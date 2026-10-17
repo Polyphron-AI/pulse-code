@@ -166,6 +166,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["time zone task due dates today midnight IANA reset"],
   },
   {
+    id: "workspace-owner-profile",
+    title: "Environment owner",
+    to: "/settings/general",
+    targetId: "workspace-display",
+    scope: "environment",
+    searchTerms: ["workspace task assignee Me unassigned display name initials profile clear"],
+  },
+  {
     id: "project-overview",
     title: "Project overview",
     to: "/settings/projects",

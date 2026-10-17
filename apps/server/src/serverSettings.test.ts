@@ -1,5 +1,6 @@
 import { vi } from "vite-plus/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import {
   DEFAULT_SERVER_SETTINGS,
   ModelSelection,
@@ -33,6 +34,7 @@ import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import { writeFileStringAtomically } from "./atomicWrite.ts";
 import * as ServerSettingsModule from "./serverSettings.ts";
 import { resolveProviderInstanceTerminalEnvironment } from "./terminal/Manager.ts";
+import * as WorkspaceTools from "./workspace/WorkspaceTools.ts";
 
 const decodeSettingsPatch = Schema.decodeUnknownEffect(ServerSettingsPatch);
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
@@ -100,6 +102,99 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect("keeps owner identity across display-profile changes", () =>
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const tools = yield* WorkspaceTools.WorkspaceTools;
+      const sql = yield* SqlClient.SqlClient;
+      const projectId = ProjectId.make("owner-project");
+      yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Owner','/synthetic','[]','2026-10-15T12:00:00Z','2026-10-15T12:00:00Z')`;
+      const clients = yield* Effect.all([
+        Deferred.make<ServerSettings>(),
+        Deferred.make<ServerSettings>(),
+      ]);
+      for (const client of clients) {
+        const changes = yield* service.subscribeChanges;
+        yield* changes.pipe(
+          Stream.filter((settings) => settings.workspaceOwnerProfile?.displayName === "Alex"),
+          Stream.runForEach((settings) => Deferred.succeed(client, settings)),
+          Effect.forkChild({ startImmediately: true }),
+        );
+      }
+      assert.isNull((yield* service.getSettings).workspaceOwnerProfile);
+      yield* service.updateSettings({
+        workspaceOwnerProfile: { displayName: "Maya", initials: "MC" },
+      });
+      const task = yield* tools.upsertTask({ projectId, title: "Review", column: "To do" });
+      assert.equal(task.owner, "environment-owner");
+      yield* service.updateSettings({ responseStreamingMode: "turn" });
+      assert.equal((yield* service.getSettings).workspaceOwnerProfile?.displayName, "Maya");
+      yield* service.updateSettings({
+        workspaceOwnerProfile: { displayName: "Alex", initials: "AL" },
+      });
+      for (const client of clients)
+        assert.deepEqual((yield* Deferred.await(client)).workspaceOwnerProfile, {
+          displayName: "Alex",
+          initials: "AL",
+        });
+      assert.deepEqual(yield* tools.getTask(task.id), task);
+      yield* service.updateSettings({ workspaceOwnerProfile: null });
+      assert.isNull((yield* service.getSettings).workspaceOwnerProfile);
+      assert.deepEqual(yield* tools.getTask(task.id), task);
+      const reopened = yield* ServerSettingsModule.ServerSettingsService.pipe(
+        Effect.provide(ServerSettingsModule.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+      );
+      assert.isNull((yield* reopened.getSettings).workspaceOwnerProfile);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        WorkspaceTools.layer.pipe(
+          Layer.provideMerge(makeServerSettingsLayer()),
+          Layer.provide(NodeCrypto.layer),
+        ),
+      ),
+    ),
+  );
+  it.effect(
+    "rejects invalid owner display values on both settings write paths without persisting",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const before = yield* service.getSettings;
+        const persisted = yield* fs.readFileString(config.settingsPath);
+        for (const workspaceOwnerProfile of [
+          { displayName: "Maya\nChen", initials: "MC" },
+          { displayName: "Maya", initials: "M!" },
+          { displayName: "Maya", initials: "M\n" },
+          { displayName: "Maya\u200b", initials: "MC" },
+        ]) {
+          const patch = { workspaceOwnerProfile };
+          const mutation = {
+            operation: "upsert" as const,
+            instanceId: ProviderInstanceId.make("owner-test"),
+            instance: { driver: ProviderDriverKind.make("codex"), config: {} },
+          };
+          for (const write of [
+            service.updateSettings(patch),
+            service.updateProviderInstance(mutation, patch),
+          ]) {
+            const error = yield* write.pipe(Effect.flip);
+            assert.equal(error.operation, "validate-workspace-owner-profile");
+            assert.include(error.message, "letters or digits");
+          }
+          assert.deepEqual(yield* service.getSettings, before);
+          assert.equal(yield* fs.readFileString(config.settingsPath), persisted);
+        }
+        const settings = yield* service.updateSettings(
+          yield* decodeSettingsPatch({
+            workspaceOwnerProfile: { displayName: " 李明 ", initials: " 李 " },
+          }),
+        );
+        assert.deepEqual(settings.workspaceOwnerProfile, { displayName: "李明", initials: "李" });
+      }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
   it.effect.each(["+05:00", "Etc/Unknown"])(
     "uses UTC for an unsupported host timezone: %s",
     (timeZone) =>
@@ -111,7 +206,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         const host = vi
           .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
           .mockReturnValue({ ...options, timeZone });
-        try {
+        yield* Effect.gen(function* () {
           yield* fs.writeFileString(
             config.settingsPath,
             '{ "responseStreamingMode": "turn", "enableAgentBrowserAccess": false }',
@@ -136,9 +231,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
               .workspaceDisplayTimeZone,
             "UTC",
           );
-        } finally {
-          host.mockRestore();
-        }
+        }).pipe(Effect.ensuring(Effect.sync(() => host.mockRestore())));
       }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
   it.effect(
@@ -152,7 +245,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         const host = vi
           .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
           .mockReturnValue({ ...options, timeZone: "Africa/Johannesburg" });
-        try {
+        yield* Effect.gen(function* () {
           yield* fs.writeFileString(config.settingsPath, "{}");
           assert.equal(
             (yield* service.getSettings).workspaceDisplayTimeZone,
@@ -184,9 +277,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
             yield* fs.readFileString(config.settingsPath),
           );
           assert.equal(persisted.workspaceDisplayTimeZone, "America/New_York");
-        } finally {
-          host.mockRestore();
-        }
+        }).pipe(Effect.ensuring(Effect.sync(() => host.mockRestore())));
       }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
   it.effect("does not rewrite malformed settings to materialize a workspace timezone", () =>

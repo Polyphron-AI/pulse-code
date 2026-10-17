@@ -47,11 +47,16 @@ describe("Pulse capability compatibility", () => {
         otlpTracesEnabled: false,
         otlpMetricsEnabled: false,
       },
-      settings: { workspaceDisplayTimeZone: "No/Such_Zone", responseStreamingMode: "turn" },
+      settings: {
+        workspaceDisplayTimeZone: "No/Such_Zone",
+        responseStreamingMode: "turn",
+        workspaceOwnerProfile: { displayName: "李明", initials: "李" },
+      },
     });
     expect(config.settings).toMatchObject({
       workspaceDisplayTimeZone: "No/Such_Zone",
       responseStreamingMode: "turn",
+      workspaceOwnerProfile: { displayName: "李明", initials: "李" },
     });
   });
   const decode = Schema.decodeUnknownSync(

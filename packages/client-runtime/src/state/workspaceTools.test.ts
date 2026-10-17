@@ -128,6 +128,7 @@ it.effect.each(["transition", "metadata"] as const)(
           revision: 0,
           dueOn: null as string | null,
           areaLabel: null as string | null,
+          owner: "environment-owner" as "environment-owner" | null,
         };
         const client = {
           [WS_METHODS.workspaceSubscribeChanges]: () =>
@@ -135,7 +136,13 @@ it.effect.each(["transition", "metadata"] as const)(
           [WS_METHODS.workspaceGetTask]: () => Effect.sync(() => task),
           [WS_METHODS.workspacePatchTask]: () =>
             Effect.gen(function* () {
-              task = { ...task, dueOn: "2026-10-16", areaLabel: "Marketing", revision: 1 };
+              task = {
+                ...task,
+                dueOn: "2026-10-16",
+                areaLabel: "Marketing",
+                owner: null,
+                revision: 1,
+              };
               yield* SubscriptionRef.update(counter, (n) => n + 1);
               return task;
             }),
@@ -161,7 +168,9 @@ it.effect.each(["transition", "metadata"] as const)(
           if (
             AsyncResult.isSuccess(result) &&
             result.value.revision === 1 &&
-            (action === "transition" ? result.value.done : result.value.dueOn === "2026-10-16")
+            (action === "transition"
+              ? result.value.done
+              : result.value.dueOn === "2026-10-16" && result.value.owner === null)
           )
             refreshed.openUnsafe();
         });
@@ -176,6 +185,7 @@ it.effect.each(["transition", "metadata"] as const)(
                     expectedRevision: 0,
                     dueOn: "2026-10-16",
                     areaLabel: "Marketing",
+                    owner: null,
                   },
                 }),
               )

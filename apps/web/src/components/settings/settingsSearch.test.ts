@@ -43,6 +43,15 @@ const ITEMS: ReadonlyArray<SettingsSearchItem> = [
     to: "/settings/general",
   },
 ];
+it("finds the environment owner display profile in workspace display settings", () => {
+  expect(searchSettings("owner initials")).toContainEqual(
+    expect.objectContaining({
+      id: "workspace-owner-profile",
+      targetId: "workspace-display",
+      scope: "environment",
+    }),
+  );
+});
 
 describe("searchSettings", () => {
   it("finds the environment timezone setting in General settings", () => {

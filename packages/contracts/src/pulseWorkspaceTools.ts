@@ -20,6 +20,7 @@ const isGregorianDate = (value: string) => {
 };
 export const WorkspaceTaskDueOn = Schema.String.check(Schema.makeFilter(isGregorianDate));
 const AreaLabel = Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120));
+export const WorkspaceTaskOwner = Schema.NullOr(Schema.Literal("environment-owner"));
 export const WorkspaceProjectConfig = Schema.Struct({
   projectId: ProjectId,
   taskColumns: Schema.Array(Column).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
@@ -46,6 +47,7 @@ export const WorkspaceTask = Schema.Struct({
   done: Schema.optionalKey(Schema.Boolean),
   dueOn: Schema.optionalKey(Schema.NullOr(WorkspaceTaskDueOn)),
   areaLabel: Schema.optionalKey(Schema.NullOr(AreaLabel)),
+  owner: Schema.optionalKey(WorkspaceTaskOwner),
 });
 export type WorkspaceTask = typeof WorkspaceTask.Type;
 export const WorkspaceTaskTransition = Schema.Struct({
@@ -64,6 +66,7 @@ export const WorkspaceTaskPatch = Schema.Struct({
   column: Schema.optionalKey(Column),
   dueOn: Schema.optionalKey(Schema.NullOr(WorkspaceTaskDueOn)),
   areaLabel: Schema.optionalKey(Schema.NullOr(AreaLabel)),
+  owner: Schema.optionalKey(WorkspaceTaskOwner),
 });
 export type WorkspaceTaskPatch = typeof WorkspaceTaskPatch.Type;
 export const WorkspaceTaskUpsert = Schema.Struct({
@@ -73,6 +76,7 @@ export const WorkspaceTaskUpsert = Schema.Struct({
   column: Column,
   dueOn: Schema.optionalKey(Schema.NullOr(WorkspaceTaskDueOn)),
   areaLabel: Schema.optionalKey(Schema.NullOr(AreaLabel)),
+  owner: Schema.optionalKey(WorkspaceTaskOwner),
 });
 export type WorkspaceTaskUpsert = typeof WorkspaceTaskUpsert.Type;
 export const WorkspaceAutomationSave = Schema.Struct({

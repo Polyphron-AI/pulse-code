@@ -307,54 +307,62 @@ it.effect("authorizes task transitions and revision-aware settings through opera
   }).pipe(Effect.scoped),
 );
 
-it.effect("denies task metadata patches to read sessions and permits operate sessions", () =>
-  Effect.gen(function* () {
-    const method = WS_METHODS.workspacePatchTask;
-    const group = WsRpcGroup.omit(
-      ...[...WsRpcGroup.requests.keys()].filter(
-        (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof method> => tag !== method,
-      ),
-    );
-    const task = {
-      id: "wskt_00000000-0000-0000-0000-000000000001",
-      projectId: ProjectId.make("project"),
-      title: "Task",
-      column: "To do",
-      revision: 1,
-      dueOn: "2026-10-16",
-      areaLabel: null,
-    };
-    const handled: string[] = [];
-    for (const scope of [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]) {
-      const client = yield* RpcTest.makeClient(group).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            group.toLayerHandler(method, () =>
-              Effect.sync(() => {
-                handled.push("patch");
-                return task;
-              }),
-            ),
-            rpcScopeAuthorizationLayer([scope]),
-          ),
+it.effect(
+  "denies task metadata and owner patches to read sessions and permits operate sessions",
+  () =>
+    Effect.gen(function* () {
+      const method = WS_METHODS.workspacePatchTask;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof method> => tag !== method,
         ),
       );
-      const patch = client[method]({ id: task.id, expectedRevision: 0, dueOn: "2026-10-16" });
-      if (scope === AuthOrchestrationReadScope) {
-        expect(yield* patch.pipe(Effect.flip)).toMatchObject({
-          requiredScope: AuthOrchestrationOperateScope,
+      const task = {
+        id: "wskt_00000000-0000-0000-0000-000000000001",
+        projectId: ProjectId.make("project"),
+        title: "Task",
+        column: "To do",
+        revision: 1,
+        dueOn: "2026-10-16",
+        areaLabel: null,
+        owner: null,
+      };
+      const handled: string[] = [];
+      for (const scope of [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]) {
+        const client = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              group.toLayerHandler(method, () =>
+                Effect.sync(() => {
+                  handled.push("patch");
+                  return task;
+                }),
+              ),
+              rpcScopeAuthorizationLayer([scope]),
+            ),
+          ),
+        );
+        const patch = client[method]({
+          id: task.id,
+          expectedRevision: 0,
+          dueOn: "2026-10-16",
+          owner: null,
         });
-        expect(handled).toEqual([]);
-      } else {
-        expect(yield* patch).toEqual(task);
-        expect(handled).toEqual(["patch"]);
+        if (scope === AuthOrchestrationReadScope) {
+          expect(yield* patch.pipe(Effect.flip)).toMatchObject({
+            requiredScope: AuthOrchestrationOperateScope,
+          });
+          expect(handled).toEqual([]);
+        } else {
+          expect(yield* patch).toEqual(task);
+          expect(handled).toEqual(["patch"]);
+        }
       }
-    }
-  }).pipe(Effect.scoped),
+    }).pipe(Effect.scoped),
 );
 
 it.effect(
-  "requires operate scope for environment timezone writes through existing settings RPC",
+  "requires operate scope for environment timezone and owner profile writes through existing settings RPC",
   () =>
     Effect.gen(function* () {
       const method = WS_METHODS.serverUpdateSettings;
@@ -373,6 +381,7 @@ it.effect(
                   handled++;
                   return {
                     ...DEFAULT_SERVER_SETTINGS,
+                    workspaceOwnerProfile: patch.workspaceOwnerProfile ?? null,
                     workspaceDisplayTimeZone: patch.workspaceDisplayTimeZone ?? "UTC",
                   };
                 }),
@@ -381,14 +390,21 @@ it.effect(
             ),
           ),
         );
-        const save = client[method]({ patch: { workspaceDisplayTimeZone: "Africa/Johannesburg" } });
+        const save = client[method]({
+          patch: {
+            workspaceDisplayTimeZone: "Africa/Johannesburg",
+            workspaceOwnerProfile: { displayName: "Maya", initials: "MC" },
+          },
+        });
         if (scope === AuthOrchestrationReadScope) {
           expect(yield* save.pipe(Effect.flip)).toMatchObject({
             requiredScope: AuthOrchestrationOperateScope,
           });
           expect(handled).toBe(0);
         } else {
-          expect((yield* save).workspaceDisplayTimeZone).toBe("Africa/Johannesburg");
+          const saved = yield* save;
+          expect(saved.workspaceDisplayTimeZone).toBe("Africa/Johannesburg");
+          expect(saved.workspaceOwnerProfile).toEqual({ displayName: "Maya", initials: "MC" });
           expect(handled).toBe(1);
         }
       }

@@ -73,31 +73,34 @@ it.each(["Success", "Failure", "unavailable"])(
       });
   },
 );
-it("returns failure and exposes the server's structured rejection to the caller", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const error = new ServerSettingsError({
-    settingsPath: "remote/settings.json",
-    operation: "validate-workspace-timezone",
-  });
-  mocks.persist.mockResolvedValue({ _tag: "Failure", cause: Cause.fail(error) });
-  const onError = vi.fn();
-  const results: boolean[] = [];
-  function Probe() {
-    const update = useUpdateScopedSettings({ onError });
-    return (
-      <button
-        onClick={async () => {
-          results.push(await update({ workspaceDisplayTimeZone: "Europe/London" }));
-        }}
-      >
-        Save
-      </button>
-    );
-  }
-  await act(() => {
-    renderer = create(<Probe />);
-  });
-  await act(() => renderer!.root.findByType("button").props.onClick());
-  expect(results).toEqual([false]);
-  expect(onError).toHaveBeenCalledExactlyOnceWith(error);
-});
+it.each(["validate-workspace-timezone", "validate-workspace-owner-profile"] as const)(
+  "exposes the server's structured %s rejection to the caller",
+  async (operation) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const error = new ServerSettingsError({
+      settingsPath: "remote/settings.json",
+      operation,
+    });
+    mocks.persist.mockResolvedValue({ _tag: "Failure", cause: Cause.fail(error) });
+    const onError = vi.fn();
+    const results: boolean[] = [];
+    function Probe() {
+      const update = useUpdateScopedSettings({ onError });
+      return (
+        <button
+          onClick={async () => {
+            results.push(await update({ workspaceDisplayTimeZone: "Europe/London" }));
+          }}
+        >
+          Save
+        </button>
+      );
+    }
+    await act(() => {
+      renderer = create(<Probe />);
+    });
+    await act(() => renderer!.root.findByType("button").props.onClick());
+    expect(results).toEqual([false]);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+  },
+);

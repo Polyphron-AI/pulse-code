@@ -20,6 +20,10 @@ const mocks = vi.hoisted(() => ({
   newCommand: vi.fn(),
   zone: "Africa/Johannesburg",
   settingsReady: true,
+  profiles: {
+    remote: { displayName: "Maya Chen", initials: "MC" },
+    other: { displayName: "Alex", initials: "AL" },
+  } as Record<string, { displayName: string; initials: string } | null>,
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
@@ -38,7 +42,13 @@ vi.mock("../../state/session", () => ({
     data: { authenticated: true, scopes: mocks.operate ? ["orchestration:operate"] : [] },
   }),
 }));
-vi.mock("../../hooks/useSettings", () => ({ useEnvironmentSettings: () => mocks.zone }));
+vi.mock("../../hooks/useSettings", () => ({
+  useEnvironmentSettings: (id: string, select: (settings: unknown) => unknown) =>
+    select({
+      workspaceDisplayTimeZone: mocks.zone,
+      workspaceOwnerProfile: mocks.profiles[id] ?? null,
+    }),
+}));
 vi.mock("../../state/entities", () => ({ useThreadShells: () => [] }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: {
@@ -80,6 +90,126 @@ vi.mock("../ui/textarea", () => ({ Textarea: "textarea" }));
 let renderer: ReactTestRenderer | undefined;
 const environmentId = EnvironmentId.make("remote");
 const projectId = ProjectId.make("project");
+it("creates Me or Unassigned atomically and keeps legacy creates free of owner fields", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.command.mockResolvedValue({ _tag: "Failure", cause: Cause.fail(new Error("Offline")) });
+  const view = () => (
+    <ProjectTasks
+      environmentId={environmentId}
+      projectId={projectId}
+      selected={null}
+      onSelect={() => {}}
+    />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  const owner = () => renderer!.root.findByProps({ "aria-label": "New task owner" });
+  expect(owner().props.value).toBe("environment-owner");
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "New task title" })
+      .props.onChange({ target: { value: "Review" } }),
+  );
+  const submit = () => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} });
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input.owner).toBe("environment-owner");
+  await act(() => owner().props.onChange({ target: { value: "" } }));
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input.owner).toBeNull();
+  mocks.tasksV2 = false;
+  await act(() => renderer!.update(view()));
+  expect(renderer!.root.findAllByProps({ "aria-label": "New task owner" })).toHaveLength(0);
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input).not.toHaveProperty("owner");
+});
+it("edits owner through the captured revision and displays the selected environment profile", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Review",
+    column: "To do",
+    revision: 3,
+    owner: "environment-owner" as const,
+  };
+  const view = (env = environmentId) => (
+    <ProjectTasks environmentId={env} projectId={projectId} selected={task} onSelect={() => {}} />
+  );
+  mocks.newCommand.mockResolvedValue({ _tag: "Failure", cause: Cause.fail(new Error("Offline")) });
+  await act(() => {
+    renderer = create(view());
+  });
+  expect(renderer!.root.findByProps({ "aria-label": "Maya Chen", role: "img" }).children).toEqual([
+    "MC",
+  ]);
+  const owner = () => renderer!.root.findByProps({ "aria-label": "Task owner" });
+  await act(() => owner().props.onChange({ target: { value: "" } }));
+  await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
+  expect(mocks.newCommand).toHaveBeenLastCalledWith({
+    environmentId,
+    input: { id: task.id, expectedRevision: 3, owner: null },
+  });
+  expect(owner().props.value).toBe("");
+  expect(renderer!.root.findAllByProps({ "aria-label": "Unassigned", role: "img" })).toHaveLength(
+    1,
+  );
+  const other = EnvironmentId.make("other");
+  await act(() => renderer!.update(view(other)));
+  expect(owner().props.value).toBe("environment-owner");
+  expect(renderer!.root.findByProps({ "aria-label": "Alex", role: "img" }).children).toEqual([
+    "AL",
+  ]);
+  mocks.profiles.other = null;
+  await act(() => renderer!.update(view(other)));
+  expect(renderer!.root.findByProps({ "aria-label": "Me", role: "img" }).children).toEqual(["Me"]);
+  expect(mocks.newCommand).toHaveBeenCalledTimes(1);
+});
+it("starts legacy tasks unassigned, assigns Me and denies owner writes for read sessions", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Legacy",
+    column: "To do",
+    revision: 0,
+  };
+  const view = () => (
+    <ProjectTasks
+      environmentId={environmentId}
+      projectId={projectId}
+      selected={task}
+      onSelect={() => {}}
+    />
+  );
+  mocks.newCommand.mockResolvedValue({
+    _tag: "Success",
+    value: { ...task, owner: "environment-owner", revision: 1 },
+  });
+  await act(() => {
+    renderer = create(view());
+  });
+  const owner = () => renderer!.root.findByProps({ "aria-label": "Task owner" });
+  expect(owner().props.value).toBe("");
+  await act(() => owner().props.onChange({ target: { value: "environment-owner" } }));
+  const submit = () =>
+    renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} });
+  mocks.operate = false;
+  await act(() => renderer!.update(view()));
+  expect(owner().props.disabled).toBe(true);
+  await act(submit);
+  expect(mocks.newCommand).not.toHaveBeenCalled();
+  mocks.operate = true;
+  await act(() => renderer!.update(view()));
+  await act(submit);
+  expect(mocks.newCommand).toHaveBeenCalledWith({
+    environmentId,
+    input: { id: task.id, expectedRevision: 0, owner: "environment-owner" },
+  });
+});
 afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());
   renderer = undefined;
@@ -87,6 +217,10 @@ afterEach(async () => {
   mocks.tasksV2 = false;
   mocks.zone = "Africa/Johannesburg";
   mocks.settingsReady = true;
+  mocks.profiles = {
+    remote: { displayName: "Maya Chen", initials: "MC" },
+    other: { displayName: "Alex", initials: "AL" },
+  };
   vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllGlobals();

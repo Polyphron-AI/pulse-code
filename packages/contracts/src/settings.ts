@@ -1199,7 +1199,14 @@ export const WorkspaceDisplayTimeZone = Schema.Trim.check(
   Schema.isMaxLength(64),
   Schema.isPattern(/^[A-Za-z][A-Za-z0-9_+\-/]*$/),
 );
+export const WorkspaceOwnerProfile = Schema.Struct({
+  displayName: Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(80)),
+  initials: Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(3)),
+});
 export const ServerSettings = Schema.Struct({
+  workspaceOwnerProfile: Schema.NullOr(WorkspaceOwnerProfile).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   workspaceDisplayTimeZone: Schema.NullOr(WorkspaceDisplayTimeZone).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
@@ -1472,6 +1479,7 @@ export const resolveProviderInstanceEnabled = (
 export const ServerSettingsOperation = Schema.Literals([
   "normalize",
   "validate-workspace-timezone",
+  "validate-workspace-owner-profile",
   "check-exists",
   "create-provider-instance",
   "read-file",
@@ -1501,6 +1509,8 @@ export class ServerSettingsError extends Schema.TaggedError<ServerSettingsError>
   override get message(): string {
     if (this.operation === "validate-workspace-timezone")
       return "Enter a valid IANA timezone, such as Africa/Johannesburg, supported by this server.";
+    if (this.operation === "validate-workspace-owner-profile")
+      return "Enter an owner name of 1 to 80 characters without control characters and initials of 1 to 3 letters or digits.";
     const provider =
       this.providerInstanceId === undefined ? "" : ` for provider ${this.providerInstanceId}`;
     const variable =
@@ -1586,6 +1596,7 @@ const OpenCodeSettingsPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  workspaceOwnerProfile: Schema.optionalKey(Schema.NullOr(WorkspaceOwnerProfile)),
   workspaceDisplayTimeZone: Schema.optionalKey(Schema.NullOr(WorkspaceDisplayTimeZone)),
   worktreeCleanup: Schema.optionalKey(
     Schema.NullOr(

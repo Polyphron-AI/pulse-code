@@ -3,6 +3,28 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import { runMigrations } from "./Migrations.ts";
+it.effect("keeps pre-owner tasks unassigned and constrains new owner values", () =>
+  Effect.gen(function* () {
+    yield* runMigrations({ toMigrationInclusive: 66 });
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`INSERT INTO workspace_tasks(id,project_id,title,column_name,revision,due_on,area_label) VALUES('legacy','project','Kept','Done',7,'2026-10-16','Marketing'),('deleted','project','Deleted','To do',3,NULL,NULL)`;
+    yield* sql`UPDATE workspace_tasks SET deleted=1 WHERE id='deleted'`;
+    yield* runMigrations();
+    expect(yield* sql`SELECT id,owner,revision FROM workspace_tasks ORDER BY id`).toEqual([
+      { id: "deleted", owner: null, revision: 3 },
+      { id: "legacy", owner: null, revision: 7 },
+    ]);
+    expect(yield* sql`SELECT due_on,area_label FROM workspace_tasks WHERE id='legacy'`).toEqual([
+      { due_on: "2026-10-16", area_label: "Marketing" },
+    ]);
+    expect((yield* Effect.exit(sql`UPDATE workspace_tasks SET owner='maya'`))._tag).toBe("Failure");
+    yield* sql`UPDATE workspace_tasks SET owner='environment-owner' WHERE id='legacy'`;
+    yield* runMigrations();
+    expect(yield* sql`SELECT owner FROM workspace_tasks WHERE id='legacy'`).toEqual([
+      { owner: "environment-owner" },
+    ]);
+  }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+);
 it.effect("upgrades default columns but leaves custom columns undesignated", () =>
   Effect.gen(function* () {
     yield* runMigrations({ toMigrationInclusive: 64 });

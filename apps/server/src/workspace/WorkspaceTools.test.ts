@@ -18,6 +18,61 @@ const layer = Tools.layer.pipe(
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeCrypto.layer),
 );
+it.effect("defaults new tasks to owner and preserves explicit unassignment", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const task = yield* tools.upsertTask({ projectId, title: "Review", column: "To do" });
+    expect(task.owner).toBe("environment-owner");
+    const cleared = yield* tools.patchTask({
+      id: task.id,
+      expectedRevision: task.revision,
+      owner: null,
+    });
+    expect(cleared.owner).toBeNull();
+    expect(cleared.revision).toBe(task.revision + 1);
+    const legacy = yield* tools.upsertTask({
+      id: task.id,
+      projectId,
+      title: "Review again",
+      column: "To do",
+    });
+    expect(legacy.owner).toBeNull();
+    const assigned = yield* tools.patchTask({
+      id: task.id,
+      expectedRevision: legacy.revision,
+      owner: "environment-owner",
+    });
+    expect(assigned.owner).toBe("environment-owner");
+    expect((yield* tools.getTask(task.id)).owner).toBe("environment-owner");
+    expect((yield* tools.listTasks(projectId)).tasks[0]?.owner).toBe("environment-owner");
+    expect(
+      (yield* tools
+        .patchTask({ id: task.id, expectedRevision: legacy.revision, owner: null })
+        .pipe(Effect.flip)).kind,
+    ).toBe("conflict");
+    expect(
+      (yield* tools.upsertTask({ id: task.id, projectId, title: "Renamed", column: "Done" })).owner,
+    ).toBe("environment-owner");
+    const unassigned = yield* tools.upsertTask({
+      projectId,
+      title: "Unassigned",
+      column: "To do",
+      owner: null,
+    });
+    expect(unassigned.owner).toBeNull();
+    const same = yield* tools.patchTask({
+      id: unassigned.id,
+      expectedRevision: unassigned.revision,
+      owner: null,
+    });
+    expect(same.revision).toBe(unassigned.revision);
+    expect((yield* tools.upsertTask({ ...unassigned, owner: "environment-owner" })).owner).toBe(
+      "environment-owner",
+    );
+    expect((yield* tools.upsertTask({ ...unassigned, owner: null })).owner).toBeNull();
+  }).pipe(Effect.provide(layer)),
+);
 it.effect(
   "persists basic tasks and project columns, keeps deleted records, and rejects cross-project or stale edits",
   () =>

@@ -33,6 +33,7 @@ interface TaskRow {
   done: number;
   dueOn: string | null;
   areaLabel: string | null;
+  owner: "environment-owner" | null;
 }
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -85,7 +86,7 @@ export const make = Effect.gen(function* () {
     safe(
       Effect.gen(function* () {
         const rows =
-          yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.id=${id} AND t.deleted=0`;
+          yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.id=${id} AND t.deleted=0`;
         const row = rows[0];
         if (!row)
           return yield* fail("not-found", "This task is unavailable. Its links have been kept.");
@@ -249,7 +250,7 @@ export const make = Effect.gen(function* () {
         Effect.gen(function* () {
           yield* requireProject(projectId);
           const rows =
-            yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.project_id=${projectId} AND t.deleted=0 ORDER BY t.id LIMIT 201`;
+            yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.project_id=${projectId} AND t.deleted=0 ORDER BY t.id LIMIT 201`;
           return {
             tasks: rows.slice(0, 200).map((row) => ({
               ...row,
@@ -278,6 +279,7 @@ export const make = Effect.gen(function* () {
                 const settings = yield* config(input.projectId);
                 let dueOn = input.dueOn ?? null;
                 let areaLabel = input.areaLabel ?? null;
+                let owner = input.owner === undefined ? "environment-owner" : input.owner;
                 if (!title || title.length > 240 || !settings.taskColumns.includes(input.column))
                   return yield* fail(
                     "invalid-input",
@@ -292,25 +294,34 @@ export const make = Effect.gen(function* () {
                     dueOn = input.dueOn === undefined ? previous.dueOn : input.dueOn;
                     areaLabel =
                       input.areaLabel === undefined ? previous.areaLabel : input.areaLabel;
-                    if (
-                      previous.title === title &&
-                      previous.column === input.column &&
-                      previous.dueOn === dueOn &&
-                      previous.areaLabel === areaLabel
-                    )
-                      return { value: previous, changed: false };
+                    owner = input.owner === undefined ? previous.owner : input.owner;
+                    const { changed } = yield* prepareTransition(
+                      previous,
+                      settings,
+                      {
+                        id: input.id,
+                        expectedRevision: previous.revision,
+                        change: { type: "column", column: input.column },
+                      },
+                      previous.title !== title ||
+                        previous.dueOn !== dueOn ||
+                        previous.areaLabel !== areaLabel ||
+                        previous.owner !== owner,
+                    );
+                    if (!changed) return { value: previous, changed: false };
                     yield* sql`UPDATE workspace_tasks SET ${sql.update({
                       title,
                       column_name: input.column,
                       revision: previous.revision + 1,
                       ...(input.dueOn === undefined ? {} : { due_on: dueOn }),
                       ...(input.areaLabel === undefined ? {} : { area_label: areaLabel }),
+                      ...(input.owner === undefined ? {} : { owner }),
                     })} WHERE id=${input.id} AND deleted=0`;
                     return { value: yield* getTask(input.id), changed: true };
                   }
                 }
                 const id = input.id ?? `wskt_${yield* crypto.randomUUIDv4}`;
-                yield* sql`INSERT INTO workspace_tasks(id,project_id,title,column_name,due_on,area_label) VALUES(${id},${input.projectId},${title},${input.column},${dueOn},${areaLabel})`;
+                yield* sql`INSERT INTO workspace_tasks(id,project_id,title,column_name,due_on,area_label,owner) VALUES(${id},${input.projectId},${title},${input.column},${dueOn},${areaLabel},${owner})`;
                 return { value: yield* getTask(id), changed: true };
               }),
             );
@@ -365,6 +376,7 @@ export const make = Effect.gen(function* () {
                   const dueOn = input.dueOn === undefined ? current.dueOn : input.dueOn;
                   const areaLabel =
                     input.areaLabel === undefined ? current.areaLabel : input.areaLabel;
+                  const owner = input.owner === undefined ? current.owner : input.owner;
                   const { column, changed } = yield* prepareTransition(
                     current,
                     settings,
@@ -375,10 +387,11 @@ export const make = Effect.gen(function* () {
                     },
                     title !== current.title ||
                       dueOn !== current.dueOn ||
-                      areaLabel !== current.areaLabel,
+                      areaLabel !== current.areaLabel ||
+                      owner !== current.owner,
                   );
                   if (!changed) return { value: current, changed: false };
-                  yield* sql`UPDATE workspace_tasks SET title=${title},column_name=${column},due_on=${dueOn},area_label=${areaLabel},revision=revision+1 WHERE id=${input.id} AND deleted=0 AND revision=${input.expectedRevision}`;
+                  yield* sql`UPDATE workspace_tasks SET title=${title},column_name=${column},due_on=${dueOn},area_label=${areaLabel},owner=${owner},revision=revision+1 WHERE id=${input.id} AND deleted=0 AND revision=${input.expectedRevision}`;
                   return { value: yield* getTask(input.id), changed: true };
                 }),
               );

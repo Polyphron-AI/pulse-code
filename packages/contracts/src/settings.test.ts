@@ -1125,3 +1125,38 @@ describe("workspace display timezone", () => {
     ).toBe("No/Such_Zone");
   });
 });
+
+describe("workspace owner profile", () => {
+  it("defaults to null, trims complete profiles, and supports clearing", () => {
+    expect(decodeServerSettings({}).workspaceOwnerProfile).toBeNull();
+    expect(decodeServerSettingsPatch({ workspaceOwnerProfile: null })).toEqual({
+      workspaceOwnerProfile: null,
+    });
+    expect(
+      decodeServerSettingsPatch({
+        workspaceOwnerProfile: { displayName: " Maya Chen ", initials: " MC " },
+      }),
+    ).toEqual({ workspaceOwnerProfile: { displayName: "Maya Chen", initials: "MC" } });
+    expect(
+      encodeServerSettings(
+        decodeServerSettings({ workspaceOwnerProfile: { displayName: "Alex", initials: "AL" } }),
+      ).workspaceOwnerProfile,
+    ).toEqual({ displayName: "Alex", initials: "AL" });
+  });
+  it("requires both bounded strings without host-dependent decoding", () => {
+    for (const workspaceOwnerProfile of [
+      {},
+      { displayName: "Maya" },
+      { initials: "MC" },
+      { displayName: " ", initials: "MC" },
+      { displayName: "x".repeat(81), initials: "MC" },
+      { displayName: "Maya", initials: "" },
+      { displayName: "Maya", initials: "ABCD" },
+    ])
+      expect(() => decodeServerSettingsPatch({ workspaceOwnerProfile })).toThrow();
+    const workspaceOwnerProfile = { displayName: "李明", initials: "李" };
+    expect(decodeServerSettings({ workspaceOwnerProfile }).workspaceOwnerProfile).toEqual(
+      workspaceOwnerProfile,
+    );
+  });
+});

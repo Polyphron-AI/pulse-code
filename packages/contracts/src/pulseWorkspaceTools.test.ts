@@ -29,6 +29,16 @@ const task = {
   title: "Review",
   column: "To do",
 };
+it("keeps owner optional and accepts only the environment owner or an explicit clear", () => {
+  for (const decode of [decodeTask, decodeUpsert, Schema.decodeUnknownSync(WorkspaceTaskPatch)]) {
+    const input = { ...task, expectedRevision: 0 };
+    expect(decode(input)).not.toHaveProperty("owner");
+    for (const owner of [null, "environment-owner"])
+      expect(decode({ ...input, owner })).toHaveProperty("owner", owner);
+    for (const owner of ["maya", "codex", "provider:claude", "", {}])
+      expect(() => decode({ ...input, owner })).toThrow();
+  }
+});
 it("decodes the optional typed confirmation reason and preserves legacy errors", () => {
   const legacy = { _tag: "WorkspaceToolsError", kind: "conflict", message: "Reload settings." };
   expect(decodeToolsError(legacy)).toMatchObject(legacy);

@@ -93,7 +93,20 @@ not produce a silent UTC label. Locale follows the existing web timestamp locale
 The operate-scoped `workspacePatchTask` RPC shares the task transition policy and applies its
 revision check and metadata update in one transaction. Omitted metadata preserves existing
 values; null clears them. Legacy upsert uses the same presence rule so an older client's title
-save cannot erase a due date or area.
+save cannot erase a due date, area or owner.
+
+Task ownership is the environment-local `environment-owner` literal or null, not an authenticated
+identity. Migration 067 keeps legacy rows unassigned; only new inserts default to the environment
+owner. Profile renames never rewrite task IDs, ownership or revisions. The nullable
+`workspaceOwnerProfile` uses the existing server settings stream, independently of the task
+capability. Clearing it restores the Me display fallback, without unassigning tasks.
+
+Owner profiles decode as complete objects with bounded trimmed strings, so device Unicode or
+locale support cannot reject ServerConfig. Both settings write paths validate names without
+control characters and initials containing one to three visible letters or digits before merging.
+A partial profile is rejected before deep merge can retain an omitted field. Profile saves require
+operate scope and create no access grants. The form blocks schema failures and retains specific
+server rejections, as with timezone settings.
 
 ## Shared entrances and status
 

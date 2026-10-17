@@ -2,6 +2,7 @@ import {
   type EnvironmentId,
   type ProjectId,
   type WorkspaceTask,
+  type ServerSettings,
   type WorkspaceProjectConfig,
   type WorkspaceProjectConfigSave,
   WorkspaceToolsError,
@@ -16,6 +17,7 @@ import {
 } from "@t3tools/client-runtime/state/workspaceTaskDates";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { useContext, useEffect, useState } from "react";
+import { UserRound } from "lucide-react";
 import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { timestampLocale } from "../../timestampFormat";
@@ -35,6 +37,29 @@ export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandF
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : "The workspace change could not be saved.";
 };
+function TaskOwner({
+  owner,
+  profile,
+}: {
+  owner: WorkspaceTask["owner"];
+  profile: ServerSettings["workspaceOwnerProfile"];
+}) {
+  const assigned = owner === "environment-owner";
+  const name = assigned ? (profile?.displayName ?? "Me") : "Unassigned";
+  return (
+    <span
+      role="img"
+      aria-label={name}
+      className={
+        assigned
+          ? "inline-flex size-[19px] shrink-0 items-center justify-center rounded-full bg-primary/15 text-4xs font-semibold text-primary ring-1 ring-background"
+          : "inline-flex size-[19px] shrink-0 items-center justify-center text-muted-foreground"
+      }
+    >
+      {assigned ? (profile?.initials ?? "Me") : <UserRound className="size-3" aria-hidden="true" />}
+    </span>
+  );
+}
 export function ProjectWorkspaceSettings({
   environmentId,
   projectId,
@@ -243,6 +268,12 @@ export function ProjectTasks({
   const list = useEnvironmentQuery(workspaceTools.tasks({ environmentId, input: { projectId } }));
   const canOperate = useWorkspaceCanOperate(environmentId);
   const upsert = useAtomCommand(workspaceTools.upsertTask, { reportFailure: false });
+  const { workspaceTasksV2 } = useMailCapabilities(environmentId);
+  const ownerProfile = useEnvironmentSettings(
+    environmentId,
+    (settings) => settings.workspaceOwnerProfile,
+  );
+  const [owner, setOwner] = useState<"environment-owner" | null>("environment-owner");
   const [title, setTitle] = useState("");
   const [column, setColumn] = useState("");
   const [id, setId] = useState(() => `wskt_${randomUUID()}`);
@@ -257,16 +288,24 @@ export function ProjectTasks({
         className="flex flex-wrap gap-2"
         onSubmit={async (event) => {
           event.preventDefault();
+          if (busy || !canOperate) return;
           setBusy(true);
           setError(null);
           const result = await upsert({
             environmentId,
-            input: { id, projectId, title: title.trim(), column: chosen },
+            input: {
+              id,
+              projectId,
+              title: title.trim(),
+              column: chosen,
+              ...(workspaceTasksV2 ? { owner } : {}),
+            },
           });
           setBusy(false);
           if (result._tag === "Failure") setError(workspaceToolsError(result));
           else {
             setTitle("");
+            setOwner("environment-owner");
             setId(`wskt_${randomUUID()}`);
             onSelect(result.value);
           }
@@ -292,6 +331,20 @@ export function ProjectTasks({
             <option key={value}>{value}</option>
           ))}
         </select>
+        {workspaceTasksV2 ? (
+          <select
+            aria-label="New task owner"
+            className="rounded-md border border-input bg-background p-2 text-sm"
+            value={owner ?? ""}
+            onChange={(event) =>
+              setOwner(event.target.value === "environment-owner" ? "environment-owner" : null)
+            }
+            disabled={busy || !canOperate}
+          >
+            <option value="environment-owner">Me</option>
+            <option value="">Unassigned</option>
+          </select>
+        ) : null}
         <Button size="sm" type="submit" disabled={busy || !canOperate || !title.trim() || !chosen}>
           Add task
         </Button>
@@ -316,11 +369,14 @@ export function ProjectTasks({
                   >
                     <button
                       type="button"
-                      className="w-full truncate rounded-md p-2 text-left text-sm hover:bg-accent"
+                      className="flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent"
                       aria-current={selected?.id === task.id ? "true" : undefined}
                       onClick={() => onSelect(task)}
                     >
-                      {task.title}
+                      <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                      {workspaceTasksV2 ? (
+                        <TaskOwner owner={task.owner} profile={ownerProfile} />
+                      ) : null}
                     </button>
                   </WorkspaceItemMenu>
                 </li>
@@ -340,6 +396,7 @@ export function ProjectTasks({
           environmentId={environmentId}
           task={list.data?.tasks.find((task) => task.id === selected.id) ?? selected}
           columns={columns}
+          ownerProfile={ownerProfile}
           onClose={() => onSelect(null)}
         />
       ) : null}
@@ -353,6 +410,7 @@ function taskDraft(task: WorkspaceTask) {
     column: task.column,
     dueOn: task.dueOn ?? "",
     areaLabel: task.areaLabel ?? "",
+    owner: task.owner ?? null,
   };
 }
 function isTaskDraftDirty(draft: ReturnType<typeof taskDraft>) {
@@ -360,7 +418,8 @@ function isTaskDraftDirty(draft: ReturnType<typeof taskDraft>) {
     draft.title.trim() !== draft.base.title ||
     draft.column !== draft.base.column ||
     (draft.dueOn || null) !== (draft.base.dueOn ?? null) ||
-    (draft.areaLabel.trim() || null) !== (draft.base.areaLabel ?? null)
+    (draft.areaLabel.trim() || null) !== (draft.base.areaLabel ?? null) ||
+    draft.owner !== (draft.base.owner ?? null)
   );
 }
 
@@ -393,11 +452,13 @@ function TaskEditor({
   environmentId,
   task,
   columns,
+  ownerProfile,
   onClose,
 }: {
   environmentId: EnvironmentId;
   task: WorkspaceTask;
   columns: readonly string[];
+  ownerProfile: ServerSettings["workspaceOwnerProfile"];
   onClose: () => void;
 }) {
   const canOperate = useWorkspaceCanOperate(environmentId);
@@ -413,7 +474,7 @@ function TaskEditor({
     setObservedTask(task);
     if (!isTaskDraftDirty(draft)) setDraft(taskDraft(task));
   }
-  const { title, column, dueOn, areaLabel } = draft;
+  const { title, column, dueOn, areaLabel, owner } = draft;
   const dirty = isTaskDraftDirty(draft);
   const configuredTimeZone = useEnvironmentSettings(
     environmentId,
@@ -455,6 +516,7 @@ function TaskEditor({
                   ...((areaLabel.trim() || null) !== (draft.base.areaLabel ?? null)
                     ? { areaLabel: areaLabel.trim() || null }
                     : {}),
+                  ...(owner !== (draft.base.owner ?? null) ? { owner } : {}),
                 },
               })
             : await save({
@@ -486,6 +548,25 @@ function TaskEditor({
         </select>
         {workspaceTasksV2 ? (
           <>
+            <label className="space-y-1 text-sm">
+              <span>Owner</span>
+              <select
+                aria-label="Task owner"
+                className="rounded-md border border-input bg-background p-2 text-sm"
+                value={owner ?? ""}
+                disabled={busy || !canOperate}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    owner: event.target.value === "environment-owner" ? "environment-owner" : null,
+                  }))
+                }
+              >
+                <option value="environment-owner">Me</option>
+                <option value="">Unassigned</option>
+              </select>
+            </label>
+            <TaskOwner owner={owner} profile={ownerProfile} />
             <label className="space-y-1 text-sm">
               <span>Due date</span>
               <Input

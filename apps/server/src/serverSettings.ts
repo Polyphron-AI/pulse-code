@@ -30,6 +30,7 @@ import {
   ServerSettings,
   ServerSettingsError,
   WorkspaceDisplayTimeZone,
+  WorkspaceOwnerProfile,
   type ServerSettingsPatch,
 } from "@t3tools/contracts";
 import * as NodeUtil from "node:util";
@@ -71,6 +72,7 @@ const encodeServerSettings = Schema.encodeEffect(ServerSettings);
 const encodeServerSettingsJson = Schema.encodeUnknownEffect(fromJsonStringPretty(ServerSettings));
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 const isWorkspaceDisplayTimeZone = Schema.is(WorkspaceDisplayTimeZone);
+const decodeWorkspaceOwnerProfile = Schema.decodeEffect(WorkspaceOwnerProfile);
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -149,6 +151,28 @@ const validateWorkspaceTimeZonePatch = (patch: ServerSettingsPatch, settingsPath
     catch: (cause) =>
       new ServerSettingsError({ settingsPath, operation: "validate-workspace-timezone", cause }),
   });
+
+const validateWorkspaceOwnerProfilePatch = (patch: ServerSettingsPatch, settingsPath: string) => {
+  const profile = patch.workspaceOwnerProfile;
+  if (profile === undefined || profile === null) return Effect.void;
+  return decodeWorkspaceOwnerProfile(profile).pipe(
+    Effect.filterOrFail(
+      (decoded) =>
+        !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(profile.displayName + profile.initials) &&
+        /^[\p{L}\p{N}]{1,3}$/u.test(decoded.initials),
+      () => new RangeError("Invalid owner display profile"),
+    ),
+    Effect.asVoid,
+    Effect.mapError(
+      (cause) =>
+        new ServerSettingsError({
+          settingsPath,
+          operation: "validate-workspace-owner-profile",
+          cause,
+        }),
+    ),
+  );
+};
 
 function resolveSettingsForDisplay(settings: ServerSettings): ServerSettings {
   const resolved = resolveTextGenerationProvider(settings);
@@ -366,6 +390,7 @@ const makeTest = (overrides: DeepPartial<ServerSettings> = {}) =>
       updateSettings: (patch) =>
         updateTestSettings((currentSettings) =>
           validateWorkspaceTimeZonePatch(patch, "test settings").pipe(
+            Effect.andThen(validateWorkspaceOwnerProfilePatch(patch, "test settings")),
             Effect.as(applyServerSettingsPatch(currentSettings, patch)),
           ),
         ),
@@ -373,6 +398,7 @@ const makeTest = (overrides: DeepPartial<ServerSettings> = {}) =>
         updateTestSettings((currentSettings) =>
           Effect.gen(function* () {
             yield* validateWorkspaceTimeZonePatch(patch, "test settings");
+            yield* validateWorkspaceOwnerProfilePatch(patch, "test settings");
             yield* ensureProviderInstanceMutationAllowed(
               currentSettings,
               mutation,
@@ -1355,6 +1381,7 @@ const make = Effect.gen(function* () {
     updateSettings: (patch) =>
       updateAndPersistSettings((current) =>
         validateWorkspaceTimeZonePatch(patch, settingsPath).pipe(
+          Effect.andThen(validateWorkspaceOwnerProfilePatch(patch, settingsPath)),
           Effect.as(applyServerSettingsPatch(current, patch)),
         ),
       ),
@@ -1362,6 +1389,7 @@ const make = Effect.gen(function* () {
       updateAndPersistSettings((current) =>
         Effect.gen(function* () {
           yield* validateWorkspaceTimeZonePatch(patch, settingsPath);
+          yield* validateWorkspaceOwnerProfilePatch(patch, settingsPath);
           yield* ensureProviderInstanceMutationAllowed(current, mutation, settingsPath);
           const patched = applyServerSettingsPatch(current, patch);
           return applyProviderInstanceMutation(patched, mutation);
