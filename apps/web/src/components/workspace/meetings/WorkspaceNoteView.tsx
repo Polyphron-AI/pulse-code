@@ -113,9 +113,9 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
         <>
           <h2 className="break-words text-base font-semibold">{note.title}</h2>
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{note.body}</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-nowrap gap-2">
             <Button
-              size="sm"
+              size="xs"
               variant="outline"
               disabled={!writable || props.status !== "ready"}
               onClick={() =>
@@ -125,15 +125,21 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
               Edit note
             </Button>
             <Button
-              size="sm"
-              variant="ghost"
+              size="xs"
+              variant="ghost-destructive"
               disabled={!writable || props.status !== "ready"}
               onClick={props.onDelete}
             >
               Delete note
             </Button>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={props.onReload}>
-              Reload current note
+            <Button
+              size="xs"
+              variant="ghost-muted"
+              aria-label="Reload current note"
+              disabled={pending}
+              onClick={props.onReload}
+            >
+              Reload
             </Button>
           </div>
         </>

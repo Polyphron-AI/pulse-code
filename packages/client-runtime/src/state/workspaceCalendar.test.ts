@@ -553,6 +553,60 @@ it.effect("discards a pending continuation after an invalidation", () =>
     }),
   ),
 );
+it.effect("discards a pending continuation after an equal first-page revalidation", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(0);
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      let reads = 0;
+      const client = {
+        [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
+        [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
+          Effect.gen(function* () {
+            reads++;
+            if (input.cursor) {
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              return {
+                ...page(),
+                events: [
+                  {
+                    ...event,
+                    id: "wce_00000000-0000-0000-0000-000000000002",
+                    title: "Stale continuation",
+                  },
+                ],
+              };
+            }
+            return { ...page(), nextCursor: "second" };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.range(target);
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      const pending = runAtomCommand(registry, atoms.loadMore, {
+        environmentId: target.environmentId,
+        input: { range, kind: "events" },
+      });
+      yield* Deferred.await(entered);
+      const settled = Latch.makeUnsafe();
+      const watch = registry.subscribe(query, (r) => {
+        if (AsyncResult.isSuccess(r) && !r.waiting && reads === 3) settled.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(watch));
+      yield* SubscriptionRef.set(counter, 1);
+      yield* settled.await;
+      yield* Deferred.succeed(release, undefined);
+      yield* Effect.promise(() => pending);
+      expect(AsyncResult.getOrThrow(registry.get(query)).events.map((row) => row.title)).toEqual([
+        "Review",
+      ]);
+    }),
+  ),
+);
 it.effect(
   "loads due continuations separately and preserves the latest completed task reference",
   () =>
@@ -722,7 +776,7 @@ it.effect("mounts only the selected detail and releases its shared stream while 
     }),
   ),
 );
-it.effect("retains requested pages after an unrelated invalidation", () =>
+it.effect("revalidates both requested sides after a combined invalidation", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const counter = yield* SubscriptionRef.make(0);
@@ -765,6 +819,7 @@ it.effect("retains requested pages after an unrelated invalidation", () =>
             input: { range, kind },
           }),
         );
+      const savedValue = AsyncResult.getOrThrow(registry.get(query));
       const updated = Latch.makeUnsafe();
       const watch = registry.subscribe(query, (r) => {
         if (AsyncResult.isSuccess(r) && !r.waiting && reads >= 4) updated.openUnsafe();
@@ -776,7 +831,246 @@ it.effect("retains requested pages after an unrelated invalidation", () =>
       expect(result.events.map((e) => e.title)).toEqual(["Review", "Second"]);
       expect(result.dueTasks.map((t) => t.title)).toEqual(["Second due task"]);
       expect(result.nextDueCursor).toBe("third-due");
-      expect(reads).toBe(4);
+      expect(reads).toBe(6);
+      expect(result).toBe(savedValue);
+    }),
+  ),
+);
+
+it.effect.each(["events", "dueTasks"] as const)(
+  "replays unchanged first pages for %s and stops at loaded depth or exhaustion",
+  (kind) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const counter = yield* SubscriptionRef.make(0);
+        let version = 0;
+        const calls: string[] = [];
+        const second = {
+          ...event,
+          id: "wce_00000000-0000-0000-0000-000000000002",
+          title: "Old second",
+        };
+        const task = {
+          ref: { type: "task", taskId: "second-task" },
+          title: "Old second",
+          projectId: "project",
+          dueOn: "2026-10-13",
+          done: false,
+          revision: 1,
+        };
+        const client = {
+          [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
+          [WS_METHODS.calendarListRange]: (input: { cursor?: string; dueCursor?: string }) =>
+            Effect.sync(() => {
+              const cursor = input.cursor ?? input.dueCursor;
+              calls.push(cursor ?? "first");
+              return {
+                ...page(),
+                events:
+                  kind === "events"
+                    ? cursor
+                      ? version === 2
+                        ? []
+                        : [
+                            {
+                              ...second,
+                              title: version ? "Fresh second" : "Old second",
+                              revision: version + 1,
+                            },
+                            ...(version === 1
+                              ? [
+                                  {
+                                    ...second,
+                                    id: "wce_00000000-0000-0000-0000-000000000003",
+                                    title: "Inserted",
+                                  },
+                                ]
+                              : []),
+                          ]
+                      : [event]
+                    : [],
+                dueTasks:
+                  kind === "dueTasks" && cursor && version !== 2
+                    ? [
+                        {
+                          ...task,
+                          title: version ? "Fresh second" : "Old second",
+                          revision: version + 1,
+                        },
+                        ...(version === 1
+                          ? [
+                              {
+                                ...task,
+                                ref: { type: "task", taskId: "inserted-task" },
+                                title: "Inserted",
+                              },
+                            ]
+                          : []),
+                      ]
+                    : [],
+                ...(kind === "events"
+                  ? { nextCursor: version === 2 ? undefined : cursor ? "third" : "second" }
+                  : { nextDueCursor: version === 2 ? undefined : cursor ? "third" : "second" }),
+              };
+            }),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.loadMore, {
+            environmentId: target.environmentId,
+            input: { range, kind },
+          }),
+        );
+        for (version = 1; version <= 2; version++) {
+          const settled = Latch.makeUnsafe();
+          const before = calls.length;
+          const watch = registry.subscribe(query, (r) => {
+            if (AsyncResult.isSuccess(r) && !r.waiting && calls.length > before)
+              settled.openUnsafe();
+          });
+          yield* SubscriptionRef.set(counter, version);
+          yield* settled.await;
+          watch();
+          const value = AsyncResult.getOrThrow(registry.get(query));
+          expect(
+            (kind === "events" ? value.events : value.dueTasks).map((row) => row.title),
+          ).toEqual(
+            version === 1
+              ? kind === "events"
+                ? ["Review", "Fresh second", "Inserted"]
+                : ["Fresh second", "Inserted"]
+              : kind === "events"
+                ? ["Review"]
+                : [],
+          );
+        }
+        expect(calls).toEqual(["first", "second", "first", "second", "first"]);
+      }),
+    ),
+);
+
+it.effect.each([
+  { failedState: "disconnected", fillsCap: false },
+  { failedState: "unavailable", fillsCap: true },
+] as const)(
+  "replaces healthy-source rows and retains only failed-source rows after fresh rows within the cap: %s",
+  ({ failedState, fillsCap }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const counter = yield* SubscriptionRef.make(0);
+        let refreshed = false;
+        const row = (id: string, connectionId: string, start: string) => ({
+          ...event,
+          id,
+          title: id,
+          source: { connectionId, calendarId: "same-label" },
+          time: {
+            kind: "timed" as const,
+            start: `2026-10-13T${start}:00Z`,
+            end: "2026-10-13T20:00:00Z",
+            sourceTimeZone: "UTC",
+          },
+        });
+        const client = {
+          [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
+          [WS_METHODS.calendarListRange]: () =>
+            Effect.sync(() => ({
+              ...page(),
+              incomplete: refreshed,
+              sourceStates: [
+                {
+                  connectionId: "healthy",
+                  calendarId: "same-label",
+                  generation: 1,
+                  state: "ready",
+                },
+                {
+                  connectionId: "failed",
+                  calendarId: "same-label",
+                  generation: 1,
+                  state: refreshed ? failedState : "ready",
+                },
+                {
+                  connectionId: "removed",
+                  calendarId: "same-label",
+                  generation: 1,
+                  state: refreshed ? "unselected" : "ready",
+                },
+              ],
+              events: refreshed
+                ? [
+                    row("fresh-b", "healthy", "10:00"),
+                    row("fresh-a", "healthy", "10:00"),
+                    ...(fillsCap ? [row("fresh-c", "healthy", "11:00")] : []),
+                  ]
+                : [
+                    row("cancelled", "healthy", "08:00"),
+                    row("saved", "failed", "09:00"),
+                    row("unselected", "removed", "07:00"),
+                  ],
+            })),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.range({ ...target, input: { ...range, limit: 3 } });
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        const settled = Latch.makeUnsafe();
+        const watch = registry.subscribe(query, (r) => {
+          if (AsyncResult.isSuccess(r) && !r.waiting && r.value.incomplete) settled.openUnsafe();
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(watch));
+        refreshed = true;
+        yield* SubscriptionRef.set(counter, 1);
+        yield* settled.await;
+        expect(AsyncResult.getOrThrow(registry.get(query)).events.map((row) => row.id)).toEqual(
+          fillsCap ? ["fresh-a", "fresh-b", "fresh-c"] : ["saved", "fresh-a", "fresh-b"],
+        );
+      }),
+    ),
+);
+
+it.effect("releases loaded depth on unmount before the same range remounts and revalidates", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const stopped = yield* Deferred.make<void>();
+      const calls: string[] = [];
+      const client = {
+        [WS_METHODS.calendarSubscribeChanges]: () =>
+          Stream.never.pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
+        [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
+          Effect.sync(() => {
+            calls.push(input.cursor ?? "first");
+            return input.cursor
+              ? { ...page(), events: [{ ...event, id: "second" }] }
+              : { ...page(), nextCursor: "second" };
+          }),
+        [WS_METHODS.calendarRefresh]: () => Effect.succeed(page()),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.range(target);
+      const stop = registry.mount(query);
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      yield* Effect.promise(() =>
+        runAtomCommand(registry, atoms.loadMore, {
+          environmentId: target.environmentId,
+          input: { range, kind: "events" },
+        }),
+      );
+      stop();
+      yield* Deferred.await(stopped);
+      const stopAgain = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stopAgain));
+      yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
+      const result = AsyncResult.getOrThrow(
+        yield* Effect.promise(() => executeAtomQuery(registry, query)),
+      );
+      expect(result.events.map((event) => event.id)).toEqual([event.id]);
+      expect(calls).toEqual(["first", "second", "first"]);
     }),
   ),
 );
@@ -814,7 +1108,7 @@ it.effect("replays changed source and task cursor chains only to the requested d
                 : [
                     {
                       ...event,
-                      id: input.cursor ? "second" : event.id,
+                      id: input.cursor ? "wce_00000000-0000-0000-0000-000000000002" : event.id,
                       revision,
                       title: `${input.cursor ? "Second" : "First"} ${revision}`,
                     },

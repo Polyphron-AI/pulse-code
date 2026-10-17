@@ -182,3 +182,16 @@ it("decodes older event-only pages with explicitly incomplete due references", (
     dueIncomplete: true,
   });
 });
+
+it("keeps source identity optional for older summaries and bounds each source tuple", () => {
+  const event = { ...item, id: "wce_00000000-0000-0000-0000-000000000001", revision: 1 };
+  const page = { events: [event], incomplete: false, sourceStates: [] };
+  expect(decodePage(page).events[0]).not.toHaveProperty("source");
+  const source = { connectionId: "account-a", calendarId: "work" };
+  expect(decodePage({ ...page, events: [{ ...event, source }] }).events[0]?.source).toEqual(source);
+  for (const invalid of [
+    { ...source, connectionId: "" },
+    { ...source, calendarId: "x".repeat(513) },
+  ])
+    expect(() => decodePage({ ...page, events: [{ ...event, source: invalid }] })).toThrow();
+});

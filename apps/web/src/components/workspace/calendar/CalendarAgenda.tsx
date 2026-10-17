@@ -1,5 +1,5 @@
 import type { CalendarDueTask, CalendarOccurrenceSummary } from "@t3tools/contracts";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { PlusIcon } from "lucide-react";
 import {
   formatDayHeading,
@@ -24,7 +24,7 @@ export interface CalendarAgendaProps {
   readonly nextEvents?: boolean;
   readonly nextDue?: boolean;
   readonly onSelectDay: (day: string) => void;
-  readonly onToday?: () => void;
+  readonly notesEventId?: string | undefined;
   readonly onSelect: CalendarEventCardProps["onSelect"];
   readonly onNotes: CalendarEventCardProps["onNotes"];
   readonly onJoin?: CalendarEventCardProps["onJoin"];
@@ -37,11 +37,15 @@ export interface CalendarAgendaProps {
 }
 export function CalendarAgenda(props: CalendarAgendaProps) {
   const { day, timeZone } = props;
-  const events = props.events.filter((e) =>
-    e.time.kind === "all-day"
-      ? e.time.startOn <= day && day < e.time.endBefore
-      : displayDay(e.time.start, timeZone) <= day &&
-        displayDay(new Date(Date.parse(e.time.end) - 1).toISOString(), timeZone) >= day,
+  const events = useMemo(
+    () =>
+      props.events.filter((e) =>
+        e.time.kind === "all-day"
+          ? e.time.startOn <= day && day < e.time.endBefore
+          : displayDay(e.time.start, timeZone) <= day &&
+            displayDay(new Date(Date.parse(e.time.end) - 1).toISOString(), timeZone) >= day,
+      ),
+    [props.events, day, timeZone],
   );
   const due = props.dueTasks.filter((t) => t.dueOn === day);
   const row = (event: CalendarOccurrenceSummary) => (
@@ -56,6 +60,7 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
         event={event}
         onSelect={props.onSelect}
         onNotes={props.onNotes}
+        notesOpen={props.notesEventId === event.id}
         {...(props.onJoin ? { onJoin: props.onJoin } : {})}
         {...(props.validateJoin ? { validateJoin: props.validateJoin } : {})}
         menu={props.renderMenu?.(event)}
@@ -69,7 +74,7 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
     >
       <div className="mb-[17px] flex min-h-[41px] items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm leading-5 font-semibold">{formatDayHeading(day)}</h2>
+          <h2 className="text-calendar-heading leading-5 font-semibold">{formatDayHeading(day)}</h2>
           <p className="mt-1 text-3xs leading-4 text-muted-foreground">
             {props.space === "meetings"
               ? "Prepare, meet and follow through."
@@ -106,13 +111,13 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
         <p role="status" className="mb-3 text-xs text-muted-foreground">
           Some calendars could not be refreshed. Showing the last saved results.
           {props.fetchedAt
-            ? ` Fetched ${new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit" }).format(new Date(props.fetchedAt))}.`
+            ? ` Fetched ${formatEventTime(new Date(props.fetchedAt).toISOString(), timeZone)}.`
             : ""}
         </p>
       ) : null}
       <div className="flex flex-col gap-4">
         {due.length || events.some((e) => e.time.kind === "all-day") ? (
-          <div aria-label="All day and due tasks" className="flex flex-col gap-4">
+          <div role="group" aria-label="All day and due tasks" className="flex flex-col gap-4">
             {events.filter((e) => e.time.kind === "all-day").map(row)}
             {due.map((task) => (
               <div key={task.ref.taskId} className="grid grid-cols-[40px_minmax(0,1fr)] gap-3">

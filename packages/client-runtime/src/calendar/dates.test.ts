@@ -1,5 +1,12 @@
-import { expect, it } from "vite-plus/test";
-import { weekDates, formatEventTime, displayDay, addDays, formatDayHeading } from "./dates.ts";
+import { expect, it, vi } from "vite-plus/test";
+import {
+  weekDates,
+  formatEventTime,
+  displayDay,
+  addDays,
+  formatDayHeading,
+  formatWeek,
+} from "./dates.ts";
 it("uses calendar fields through month and DST boundaries", () => {
   expect(weekDates("2026-10-13")).toEqual([
     "2026-10-12",
@@ -18,3 +25,28 @@ it("uses calendar fields through month and DST boundaries", () => {
 
 it("keeps the reference day-heading punctuation", () =>
   expect(formatDayHeading("2026-10-13")).toBe("Tuesday, 13 October"));
+
+it("names both months and years when the week crosses their boundary", () => {
+  expect(formatWeek("2026-10-01")).toBe("28 September – 4 October 2026");
+  expect(formatWeek("2026-12-31")).toBe("28 December 2026 – 3 January 2027");
+  expect(formatWeek("2026-10-13")).toBe("12 – 18 October 2026");
+  expect(weekDates("2026-10-18")).toEqual(weekDates("2026-10-12"));
+});
+
+it("reuses warmed display formatters across event rows", () => {
+  const construct = vi.spyOn(Intl, "DateTimeFormat");
+  try {
+    const instant = "2026-10-13T07:00:00Z";
+    const zone = "Pacific/Chatham";
+    displayDay(instant, zone);
+    formatEventTime(instant, zone);
+    const warmed = construct.mock.calls.length;
+    for (let row = 0; row < 20; row++) {
+      displayDay(instant, zone);
+      formatEventTime(instant, zone);
+    }
+    expect(construct).toHaveBeenCalledTimes(warmed);
+  } finally {
+    construct.mockRestore();
+  }
+});

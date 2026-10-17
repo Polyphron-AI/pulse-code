@@ -68,6 +68,7 @@ const eventFields = {
 };
 export const CalendarOccurrenceSummary = Schema.Struct({
   id: CalendarOccurrenceId,
+  source: Schema.optionalKey(Schema.Struct({ connectionId: SourceId, calendarId: SourceId })),
   ...eventFields,
   status: Schema.Literal("confirmed"),
   revision: PositiveInt,

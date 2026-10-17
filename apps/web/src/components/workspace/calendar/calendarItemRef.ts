@@ -1,5 +1,6 @@
 import { CalendarOccurrenceId, WorkspaceItemRef, type CalendarTime } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { displayDay } from "@t3tools/client-runtime/calendar/dates";
 
 const isOccurrenceId = Schema.is(CalendarOccurrenceId);
 const isWorkspaceItem = Schema.is(WorkspaceItemRef);
@@ -32,13 +33,5 @@ export function parseCalendarLocation(raw: string | undefined) {
 
 /** Resolve a selected occurrence's day without turning all-day dates into instants. */
 export function calendarOccurrenceDay(time: CalendarTime, timeZone: string) {
-  if (time.kind === "all-day") return time.startOn;
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(time.start));
-  const part = (type: string) => parts.find((part) => part.type === type)!.value;
-  return `${part("year")}-${part("month")}-${part("day")}`;
+  return time.kind === "all-day" ? time.startOn : displayDay(time.start, timeZone);
 }

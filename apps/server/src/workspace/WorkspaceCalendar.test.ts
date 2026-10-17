@@ -55,6 +55,7 @@ it.effect("keeps occurrence identity across moves and isolates source tuples", (
     const calendar = yield* Calendar.WorkspaceCalendar;
     yield* calendar.ingestPage({ ...source, items: [occurrence] });
     const first = (yield* calendar.listRange(range)).events[0]!;
+    expect(first).toMatchObject({ source: { connectionId: "fake-a", calendarId: "primary" } });
     yield* calendar.ingestPage({
       ...source,
       items: [

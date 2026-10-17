@@ -2,13 +2,15 @@ import { randomUUID } from "../../../lib/utils";
 import {
   createContext,
   useContext,
+  useId,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   EnvironmentId,
   ProjectId,
@@ -24,6 +26,7 @@ import { workspaceNotes } from "../../../state/workspaceNotes";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useEnvironmentSettings } from "../../../hooks/useSettings";
 import { useConnectedEnvironmentIds } from "../../../state/environments";
+import { useProjects } from "../../../state/entities";
 import { useMailCapabilities } from "../mail/useMailCapabilities";
 import { WorkspaceEngagement } from "../WorkspaceEngagement";
 import { WorkspaceProjectResources } from "../WorkspaceResourcesPanel";
@@ -42,12 +45,14 @@ import {
 } from "../meetings/meetingNotes";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { Checkbox } from "../../ui/checkbox";
+import { Label } from "../../ui/label";
 import { calendarItemRef } from "./calendarItemRef";
 import { CalendarAgenda } from "./CalendarAgenda";
 type NoteAttempt = {
   requestId: string;
   title: string;
-  attempted: boolean;
+  linkFailed: boolean;
   saved: WorkspaceLinkEndpoint | null;
   grantProject: boolean;
   projectId: ProjectId | undefined;
@@ -55,6 +60,7 @@ type NoteAttempt = {
 const CalendarNotesContext = createContext<Map<string, NoteAttempt> | null>(null);
 /** Retains creation repair state while /workspace destinations unmount their readers. */
 export function CalendarNotesProvider({ children }: { readonly children: ReactNode }) {
+  // Repair records are intentionally non-reactive and exist only after a create dispatch.
   const [attempts] = useState(() => new Map<string, NoteAttempt>());
   return <CalendarNotesContext value={attempts}>{children}</CalendarNotesContext>;
 }
@@ -85,7 +91,8 @@ function CalendarBinding({
   const resources = useWorkspaceResources();
   const timeZone =
     useEnvironmentSettings(environmentId, (s) => s.workspaceDisplayTimeZone) ?? "UTC";
-  const [today] = useState(() => displayDay(new Date().toISOString(), timeZone));
+  const [now] = useState(() => new Date().toISOString());
+  const today = useMemo(() => displayDay(now, timeZone), [now, timeZone]);
   const day = search.day ?? today;
   const range = useMemo(() => {
     const days = weekDates(day);
@@ -94,14 +101,21 @@ function CalendarBinding({
   const query = useEnvironmentQuery(workspaceCalendar.range({ environmentId, input: range }));
   const connected = useConnectedEnvironmentIds().includes(environmentId);
   const loadMore = useAtomCommand(workspaceCalendar.loadMore, { reportFailure: false });
-  const [error, setError] = useState<string | null>(null);
-  const [notes, setNotes] = useState<{
-    event: CalendarOccurrenceSummary;
-    projectId: ProjectId | undefined;
+  const [loadError, setLoadError] = useState<{
+    range: string;
+    fetchedAt: number;
+    message: string;
   } | null>(null);
-  const inheritedAttempts = useContext(CalendarNotesContext);
-  const [localAttempts] = useState(() => new Map<string, NoteAttempt>());
-  const attempts = inheritedAttempts ?? localAttempts;
+  const rangeKey = JSON.stringify(range);
+  const error =
+    loadError?.range === rangeKey && loadError.fetchedAt === query.dataUpdatedAt
+      ? loadError.message
+      : null;
+  if (loadError && error === null) setLoadError(null);
+  const [notes, setNotes] = useState<CalendarOccurrenceSummary | null>(null);
+  const notesTrigger = useRef<HTMLButtonElement | null>(null);
+  const attempts = useContext(CalendarNotesContext);
+  if (!attempts) throw new Error("CalendarSpace requires CalendarNotesProvider.");
   const header = useWorkspaceHeaderModel(
     environmentId,
     space === "calendar" ? "Calendar" : "Meetings",
@@ -159,27 +173,35 @@ function CalendarBinding({
             to: "/workspace",
             search: {
               ...search,
-              space: "calendar",
-              view: "agenda",
+              space,
+              view: space === "calendar" ? "agenda" : "upcoming",
               day,
               item: JSON.stringify(calendarItemRef(event.id)),
             },
           });
         }}
-        onNotes={(event) =>
-          setNotes({
-            event,
-            projectId:
-              resources.projectId ?? (search.project ? ProjectId.make(search.project) : undefined),
-          })
-        }
+        onNotes={(event, trigger) => {
+          notesTrigger.current = trigger;
+          setNotes(event);
+        }}
+        notesEventId={notes?.id}
         onRetry={() => {
-          setError(null);
+          setLoadError(null);
           query.refresh();
         }}
         onLoadMore={(kind) => {
           void loadMore({ environmentId, input: { range, kind } }).then((result) => {
-            if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
+            if (result._tag === "Failure") {
+              const cause = squashAtomCommandFailure(result);
+              setLoadError({
+                range: rangeKey,
+                fetchedAt: query.dataUpdatedAt,
+                message:
+                  cause instanceof Error
+                    ? cause.message
+                    : "Calendar could not load more results. Retry calendar.",
+              });
+            } else setLoadError(null);
           });
         }}
         onOpenTask={(task) => open(task.ref)}
@@ -192,16 +214,27 @@ function CalendarBinding({
           </WorkspaceItemMenu>
         )}
       />
+      {query.data?.unavailableReason ? (
+        <div className="px-4 pb-4">
+          <Link to="/workspace" search={{ space: "office" }} className="text-sm underline">
+            Open local Office tools
+          </Link>
+        </div>
+      ) : null}
       {notes ? (
         <MeetingNotes
-          key={notes.event.id}
+          key={notes.id}
           environmentId={environmentId}
-          event={notes.event}
+          event={notes}
           attempts={attempts}
-          projectId={notes.projectId}
-          onClose={() =>
-            setNotes((current) => (current?.event.id === notes.event.id ? null : current))
+          connected={connected}
+          projectId={
+            resources.projectId ?? (search.project ? ProjectId.make(search.project) : undefined)
           }
+          onClose={() => {
+            setNotes((current) => (current?.id === notes.id ? null : current));
+            notesTrigger.current?.focus();
+          }}
         />
       ) : null}
     </WorkspaceEngagement>
@@ -213,12 +246,14 @@ function MeetingNotes({
   projectId,
   onClose,
   attempts,
+  connected,
 }: {
   environmentId: EnvironmentId;
   event: CalendarOccurrenceSummary;
   projectId: ProjectId | undefined;
   onClose: () => void;
   attempts: Map<string, NoteAttempt>;
+  connected: boolean;
 }) {
   const resources = useWorkspaceResources();
   const attemptKey = JSON.stringify([environmentId, event.id]);
@@ -227,74 +262,76 @@ function MeetingNotes({
     workspaceLinks.list({ environmentId, input: { item: meeting.ref } }),
   );
   const canOperate = useWorkspaceCanOperate(environmentId);
+  const writable = connected && canOperate;
+  const projects = useProjects();
   const create = useAtomCommand(workspaceNotes.create, { reportFailure: false });
   const link = useAtomCommand(workspaceLinks.link, { reportFailure: false });
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
+  const heading = useRef<HTMLHeadingElement | null>(null);
+  const checkboxId = useId();
+  const currentContext = useRef({ resources, projectId });
+  useEffect(() => {
+    currentContext.current = { resources, projectId };
+  }, [resources, projectId]);
   useEffect(() => {
     mounted.current = true;
+    heading.current?.focus();
     return () => {
       mounted.current = false;
     };
   }, []);
-  const [attempt] = useState(() => {
-    const previous = attempts.get(attemptKey);
-    if (previous) return previous;
-    const suffix = " \u00b7 Meeting notes";
-    const title = event.title.slice(0, 300 - suffix.length).replace(/[\uD800-\uDBFF]$/u, "");
-    const next = {
-      requestId: randomUUID(),
-      title: `${title}${suffix}`,
-      attempted: false,
-      saved: null,
-      grantProject: false,
-      projectId,
-    };
+  const [attempt, setAttempt] = useState(() => attempts.get(attemptKey));
+  const saveAttempt = (next: NoteAttempt) => {
     attempts.set(attemptKey, next);
-    return next;
-  });
-  const [attempted, setAttempted] = useState(attempt.attempted);
-  const [saved, setSavedState] = useState<WorkspaceLinkEndpoint | null>(attempt.saved);
-  const setSaved = (note: WorkspaceLinkEndpoint) => {
-    attempts.set(attemptKey, { ...(attempts.get(attemptKey) ?? attempt), saved: note });
-    if (mounted.current) setSavedState(note);
+    if (mounted.current) setAttempt(next);
   };
-  const requestId = attempt.requestId;
-  const [grantProject, setGrantProject] = useState(attempt.grantProject);
+  const saved = attempt?.saved;
+  const [grantProject, setGrantProject] = useState(attempt?.grantProject ?? false);
+  const linkProjectId = attempt ? attempt.projectId : projectId;
+  const projectLabel =
+    attempt && linkProjectId !== projectId
+      ? `Also link this note to ${projects.find((project) => project.environmentId === environmentId && project.id === linkProjectId)?.title ?? linkProjectId}`
+      : "Also link this note to the selected project";
   const opened = useRef(false);
   const candidates =
     links.data?.linked
       .filter((v) => v.status === "confirmed" && isWorkspaceNote(v.item.ref))
       .map((v) => v.item) ?? [];
-  const open = (note: WorkspaceLinkEndpoint) => {
-    if (!mounted.current) return;
-    if (isWorkspaceNote(note.ref)) {
-      const result = openMeetingNote(resources, {
-        environmentId,
-        note: note.ref,
-        ...((attempt.projectId ?? resources.projectId)
-          ? { projectId: (attempt.projectId ?? resources.projectId)! }
-          : {}),
-      });
-      if (result === "opened") onClose();
-      else setError("Choose a resource project, then open this note.");
-    }
-  };
+  const open = useCallback(
+    (note: WorkspaceLinkEndpoint) => {
+      if (!mounted.current) return;
+      if (isWorkspaceNote(note.ref)) {
+        const context = currentContext.current;
+        const destination = context.resources.projectId ?? context.projectId;
+        const result = openMeetingNote(context.resources, {
+          environmentId,
+          note: note.ref,
+          ...(destination ? { projectId: destination } : {}),
+        });
+        if (result === "opened") onClose();
+        else setError("Choose a resource project, then open this note.");
+      }
+    },
+    [environmentId, onClose],
+  );
   useEffect(() => {
     if (!links.error && candidates.length === 1 && !links.data?.truncated && !opened.current) {
       opened.current = true;
       open(candidates[0]!);
     }
-  });
+  }, [links.error, links.data?.truncated, candidates, open]);
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
     setError(null);
     try {
       await action();
     } catch (cause) {
-      if (cause instanceof MeetingNoteLinkError) setSaved(cause.note);
+      const current = attempts.get(attemptKey);
+      if (cause instanceof MeetingNoteLinkError && current)
+        saveAttempt({ ...current, saved: cause.note, linkFailed: true });
       if (mounted.current)
         setError(
           cause instanceof Error
@@ -322,7 +359,9 @@ function MeetingNotes({
       aria-label="Meeting notes"
       className="m-4 flex flex-col gap-3 rounded-lg border border-border p-4"
     >
-      <h3 className="text-sm font-semibold">Notes &amp; agenda</h3>
+      <h3 ref={heading} tabIndex={-1} className="text-sm font-semibold">
+        Notes &amp; agenda
+      </h3>
       {links.data?.truncated ? (
         <p>
           Some linked notes are not shown. Choose an exact note reference or use Linked context.
@@ -346,48 +385,56 @@ function MeetingNotes({
       {!links.isPending && !links.error && candidates.length === 0 ? (
         <>
           <p>No linked notes. Create a note or link an existing note by its exact reference.</p>
-          {projectId ? (
-            <label className="text-xs">
-              <input
-                type="checkbox"
-                disabled={attempted || busy}
+          {linkProjectId ? (
+            <Label htmlFor={checkboxId}>
+              <Checkbox
+                id={checkboxId}
+                disabled={Boolean(attempt) || busy}
                 checked={grantProject}
-                onChange={(e) => {
-                  attempts.set(attemptKey, { ...attempt, grantProject: e.target.checked });
-                  setGrantProject(e.target.checked);
-                }}
-              />{" "}
-              Also link this note to the selected project
-            </label>
+                onCheckedChange={setGrantProject}
+              />
+              {projectLabel}
+            </Label>
           ) : null}
           <Button
             size="xs"
             variant="outline"
-            disabled={!canOperate || busy}
+            disabled={!writable || busy}
             onClick={() =>
               void run(async () => {
-                setAttempted(true);
-                attempts.set(attemptKey, {
-                  ...(attempts.get(attemptKey) ?? attempt),
-                  attempted: true,
-                });
+                if (!writable) return;
+                const suffix = " · Meeting notes";
+                const next = attempt ?? {
+                  requestId: randomUUID(),
+                  title: `${event.title.slice(0, 300 - suffix.length).replace(/[\uD800-\uDBFF]$/u, "")}${suffix}`,
+                  saved: null,
+                  linkFailed: false,
+                  grantProject,
+                  projectId,
+                };
+                saveAttempt(next);
                 const note = await createMeetingNote(
                   commands,
                   {
                     environmentId,
-                    requestId,
-                    title: attempt.title,
+                    requestId: next.requestId,
+                    title: next.title,
                     body: "",
                     meeting,
-                    ...(grantProject && attempt.projectId ? { projectId: attempt.projectId } : {}),
+                    ...(next.grantProject && next.projectId ? { projectId: next.projectId } : {}),
                   },
-                  setSaved,
+                  (note) => saveAttempt({ ...next, saved: note }),
                 );
+                attempts.delete(attemptKey);
+                if (mounted.current) {
+                  setAttempt(undefined);
+                  setGrantProject(false);
+                }
                 open(note);
               })
             }
           >
-            {saved ? "Retry linking" : "Create meeting note"}
+            {attempt?.linkFailed ? "Retry linking" : "Create meeting note"}
           </Button>
           <label className="text-xs">
             Note reference
@@ -400,9 +447,10 @@ function MeetingNotes({
           <Button
             size="xs"
             variant="outline"
-            disabled={!canOperate || busy}
+            disabled={!writable || busy}
             onClick={() =>
               void run(async () => {
+                if (!writable) return;
                 const ref = parseNoteLocation(address);
                 if (!ref) throw new Error("Paste a valid workspace note reference.");
                 const note = { ref };

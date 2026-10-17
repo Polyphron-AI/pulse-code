@@ -142,7 +142,9 @@ export function calendarRangeSql(
     payload: string;
     revision: number;
     sortKey: number;
-  }>`SELECT id,summary_json AS payload,revision,sort_key AS "sortKey" FROM workspace_calendar_occurrences WHERE status='confirmed' AND sort_key<${upperSortKey} AND ${sql.or(selected.map((source) => sql`(connection_id=${source.connectionId} AND calendar_id=${source.calendarId})`))} AND ((time_kind='timed' AND start_ms<${until} AND end_ms>${from}) OR (time_kind='all-day' AND start_on<${input.endBefore} AND end_before>${input.startOn})) AND ${cursor ? sql`(sort_key,id)>(${cursor.sortKey},${cursor.id})` : sql`1=1`} ORDER BY sort_key,id LIMIT ${(input.limit ?? 50) + 1}`;
+    connectionId: string;
+    calendarId: string;
+  }>`SELECT id,summary_json AS payload,revision,sort_key AS "sortKey",connection_id AS "connectionId",calendar_id AS "calendarId" FROM workspace_calendar_occurrences WHERE status='confirmed' AND sort_key<${upperSortKey} AND ${sql.or(selected.map((source) => sql`(connection_id=${source.connectionId} AND calendar_id=${source.calendarId})`))} AND ((time_kind='timed' AND start_ms<${until} AND end_ms>${from}) OR (time_kind='all-day' AND start_on<${input.endBefore} AND end_before>${input.startOn})) AND ${cursor ? sql`(sort_key,id)>(${cursor.sortKey},${cursor.id})` : sql`1=1`} ORDER BY sort_key,id LIMIT ${(input.limit ?? 50) + 1}`;
 }
 
 interface SourceAvailability {
@@ -472,6 +474,7 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
             ...(yield* decodeSummaryJson(rows[0].payload)),
             id: rows[0].id,
             revision: rows[0].revision,
+            source: { connectionId: rows[0].connectionId, calendarId: rows[0].calendarId },
           }
         : undefined;
       const eventReserve = firstEvent ? bytes(firstEvent) : 0;
@@ -485,7 +488,12 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
         const event =
           index === 0
             ? firstEvent!
-            : { ...(yield* decodeSummaryJson(row.payload)), id: row.id, revision: row.revision };
+            : {
+                ...(yield* decodeSummaryJson(row.payload)),
+                id: row.id,
+                revision: row.revision,
+                source: { connectionId: row.connectionId, calendarId: row.calendarId },
+              };
         const size = (index === 0 ? eventReserve : bytes(event)) + (page.events.length ? 1 : 0);
         if (pageBytes + size > 65536) break;
         page.events.push(event);

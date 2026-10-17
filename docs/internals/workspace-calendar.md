@@ -66,12 +66,20 @@ normalize range fields and zone case, capture the environment, and revalidate sa
 changes or reconnect. Source selection belongs to the environment resolver; selection changes
 invalidate these queries and invalidate server cursors. A server without the optional capability
 produces a successful unavailable state without calling missing endpoints.
+The selected URL day also survives other workspace destinations so returning through the sidebar,
+palette or history restores the same day. Outside Calendar and Meetings it has no query effect.
 
 `loadMore` is explicit and separate for events and due tasks. It deduplicates IDs across requested
-pages and discards continuations when the first page changes. A cursor conflict restarts page 1;
+pages. Each invalidation re-reads both sides up to their previously loaded depth, stopping at
+exhaustion. The shared change counter cannot prove either side untouched, so an equal first page
+does not permit continuation reuse. A cursor conflict restarts the same bounded replay from page 1;
 invalid input remains an error. In-flight commands with the same environment and normalized range
 share work. A late continuation cannot reopen hidden listeners or overwrite a newer first page.
 Queries and streams use zero idle TTL so their last unmount releases subscriptions immediately.
+Partial refreshes replace healthy sources. Only rows with an explicit source tuple whose new state
+is unavailable or disconnected can be retained, after fresh rows within the loaded cap. Unselected,
+removed and unknown sources are not retained. Older servers may omit the optional tuple, so their
+partial pages show fresh rows only. Merged results sort by start and occurrence ID.
 The 30-second stale threshold controls requested mount freshness only. No elapsed clock triggers a
 request and no hidden consumer retains a provider listener. A failed configuration check stops
 invalidation signals; mounted range/detail reads still surface that failure. A silent change stream

@@ -24,6 +24,7 @@ export function CalendarDayStrip({
             year: "numeric",
           })}
           aria-pressed={day === value}
+          tabIndex={day === value ? 0 : -1}
           onClick={() => onSelectDay(value)}
           onKeyDown={(e) => {
             const next =
@@ -41,7 +42,7 @@ export function CalendarDayStrip({
               buttons.current[next]?.focus();
             }
           }}
-          className="min-w-0 rounded-lg bg-card text-3xs text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+          className="relative min-w-0 rounded-lg bg-white/[0.015] text-3xs text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-primary aria-pressed:text-primary-foreground pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-[6px]"
         >
           {formatDay(value, { weekday: "short" }).slice(0, 1)}{" "}
           {formatDay(value, { day: "numeric" })}

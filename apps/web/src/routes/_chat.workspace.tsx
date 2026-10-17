@@ -73,7 +73,11 @@ function WorkspaceRouteContent() {
     case "tasks":
       return <TasksSpace />;
     case "meetings":
-      return search.item && parseNoteLocation(search.item) ? <NoteWorkspace /> : <MeetingsSpace />;
+      return search.item && parseNoteLocation(search.item) ? (
+        <NoteWorkspace />
+      ) : (
+        <CalendarWorkspace space="meetings" />
+      );
     case "calendar":
       return <CalendarWorkspace />;
     case undefined:
@@ -134,20 +138,37 @@ function NoteWorkspace() {
   );
 }
 
-function CalendarWorkspace() {
+function CalendarWorkspace({ space = "calendar" }: { space?: "calendar" | "meetings" }) {
+  const search = Route.useSearch();
+  const item = parseCalendarLocation(search.item);
+  return item ? (
+    <CalendarItemWorkspace space={space} item={item} />
+  ) : space === "meetings" ? (
+    <MeetingsSpace />
+  ) : (
+    <CalendarSpace />
+  );
+}
+function CalendarItemWorkspace({
+  space,
+  item,
+}: {
+  space: "calendar" | "meetings";
+  item: NonNullable<ReturnType<typeof parseCalendarLocation>>;
+}) {
   const search = Route.useSearch();
   const { environmentId } = useMailCapabilities(
     search.environment ? EnvironmentId.make(search.environment) : undefined,
   );
-  const ref = parseCalendarLocation(search.item);
-  return environmentId && ref ? (
+  return environmentId ? (
     <LinkedCalendarEvent
-      key={`${environmentId}:${ref.resourceId}`}
+      key={`${environmentId}:${item.resourceId}`}
       environmentId={environmentId}
-      item={ref}
+      item={item}
+      space={space}
     />
   ) : (
-    <CalendarSpace />
+    <p>Choose an environment to open Calendar.</p>
   );
 }
 
@@ -155,9 +176,11 @@ function CalendarWorkspace() {
 function LinkedCalendarEvent({
   environmentId,
   item,
+  space,
 }: {
   environmentId: EnvironmentId;
   item: NonNullable<ReturnType<typeof parseCalendarLocation>>;
+  space: "calendar" | "meetings";
 }) {
   const search = Route.useSearch();
   const navigate = useNavigate();
@@ -172,7 +195,8 @@ function LinkedCalendarEvent({
       ? detail.data
       : null;
   const endpoint = { ref: item, ...(event ? { title: event.title } : {}) };
-  const header = useWorkspaceHeaderModel(environmentId, "Calendar", "Calendar");
+  const label = space === "meetings" ? "Meetings" : "Calendar";
+  const header = useWorkspaceHeaderModel(environmentId, label, label);
   const day = event ? calendarOccurrenceDay(event.time, timeZone) : undefined;
   useEffect(() => {
     if (day && day !== search.day)
@@ -181,7 +205,7 @@ function LinkedCalendarEvent({
   return (
     <WorkspaceEngagement
       environmentId={environmentId}
-      space="calendar"
+      space={space}
       layout="full"
       header={header}
       resources={<WorkspaceProjectResources />}

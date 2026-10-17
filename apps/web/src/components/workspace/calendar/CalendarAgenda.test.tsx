@@ -14,9 +14,10 @@ import {
   useNavigate,
   useSearch,
 } from "@tanstack/react-router";
-import { fireEvent, getByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, type CalendarOccurrenceSummary } from "@t3tools/contracts";
+import { CalendarAgenda } from "./CalendarAgenda";
 import { Route, parseWorkspaceSearch } from "../../../routes/_chat.workspace";
 import { WorkspaceResourcesProvider, useWorkspaceResourceState } from "../workspaceResourceState";
 import { WorkspaceNavigation } from "../WorkspaceNavigationView";
@@ -28,6 +29,9 @@ const rpc = vi.hoisted(() => ({
   noteReceipt: undefined as (() => void) | undefined,
   noteRequests: [] as unknown[],
   rangeMode: "ready",
+  rangeUpdatedAt: 1,
+  more: false,
+  timeZone: "Africa/Johannesburg" as string | null,
   connected: true,
   active: 0,
   max: 0,
@@ -55,7 +59,7 @@ const event = {
   hasDescription: true,
   descriptionPreview: "Campaign readiness",
   joinUrl: "https://meet.google.com/abc-defg-hij",
-};
+} satisfies CalendarOccurrenceSummary;
 const noteId = "wsn_00000000-0000-0000-0000-000000000001";
 vi.mock("../../../state/workspaceCalendar", () => ({
   workspaceCalendar: {
@@ -161,6 +165,7 @@ vi.mock("../../../state/query", () => ({
           sourceStates: [],
           incomplete: rpc.rangeMode === "partial",
           dueIncomplete: false,
+          ...(rpc.more ? { nextCursor: "more", nextDueCursor: "more-due" } : {}),
           ...(rpc.rangeMode === "unavailable"
             ? { unavailableReason: "Calendar is unavailable on this server." }
             : {}),
@@ -177,13 +182,13 @@ vi.mock("../../../state/query", () => ({
       isPending:
         (query?.kind === "detail" && !rpc.detail) ||
         (query?.kind === "range" && rpc.rangeMode === "loading"),
-      dataUpdatedAt: 1,
+      dataUpdatedAt: rpc.rangeUpdatedAt,
       refresh: () => {},
     };
   },
 }));
 vi.mock("../../../hooks/useSettings", () => ({
-  useEnvironmentSettings: () => "Africa/Johannesburg",
+  useEnvironmentSettings: () => rpc.timeZone,
 }));
 vi.mock("../../../hooks/useMediaQuery", () => ({ useMediaQuery: () => true }));
 vi.mock("../../../state/environments", () => ({
@@ -237,17 +242,27 @@ function Shell() {
         environmentId={id}
         onModeChange={() => {}}
         onNavigate={(destination) => {
-          void navigate({ to: "/workspace", search: workspaceDestinationSearch(destination, id) });
+          void navigate({
+            to: "/workspace",
+            search: workspaceDestinationSearch(destination, id, search),
+          });
         }}
       />
       <Outlet />
     </WorkspaceResourcesProvider>
   );
 }
-async function mount(item?: string) {
+async function mount(
+  item?: string,
+  space = item ? "calendar" : "meetings",
+  timeZone: string | null = "Africa/Johannesburg",
+) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   rpc.notes = 1;
   rpc.rangeMode = "ready";
+  rpc.more = false;
+  rpc.rangeUpdatedAt = 1;
+  rpc.timeZone = timeZone;
   rpc.connected = true;
   rpc.detail = false;
   rpc.error = null;
@@ -266,8 +281,8 @@ async function mount(item?: string) {
     component: Route.options.component!,
   });
   const search = defaultStringifySearch({
-    space: item ? "calendar" : "meetings",
-    view: item ? "agenda" : "upcoming",
+    space,
+    view: space === "calendar" ? "agenda" : "upcoming",
     day: "2026-10-14",
     environment: "fixture-environment",
     project: "fixture-synkek",
@@ -301,6 +316,414 @@ const notify = async () =>
     rpc.version++;
     for (const l of rpc.listeners) l();
   });
+
+it.each(["reopen", "while open"])(
+  "links the project shown at confirmation after a project switch %s",
+  async (when) => {
+    const { node, dispose } = await mount();
+    try {
+      rpc.notes = 0;
+      rpc.commands.mockImplementation(async (name: string) =>
+        name === "create"
+          ? { _tag: "Success", value: { id: noteId, title: "Saved note" } }
+          : { _tag: "Success", value: {} },
+      );
+      await click(node, "button", "Tuesday, 13 October 2026");
+      await click(node, "combobox", "Choose project");
+      await click(document.body, "option", "SynKEK");
+      await click(node, "button", "Notes & agenda");
+      if (when === "reopen") await click(node, "button", "Close notes chooser");
+      await click(node, "combobox", "Choose project");
+      await click(document.body, "option", "Chosen project");
+      if (when === "reopen") await click(node, "button", "Notes & agenda");
+      await act(() => fireEvent.click(getByRole(node, "checkbox").closest("label")!));
+      expect(getByRole(node, "checkbox", { checked: true })).toBeDefined();
+      await click(node, "button", "Create meeting note");
+      expect(
+        rpc.commands.mock.calls
+          .filter((call) => call[0] === "link")
+          .map((call) => call[1].input.a.ref),
+      ).toEqual([
+        { type: "provider-resource", provider: "workspace-calendar", resourceId: event.id },
+        { type: "project", projectId: "chosen" },
+      ]);
+      expect(getByRole(node, "combobox").textContent).toContain("Chosen project");
+    } finally {
+      await dispose();
+    }
+  },
+);
+
+it("opens an existing note using the current manual resource project after reopening", async () => {
+  const { node, dispose } = await mount();
+  try {
+    rpc.notes = 0;
+    await click(node, "button", "Tuesday, 13 October 2026");
+    await click(node, "combobox", "Choose project");
+    await click(document.body, "option", "SynKEK");
+    await click(node, "button", "Notes & agenda");
+    await click(node, "button", "Close notes chooser");
+    await click(node, "combobox", "Choose project");
+    await click(document.body, "option", "Chosen project");
+    rpc.notes = 1;
+    await notify();
+    await click(node, "button", "Notes & agenda");
+    await act(() => vi.dynamicImportSettled());
+    expect(getByRole(node, "tabpanel").textContent).toContain("Exact native note body");
+    expect(getByRole(node, "combobox").textContent).toContain("Chosen project");
+  } finally {
+    await dispose();
+  }
+});
+
+it("uses a project selected after the first projectless chooser open", async () => {
+  const { node, router, dispose } = await mount();
+  try {
+    rpc.notes = 0;
+    rpc.commands.mockImplementation(async (name: string) =>
+      name === "create"
+        ? { _tag: "Success", value: { id: noteId, title: "Saved note" } }
+        : { _tag: "Success", value: {} },
+    );
+    await act(() =>
+      router.navigate({
+        to: "/workspace",
+        search: {
+          space: "meetings",
+          view: "upcoming",
+          day: "2026-10-13",
+          environment: "fixture-environment",
+        },
+      }),
+    );
+    await click(node, "button", "Notes & agenda");
+    expect(queryByRole(node, "checkbox")).toBeNull();
+    await click(node, "button", "Close notes chooser");
+    await click(node, "combobox", "Choose project");
+    await click(document.body, "option", "Chosen project");
+    await click(node, "button", "Notes & agenda");
+    await act(() => fireEvent.click(getByRole(node, "checkbox").closest("label")!));
+    await click(node, "button", "Create meeting note");
+    expect(rpc.commands).toHaveBeenCalledWith(
+      "link",
+      expect.objectContaining({
+        input: expect.objectContaining({ a: { ref: { type: "project", projectId: "chosen" } } }),
+      }),
+    );
+    expect(getByRole(node, "combobox").textContent).toContain("Chosen project");
+  } finally {
+    await dispose();
+  }
+});
+
+it("names the frozen repair project while preserving a newer manual destination", async () => {
+  const { node, dispose } = await mount();
+  try {
+    rpc.notes = 0;
+    let failLink = true;
+    rpc.commands.mockImplementation(async (name: string) =>
+      name === "create"
+        ? { _tag: "Success", value: { id: noteId, title: "Saved note" } }
+        : failLink
+          ? { _tag: "Failure", cause: Cause.fail(new Error("Link failed")) }
+          : { _tag: "Success", value: {} },
+    );
+    await click(node, "button", "Tuesday, 13 October 2026");
+    await click(node, "combobox", "Choose project");
+    await click(document.body, "option", "SynKEK");
+    await click(node, "button", "Notes & agenda");
+    await act(() => fireEvent.click(getByRole(node, "checkbox").closest("label")!));
+    await click(node, "button", "Create meeting note");
+    await click(node, "button", "Close notes chooser");
+    await click(node, "combobox", "Choose project");
+    await click(document.body, "option", "Chosen project");
+    await click(node, "button", "Notes & agenda");
+    expect(
+      getByRole(node, "checkbox", {
+        name: "Also link this note to SynKEK",
+        checked: true,
+      }).getAttribute("aria-disabled"),
+    ).toBe("true");
+    failLink = false;
+    await click(node, "button", "Retry linking");
+    expect(rpc.commands).toHaveBeenCalledWith(
+      "link",
+      expect.objectContaining({
+        input: expect.objectContaining({
+          a: { ref: { type: "project", projectId: "fixture-synkek" } },
+        }),
+      }),
+    );
+    expect(getByRole(node, "combobox").textContent).toContain("Chosen project");
+  } finally {
+    await dispose();
+  }
+});
+
+it("clears successful creation repair so unlinking offers a fresh note and request", async () => {
+  const { node, dispose } = await mount();
+  try {
+    rpc.notes = 0;
+    rpc.commands.mockImplementation(async (name: string) =>
+      name === "create"
+        ? { _tag: "Success", value: { id: noteId, title: "Saved note" } }
+        : { _tag: "Success", value: {} },
+    );
+    await click(node, "button", "Tuesday, 13 October 2026");
+    await click(node, "button", "Notes & agenda");
+    await click(node, "button", "Create meeting note");
+    await act(() => vi.dynamicImportSettled());
+    rpc.notes = 1;
+    await notify();
+    // The links boundary now reports the note unlinked in this same route lifetime.
+    rpc.notes = 0;
+    await notify();
+    await click(node, "button", "Notes & agenda");
+    expect(queryByRole(node, "button", { name: "Retry linking" })).toBeNull();
+    expect(queryByRole(node, "button", { name: "Open saved note" })).toBeNull();
+    await click(node, "button", "Create meeting note");
+    const requests = rpc.commands.mock.calls
+      .filter((call) => call[0] === "create")
+      .map((call) => call[1].input.requestId);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).not.toBe(requests[0]);
+  } finally {
+    await dispose();
+  }
+});
+
+it.each(["create", "link", "retry"])(
+  "gates disconnected %s without consuming a new attempt",
+  async (action) => {
+    const { node, dispose } = await mount();
+    try {
+      rpc.notes = 0;
+      rpc.commands.mockImplementation(async (name: string) =>
+        name === "create"
+          ? { _tag: "Success", value: { id: noteId, title: "Saved note" } }
+          : { _tag: "Failure", cause: Cause.fail(new Error("Link failed")) },
+      );
+      await click(node, "button", "Tuesday, 13 October 2026");
+      await click(node, "button", "Notes & agenda");
+      if (action === "retry") await click(node, "button", "Create meeting note");
+      rpc.connected = false;
+      await notify();
+      const name =
+        action === "create"
+          ? "Create meeting note"
+          : action === "link"
+            ? "Link existing note"
+            : "Retry linking";
+      const button = getByRole(node, "button", { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      const count = rpc.commands.mock.calls.length;
+      await act(() => fireEvent.click(button));
+      expect(rpc.commands).toHaveBeenCalledTimes(count);
+      rpc.connected = true;
+      await notify();
+      expect(button.disabled).toBe(false);
+      if (action !== "retry")
+        expect(getByRole(node, "checkbox").getAttribute("aria-disabled")).not.toBe("true");
+    } finally {
+      await dispose();
+    }
+  },
+);
+
+it("keeps Meetings selection and Close event in Upcoming", async () => {
+  const { node, router, dispose } = await mount();
+  try {
+    await click(node, "button", "Tuesday, 13 October 2026");
+    await click(node, "button", "Launch review");
+    await act(() => router.load());
+    expect(router.state.location.search).toMatchObject({ space: "meetings", view: "upcoming" });
+    expect(node.textContent).toContain("Loading event...");
+    await click(node, "button", "Close event");
+    await act(() => router.load());
+    expect(router.state.location.search).toMatchObject({
+      space: "meetings",
+      view: "upcoming",
+      day: "2026-10-13",
+    });
+    expect(getByRole(node, "region", { name: "Upcoming meetings" })).toBeDefined();
+  } finally {
+    await dispose();
+  }
+});
+
+it("honors a Meetings URL carrying a calendar item", async () => {
+  const item = JSON.stringify({
+    type: "provider-resource",
+    provider: "workspace-calendar",
+    resourceId: event.id,
+  });
+  const { node, router, dispose } = await mount(item, "meetings");
+  try {
+    expect(node.textContent).toContain("Loading event...");
+    rpc.detail = true;
+    await notify();
+    await act(() => router.load());
+    expect(node.textContent).toContain("Resolved body");
+    await click(node, "button", "Close event");
+    await act(() => router.load());
+    expect(router.state.location.search).toMatchObject({
+      space: "meetings",
+      view: "upcoming",
+      day: "2026-12-02",
+    });
+  } finally {
+    await dispose();
+  }
+});
+
+it("focuses the chooser on open and restores the triggering card button on close", async () => {
+  const { node, dispose } = await mount();
+  try {
+    rpc.notes = 0;
+    await click(node, "button", "Tuesday, 13 October 2026");
+    const trigger = getByRole(node, "button", { name: "Notes & agenda" });
+    await act(() => trigger.click());
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(getByRole(node, "heading", { name: "Notes & agenda" }));
+    await click(node, "button", "Close notes chooser");
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  } finally {
+    await dispose();
+  }
+});
+
+it.each(["range change", "refresh recovery"])(
+  "clears a Load more error after %s",
+  async (recovery) => {
+    const { node, router, dispose } = await mount();
+    try {
+      rpc.more = true;
+      rpc.commands.mockResolvedValue({
+        _tag: "Failure",
+        cause: Cause.fail(new Error("Page read failed")),
+      });
+      await notify();
+      await click(node, "button", "Load more events");
+      expect(getByRole(node, "alert").textContent).toContain("Page read failed");
+      expect(rpc.commands).toHaveBeenCalledWith(
+        "more",
+        expect.objectContaining({ input: expect.objectContaining({ kind: "events" }) }),
+      );
+      if (recovery === "range change") {
+        await act(() =>
+          router.navigate({
+            to: "/workspace",
+            search: { ...router.state.location.search, day: "2026-10-20" },
+          }),
+        );
+      } else {
+        rpc.rangeUpdatedAt = 2;
+        await notify();
+      }
+      expect(queryByRole(node, "alert")).toBeNull();
+      rpc.commands.mockResolvedValue({ _tag: "Success", value: undefined });
+      await click(node, "button", "Load more due tasks");
+      expect(rpc.commands).toHaveBeenLastCalledWith(
+        "more",
+        expect.objectContaining({ input: expect.objectContaining({ kind: "dueTasks" }) }),
+      );
+      expect(queryByRole(node, "alert")).toBeNull();
+    } finally {
+      await dispose();
+    }
+  },
+);
+
+it("derives the default day again when the environment timezone arrives", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-12T23:30:00Z"));
+  const { node, router, dispose } = await mount(undefined, "meetings", null);
+  try {
+    await act(() =>
+      router.navigate({
+        to: "/workspace",
+        search: { space: "meetings", view: "upcoming", environment: "fixture-environment" },
+      }),
+    );
+    expect(getByRole(node, "heading", { name: "Monday, 12 October" })).toBeDefined();
+    rpc.timeZone = "Africa/Johannesburg";
+    await notify();
+    expect(getByRole(node, "heading", { name: "Tuesday, 13 October" })).toBeDefined();
+    expect(
+      getByRole(node, "button", { name: "Tuesday, 13 October 2026" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  } finally {
+    await dispose();
+    vi.useRealTimers();
+  }
+});
+
+it("places cross-midnight events on both days, keeps all-day and date-only due rows in the untimed band, and excludes exclusive ends", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const openTask = vi.fn();
+  const overnight = {
+    ...event,
+    title: "Overnight",
+    time: { ...event.time, start: "2026-10-12T21:00:00Z", end: "2026-10-12T23:30:00Z" },
+  };
+  const allDay = {
+    ...event,
+    id: "all-day",
+    title: "All-day planning",
+    time: { kind: "all-day" as const, startOn: "2026-10-12", endBefore: "2026-10-14" },
+  };
+  const due = {
+    ref: { type: "task" as const, taskId: "wskt_00000000-0000-0000-0000-000000000001" },
+    title: "Due follow-up",
+    projectId: ProjectId.make("chosen"),
+    dueOn: "2026-10-13",
+    done: false,
+    revision: 1,
+  };
+  const render = (day: string, done = false) =>
+    act(() =>
+      root.render(
+        <CalendarAgenda
+          day={day}
+          timeZone="Africa/Johannesburg"
+          space="calendar"
+          events={[overnight, allDay]}
+          dueTasks={[{ ...due, done }]}
+          status="ready"
+          onSelectDay={() => {}}
+          onSelect={() => {}}
+          onNotes={() => {}}
+          onOpenTask={openTask}
+        />,
+      ),
+    );
+  try {
+    for (const day of ["2026-10-12", "2026-10-13"]) {
+      await render(day);
+      expect(getByRole(node, "button", { name: "Overnight" })).toBeDefined();
+      expect(getByRole(node, "group", { name: "All day and due tasks" }).textContent).toContain(
+        "All-day planning",
+      );
+    }
+    const band = getByRole(node, "group", { name: "All day and due tasks" });
+    expect(band.textContent).toContain("Due follow-up");
+    expect(band.textContent).not.toContain("minutes");
+    await click(node, "button", "Due follow-up");
+    expect(openTask).toHaveBeenCalledWith(due);
+    await render("2026-10-13", true);
+    expect(getByRole(node, "button", { name: "Due follow-up · Completed" })).toBeDefined();
+    await render("2026-10-14");
+    expect(queryByRole(node, "button", { name: "Overnight" })).toBeNull();
+    expect(queryByRole(node, "button", { name: "All-day planning" })).toBeNull();
+    expect(queryByRole(node, "group", { name: "All day and due tasks" })).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
 it("persists day through real destinations, route unmount and browser history, then opens exact note in the one resource body", async () => {
   const { node, router, dispose } = await mount();
   try {
@@ -413,7 +836,7 @@ it.each([0, 2])(
       if (count === 0) {
         expect(getByRole(node, "button", { name: "Create meeting note" })).toBeDefined();
         expect(getByRole(node, "button", { name: "Link existing note" })).toBeDefined();
-        expect((getByRole(node, "checkbox") as HTMLInputElement).checked).toBe(false);
+        expect(getByRole(node, "checkbox", { checked: false })).toBeDefined();
         expect(rpc.commands).not.toHaveBeenCalled();
       } else {
         expect(getByRole(node, "button", { name: "Second note" })).toBeDefined();
@@ -428,7 +851,7 @@ it.each([0, 2])(
 );
 
 it("retains a saved note and retry identity after a failed link and chooser close without granting project context", async () => {
-  const { node, dispose } = await mount();
+  const { node, router, dispose } = await mount();
   try {
     rpc.notes = 0;
     let failLink = true;
@@ -440,6 +863,8 @@ it("retains a saved note and retry identity after a failed link and chooser clos
           : { _tag: "Success", value: {} },
     );
     await click(node, "button", "Tuesday, 13 October 2026");
+    await click(node, "combobox", "Choose project");
+    await click(document.body, "option", "Chosen project");
     await click(node, "button", "Notes & agenda");
     await click(node, "button", "Create meeting note");
     expect(node.textContent).toContain("Note saved. Linking did not finish.");
@@ -447,7 +872,14 @@ it("retains a saved note and retry identity after a failed link and chooser clos
     const original = rpc.commands.mock.calls.find((c) => c[0] === "create")![1];
     await click(node, "button", "Close notes chooser");
     await click(node, "link", "Projects");
+    await act(() => router.load());
+    expect(router.state.location.search.space).toBe("projects");
+    expect(node.textContent).toContain("Projects destination");
+    expect(queryByRole(node, "region", { name: "Upcoming meetings" })).toBeNull();
     await click(node, "link", "Calendar");
+    await act(() => router.load());
+    expect(router.state.location.search.space).toBe("calendar");
+    expect(getByRole(node, "region", { name: "Calendar agenda" })).toBeDefined();
     await click(node, "button", "Notes & agenda");
     expect(getByRole(node, "button", { name: "Open saved note" })).toBeDefined();
     await click(node, "button", "Open saved note");
@@ -494,6 +926,10 @@ it.each(["loading", "empty", "unavailable", "partial", "no-url", "disconnected"]
       if (mode === "empty") expect(node.textContent).toContain("No meetings on this day.");
       if (mode === "unavailable")
         expect(node.textContent).toContain("Calendar is unavailable on this server.");
+      if (mode === "unavailable")
+        expect(
+          getByRole(node, "link", { name: "Open local Office tools" }).getAttribute("href"),
+        ).toBe("/workspace?space=office");
       if (mode === "partial") {
         expect(node.textContent).toContain("Showing the last saved results.");
         expect(getByRole(node, "button", { name: "Launch review" })).toBeDefined();

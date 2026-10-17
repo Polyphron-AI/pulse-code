@@ -8,11 +8,14 @@ import { WorkspaceProjectResources } from "../WorkspaceResourcesPanel";
 import { useWorkspaceHeaderModel } from "../useWorkspaceHeaderModel";
 export function MeetingsSpace() {
   const search = parseWorkspaceSearch(useSearch({ strict: false }));
+  return search.view === "recordings" ? <RecordingsSpace /> : <CalendarSpace space="meetings" />;
+}
+function RecordingsSpace() {
+  const search = parseWorkspaceSearch(useSearch({ strict: false }));
   const { environmentId } = useMailCapabilities(
     search.environment ? EnvironmentId.make(search.environment) : undefined,
   );
   const header = useWorkspaceHeaderModel(environmentId, "Meetings", "Meetings");
-  if (search.view !== "recordings") return <CalendarSpace space="meetings" />;
   return (
     <WorkspaceEngagement
       environmentId={environmentId}
@@ -24,6 +27,7 @@ export function MeetingsSpace() {
       <section aria-label="Recordings" className="p-4">
         <p>Published recordings are not available in this environment.</p>
         {window.desktopBridge?.talkInvoke ? (
+          // Office tools belong to this device, independently of the selected environment.
           <Link to="/workspace" search={{ space: "office" }}>
             Open Pulse Talk, local to this device
           </Link>

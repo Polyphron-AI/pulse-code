@@ -2,7 +2,7 @@ import {
   CalendarError,
   CalendarRangeInput,
   WS_METHODS,
-  type CalendarPage,
+  CalendarPage,
   type EnvironmentId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -39,6 +39,12 @@ const unavailableReason = "Calendar is unavailable on this server.";
 const unavailable = { unavailableReason };
 type LoadMoreInput = { readonly range: CalendarRangeInput; readonly kind: "events" | "dueTasks" };
 type RangeState = CalendarPage & { readonly unavailableReason?: string };
+const sameRange = Schema.toEquivalence(
+  Schema.Struct({
+    ...CalendarPage.fields,
+    unavailableReason: Schema.optionalKey(Schema.String),
+  }),
+);
 const decodeRange = Schema.decodeUnknownOption(CalendarRangeInput);
 const normalizeRange = (input: CalendarRangeInput) => {
   const decoded = decodeRange(input);
@@ -77,18 +83,36 @@ export function createWorkspaceCalendarAtoms<R, E>(
     value: RangeState;
     eventDepth: number;
     dueDepth: number;
-    forceReplay: boolean;
+    queryValue: RangeState;
   };
   // Revalidation follows only the depth explicitly loaded in this mounted range.
   const depths = new Map<string, Depth>();
   const depthKey = (environmentId: EnvironmentId, input: CalendarRangeInput) =>
     JSON.stringify([environmentId, normalizeRange(input)]);
-  const signature = (page: CalendarPage, kind: "events" | "due") =>
-    JSON.stringify(
-      kind === "events"
-        ? [page.sourceStates, page.nextCursor, page.events.map((e) => [e.id, e.revision, e])]
-        : [page.nextDueCursor, page.dueTasks.map((t) => [t.ref.taskId, t.revision, t])],
-    );
+  const eventStart = (event: CalendarPage["events"][number]) =>
+    Date.parse(event.time.kind === "timed" ? event.time.start : `${event.time.startOn}T00:00:00Z`);
+  const sortEvents = (events: CalendarPage["events"][number][]) =>
+    events.sort((a, b) => eventStart(a) - eventStart(b) || a.id.localeCompare(b.id));
+  const retainFailedSources = (
+    fresh: RangeState,
+    saved: RangeState | undefined,
+    cap: number,
+  ): RangeState => {
+    const freshIds = new Set(fresh.events.map((event) => event.id));
+    const retained =
+      saved?.events.filter(
+        (event) =>
+          !freshIds.has(event.id) &&
+          event.source &&
+          fresh.sourceStates.some(
+            (source) =>
+              source.connectionId === event.source?.connectionId &&
+              source.calendarId === event.source.calendarId &&
+              (source.state === "unavailable" || source.state === "disconnected"),
+          ),
+      ) ?? [];
+    return { ...fresh, events: sortEvents([...fresh.events, ...retained].slice(0, cap)) };
+  };
   const combine = (
     first: RangeState,
     events: readonly CalendarPage[],
@@ -109,7 +133,7 @@ export function createWorkspaceCalendarAtoms<R, E>(
     }
     return {
       ...base,
-      events: [...eventRows.values()],
+      events: sortEvents([...eventRows.values()]),
       dueTasks: [...dueRows.values()],
       dueIncomplete: lastDue.dueIncomplete,
       ...(lastEvents.nextCursor ? { nextCursor: lastEvents.nextCursor } : {}),
@@ -136,13 +160,7 @@ export function createWorkspaceCalendarAtoms<R, E>(
       const previous = depths.get(key);
       const page: RangeState = yield* request(WS_METHODS.calendarListRange, input);
       const replay = Effect.fnUntraced(function* (kind: "events" | "due") {
-        const old = previous?.[kind] ?? [];
-        if (
-          previous &&
-          !previous.forceReplay &&
-          signature(previous.first, kind) === signature(page, kind)
-        )
-          return old;
+        // The shared counter cannot prove either side unchanged, even with an equal first page.
         const pages: CalendarPage[] = [];
         const requested = previous
           ? kind === "events"
@@ -164,29 +182,17 @@ export function createWorkspaceCalendarAtoms<R, E>(
       });
       const events = yield* replay("events");
       const due = yield* replay("due");
-      const fresh = combine(page, events, due);
+      const fresh = retainFailedSources(
+        combine(page, events, due),
+        previous?.value,
+        ((previous?.eventDepth ?? 0) + 1) * (input.limit ?? 50),
+      );
       const dueFailed = page.dueIncomplete && !page.nextDueCursor && page.dueTasks.length === 0;
       const combined = {
         ...fresh,
-        ...(previous && page.incomplete
-          ? {
-              events: [
-                ...new Map(
-                  [...previous.value.events, ...fresh.events].map((event) => [event.id, event]),
-                ).values(),
-              ].slice(0, ((previous.eventDepth ?? 0) + 1) * (input.limit ?? 50)),
-            }
-          : {}),
         ...(previous && dueFailed ? { dueTasks: previous.value.dueTasks } : {}),
       };
-      const value =
-        previous &&
-        signature(previous.value, "events") === signature(combined, "events") &&
-        signature(previous.value, "due") === signature(combined, "due") &&
-        previous.value.incomplete === combined.incomplete &&
-        previous.value.dueIncomplete === combined.dueIncomplete
-          ? previous.value
-          : combined;
+      const value = previous && sameRange(previous.value, combined) ? previous.value : combined;
       depths.set(key, {
         first: page,
         events,
@@ -194,7 +200,7 @@ export function createWorkspaceCalendarAtoms<R, E>(
         value,
         eventDepth: previous?.eventDepth ?? 0,
         dueDepth: previous?.dueDepth ?? 0,
-        forceReplay: false,
+        queryValue: value,
       });
       return value;
     }),
@@ -208,14 +214,8 @@ export function createWorkspaceCalendarAtoms<R, E>(
     ),
   );
   type Query = ReturnType<typeof queries>;
-  type Loaded = {
-    readonly first: RangeState;
-    readonly events: readonly CalendarPage[];
-    readonly due: readonly CalendarPage[];
-  };
-  const loaded = Atom.family((_query: Query) =>
-    Atom.make<Loaded | undefined>(undefined).pipe(Atom.setIdleTTL(0)),
-  );
+  // This atom only notifies readers. The range lifetime owns the single page store above.
+  const loaded = Atom.family((_query: Query) => Atom.make(0).pipe(Atom.setIdleTTL(0)));
   const queryKeys = new WeakMap<Query, string>();
   const lifetimes = Atom.family((query: Query) =>
     Atom.make((get) => {
@@ -234,10 +234,12 @@ export function createWorkspaceCalendarAtoms<R, E>(
         lifetime.active = false;
       });
       const result = get(query);
-      const pages = get(loaded(query));
-      if (!AsyncResult.isSuccess(result) || result.waiting || pages?.first !== result.value)
+      get(loaded(query));
+      const key = queryKeys.get(query);
+      const pages = key ? depths.get(key) : undefined;
+      if (!AsyncResult.isSuccess(result) || result.waiting || pages?.queryValue !== result.value)
         return result;
-      return AsyncResult.success(combine(result.value, pages.events, pages.due));
+      return AsyncResult.success(pages.value);
     }).pipe(Atom.setIdleTTL(0)),
   );
   const range = ({
@@ -294,9 +296,9 @@ export function createWorkspaceCalendarAtoms<R, E>(
             kind: "unavailable",
             message: first.value.unavailableReason,
           });
-        const stored = registry.get(loaded(query));
-        const pages =
-          stored?.first === first.value ? stored : { first: first.value, events: [], due: [] };
+        const key = depthKey(environmentId, normalized);
+        const pages = depths.get(key);
+        if (!pages || pages.queryValue !== first.value) return;
         const last = (input.kind === "events" ? pages.events : pages.due).at(-1) ?? first.value;
         const cursor = input.kind === "events" ? last.nextCursor : last.nextDueCursor;
         if (!cursor) return;
@@ -306,9 +308,6 @@ export function createWorkspaceCalendarAtoms<R, E>(
         }).pipe(
           Effect.catch((error) => {
             if (lifetime.active && isCalendarError(error) && error.kind === "conflict") {
-              const key = depthKey(environmentId, normalized);
-              const previous = depths.get(key);
-              if (previous) depths.set(key, { ...previous, forceReplay: true });
               registry.refresh(query);
             }
             return Effect.fail(error);
@@ -317,32 +316,25 @@ export function createWorkspaceCalendarAtoms<R, E>(
         if (!lifetime.active) return;
         const current = registry.get(query);
         if (AsyncResult.isSuccess(current) && !current.waiting && current.value === first.value) {
-          const latest = registry.get(loaded(query));
-          const keep = latest?.first === first.value ? latest : pages;
-          const depth = depths.get(depthKey(environmentId, normalized));
-          if (depth)
-            depths.set(
-              depthKey(environmentId, normalized),
-              input.kind === "events"
-                ? {
-                    ...depth,
-                    events: [...depth.events, next],
-                    eventDepth: depth.eventDepth + 1,
-                    value: combine(depth.first, [...depth.events, next], depth.due),
-                  }
-                : {
-                    ...depth,
-                    due: [...depth.due, next],
-                    dueDepth: depth.dueDepth + 1,
-                    value: combine(depth.first, depth.events, [...depth.due, next]),
-                  },
-            );
-          registry.set(
-            loaded(query),
-            input.kind === "events"
-              ? { ...keep, events: [...keep.events, next] }
-              : { ...keep, due: [...keep.due, next] },
-          );
+          const depth = depths.get(key);
+          if (!depth || depth.first !== pages.first || depth.queryValue !== first.value) return;
+          const events = input.kind === "events" ? [...depth.events, next] : depth.events;
+          const due = input.kind === "dueTasks" ? [...depth.due, next] : depth.due;
+          const eventDepth = depth.eventDepth + (input.kind === "events" ? 1 : 0);
+          const dueDepth = depth.dueDepth + (input.kind === "dueTasks" ? 1 : 0);
+          depths.set(key, {
+            ...depth,
+            events,
+            due,
+            eventDepth,
+            dueDepth,
+            value: retainFailedSources(
+              combine(depth.first, events, due),
+              depth.value,
+              (eventDepth + 1) * normalized.limit,
+            ),
+          });
+          registry.update(loaded(query), (version) => version + 1);
         }
       }),
     }),
