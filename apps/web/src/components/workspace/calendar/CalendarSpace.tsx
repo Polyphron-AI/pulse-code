@@ -101,8 +101,6 @@ function CalendarBinding({
   }, [day, timeZone]);
   const query = useEnvironmentQuery(workspaceCalendar.range({ environmentId, input: range }));
   const connected = useConnectedEnvironmentIds().includes(environmentId);
-  const canOperate = useWorkspaceCanOperate(environmentId);
-  const capability = useMailCapabilities(environmentId);
   const loadMore = useAtomCommand(workspaceCalendar.loadMore, { reportFailure: false });
   const [loadError, setLoadError] = useState<{
     range: string;
@@ -205,13 +203,13 @@ function CalendarBinding({
           });
         }}
         onOpenTask={(task) => open(task.ref)}
-        renderMenu={(event) => {
+        renderMenu={(event, title, triggerClassName) => {
           const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
-          if (!url && !(capability.workspaceLinks && canOperate)) return null;
           return (
             <WorkspaceItemMenu
               environmentId={environmentId}
               item={{ ref: calendarItemRef(event.id), title: event.title }}
+              triggerClassName={triggerClassName}
               actions={
                 url ? (
                   <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -220,7 +218,7 @@ function CalendarBinding({
                 ) : null
               }
             >
-              <span className="sr-only">Event actions</span>
+              {title}
             </WorkspaceItemMenu>
           );
         }}

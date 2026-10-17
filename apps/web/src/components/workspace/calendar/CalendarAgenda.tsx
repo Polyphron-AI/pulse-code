@@ -34,7 +34,11 @@ export interface CalendarAgendaProps {
   readonly onRetry?: () => void;
   readonly onLoadMore?: (kind: "events" | "dueTasks") => void;
   readonly onOpenTask?: (task: CalendarDueTask) => void;
-  readonly renderMenu?: (event: CalendarOccurrenceSummary) => ReactNode;
+  readonly renderMenu?: (
+    event: CalendarOccurrenceSummary,
+    title: ReactNode,
+    triggerClassName: string,
+  ) => ReactNode;
 }
 export function CalendarAgenda(props: CalendarAgendaProps) {
   const { day, timeZone } = props;
@@ -51,6 +55,7 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
     [props.events, day, timeZone],
   );
   const due = props.dueTasks.filter((t) => t.dueOn === day);
+  const renderMenu = props.renderMenu;
   const row = (event: CalendarOccurrenceSummary) => (
     <div key={event.id} className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] items-start gap-x-3">
       <time
@@ -66,7 +71,9 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
         notesOpen={props.notesEventId === event.id}
         {...(props.onJoin ? { onJoin: props.onJoin } : {})}
         {...(props.handoffClient ? { handoffClient: props.handoffClient } : {})}
-        menu={props.renderMenu?.(event)}
+        {...(renderMenu
+          ? { renderMenu: (title, triggerClassName) => renderMenu(event, title, triggerClassName) }
+          : {})}
       />
     </div>
   );
@@ -109,20 +116,26 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
       {props.view !== "week" ? (
         <CalendarDayStrip day={day} onSelectDay={props.onSelectDay} />
       ) : null}
-      {props.status === "loading" ? <p role="status">Loading calendar...</p> : null}
+      {props.status === "loading" ? (
+        <p role="status" className="mb-3 text-xs text-muted-foreground">
+          Loading calendar...
+        </p>
+      ) : null}
       {props.status === "unavailable" ? (
-        <p role="status">Calendar is unavailable on this server.</p>
+        <p role="status" className="mb-3 text-xs text-muted-foreground">
+          Calendar is unavailable on this server.
+        </p>
       ) : null}
       {props.status === "disconnected" ? (
-        <p role="status">
+        <p role="status" className="mb-3 text-xs text-muted-foreground">
           Calendar is disconnected.
           {props.events.length || props.dueTasks.length ? " Showing the last saved results." : ""}
         </p>
       ) : null}
       {props.error ? (
-        <div role="alert">
-          <p>{props.error}</p>
-          <Button variant="ghost" size="xs" onClick={props.onRetry}>
+        <div role="alert" className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+          <p className="text-destructive-foreground">{props.error}</p>
+          <Button variant="outline" size="xs" onClick={props.onRetry}>
             Retry calendar
           </Button>
         </div>
@@ -165,7 +178,9 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
       (props.view === "week"
         ? !props.events.length && !props.dueTasks.length
         : !events.length && !due.length) ? (
-        <p>{props.view === "week" ? "No meetings this week." : "No meetings on this day."}</p>
+        <p className="mb-3 text-xs text-muted-foreground">
+          {props.view === "week" ? "No meetings this week." : "No meetings on this day."}
+        </p>
       ) : null}
       <div className="mt-4 flex gap-2">
         {props.nextEvents ? (

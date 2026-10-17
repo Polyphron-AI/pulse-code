@@ -68,6 +68,7 @@ vi.mock("@effect/atom-react", () => ({
   useAtomValue: () => mocks.keybindings ?? DEFAULT_RESOLVED_KEYBINDINGS,
 }));
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
+vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["a"] }));
 vi.mock("../../state/entities", () => ({
   useProjects: () => [
     { id: ProjectId.make("project-a"), title: "A project", environmentId: EnvironmentId.make("a") },

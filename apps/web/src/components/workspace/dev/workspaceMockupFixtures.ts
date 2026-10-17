@@ -36,7 +36,7 @@ export const workspaceTasksMockupStates = [
   "board-disconnected",
 ] as const;
 export type WorkspaceTasksMockupState = (typeof workspaceTasksMockupStates)[number];
-export const workspaceCalendarHandoffMockupStates = [
+export const workspaceCalendarAgendaMockupStates = [
   "no-url",
   "desktop-reject",
   "no-url-menu",
@@ -57,7 +57,7 @@ export const workspaceCalendarMockupStates = [
   "week-allday",
   "week-overflow",
   "week-390",
-  ...workspaceCalendarHandoffMockupStates,
+  ...workspaceCalendarAgendaMockupStates,
 ] as const;
 export type WorkspaceCalendarMockupState = (typeof workspaceCalendarMockupStates)[number];
 export const workspaceBrowserMockupStates = [
@@ -863,7 +863,7 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
       ((id === "03" || id === "08") &&
         workspaceTasksMockupStates.some((value) => value === state)) ||
       (id === "08" && workspaceCalendarMockupStates.some((value) => value === state)) ||
-      (id === "07" && workspaceCalendarHandoffMockupStates.some((value) => value === state)) ||
+      (id === "07" && workspaceCalendarAgendaMockupStates.some((value) => value === state)) ||
       (id === "05" && workspaceBrowserMockupStates.some((value) => value === state))
     )
   )
@@ -919,7 +919,7 @@ export function createWorkspaceMockupSession(
     recipe:
       calendarState &&
       calendarState !== "picker" &&
-      !workspaceCalendarHandoffMockupStates.some((state) => state === calendarState)
+      !workspaceCalendarAgendaMockupStates.some((state) => state === calendarState)
         ? { ...workspaceMockupRecipes[id], view: "week" }
         : calendarState === "recordings"
           ? { ...workspaceMockupRecipes[id], view: "recordings" }

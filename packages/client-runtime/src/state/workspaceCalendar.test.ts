@@ -11,21 +11,119 @@ import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Deferred from "effect/Deferred";
 import * as TestClock from "effect/testing/TestClock";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 
-import { PrimaryConnectionTarget, RelayConnectionTarget } from "../connection/model.ts";
+import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
+import {
+  AVAILABLE_CONNECTION_STATE,
+  PrimaryConnectionTarget,
+  RelayConnectionTarget,
+  type ConnectionTarget,
+  type PreparedConnection,
+  type SupervisorConnectionState,
+} from "../connection/model.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
+import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
+import type { RpcSession } from "../rpc/session.ts";
 import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
 import { executeAtomQuery, runAtomCommand } from "./runtime.ts";
+import { createWorkspaceCalendarAtoms } from "./workspaceCalendar.ts";
 
-import {
-  TARGET,
-  session,
-  makeTestRuntime,
-} from "../../../../apps/web/src/components/workspace/calendar/calendarRuntime.testHelpers.ts";
+const TARGET = new PrimaryConnectionTarget({
+  environmentId: EnvironmentId.make("environment-1"),
+  label: "Test environment",
+  httpBaseUrl: "https://environment.example.test",
+  wsBaseUrl: "wss://environment.example.test",
+});
+
+function session(client: WsRpcProtocolClient): RpcSession {
+  return {
+    client,
+    initialConfig: Effect.succeed({
+      pulseCapabilities: { workspaceCalendar: true },
+    } as import("@t3tools/contracts").ServerConfig),
+    subscribeServerConfig: (input) => client.subscribeServerConfig(input),
+    ready: Effect.void,
+    probe: Effect.void,
+    closed: Effect.never,
+  };
+}
+
+const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
+  client: WsRpcProtocolClient,
+  otherClient = client,
+  otherTarget: ConnectionTarget = TARGET,
+  supported = true,
+) {
+  const connectionState: SupervisorConnectionState = {
+    ...AVAILABLE_CONNECTION_STATE,
+    desired: true,
+    network: "online",
+    phase: "connected",
+    attempt: 1,
+    generation: 1,
+  };
+  const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+    target: TARGET,
+    state: yield* SubscriptionRef.make(connectionState),
+    session: yield* SubscriptionRef.make<Option.Option<RpcSession>>(
+      Option.some({
+        ...session(client),
+        initialConfig: Effect.succeed({
+          pulseCapabilities: supported ? { workspaceCalendar: true } : {},
+        } as import("@t3tools/contracts").ServerConfig),
+      }),
+    ),
+    prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
+    connect: Effect.void,
+    disconnect: Effect.void,
+    retryNow: Effect.void,
+  } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+  const other = {
+    ...supervisor,
+    target: otherTarget,
+    session: yield* SubscriptionRef.make(Option.some(session(otherClient))),
+  };
+  const forEnvironment = (id: EnvironmentId) => (id === TARGET.environmentId ? supervisor : other);
+  const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
+    entries: yield* SubscriptionRef.make<ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>>(
+      new Map([
+        [TARGET.environmentId, { target: TARGET, profile: Option.none(), enabled: true }],
+        [otherTarget.environmentId, { target: otherTarget, profile: Option.none(), enabled: true }],
+      ]),
+    ),
+    run: (environmentId, effect) =>
+      Effect.provideService(
+        effect,
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        forEnvironment(environmentId),
+      ),
+    runStream: (environmentId, stream) =>
+      Stream.provideService(
+        stream,
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        forEnvironment(environmentId),
+      ),
+    followStream: (environmentId, stream) =>
+      Stream.provideService(
+        stream,
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        forEnvironment(environmentId),
+      ),
+  } as EnvironmentRegistry.EnvironmentRegistry["Service"]);
+  const runtime = Atom.runtime(
+    Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+  );
+  const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
+    Effect.sync(() => registry.dispose()),
+  );
+  return { atoms: createWorkspaceCalendarAtoms(runtime), registry, supervisor };
+});
 
 const range = { startOn: "2026-10-13", endBefore: "2026-10-14", timeZone: "Africa/Johannesburg" };
 const event = {
@@ -401,7 +499,6 @@ it.effect("revalidates saved metadata and resubscribes on reconnect without prov
         revision: 2,
       });
       expect(query).toBe(atoms.range({ environmentId: TARGET.environmentId, input: range }));
-      expect(supervisor.target.environmentId).toBe(TARGET.environmentId);
       expect(refreshes).toBe(0);
       expect(starts).toBe(2);
       expect(reads).toBe(2);

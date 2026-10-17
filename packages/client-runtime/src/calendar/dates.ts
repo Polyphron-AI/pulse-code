@@ -77,6 +77,18 @@ export const formatEventOffsetTime = (instant: string | number, timeZone: string
   }).format(
     typeof instant === "number" ? instant : DateTime.toEpochMillis(DateTime.makeUnsafe(instant)),
   );
+export const formatEventOffset = (instant: string | number, timeZone: string) =>
+  formatter({
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(
+      typeof instant === "number" ? instant : DateTime.toEpochMillis(DateTime.makeUnsafe(instant)),
+    )
+    .find((part) => part.type === "timeZoneName")!.value;
 export function formatEventRange(start: string, end: string, timeZone: string) {
   const format = (instant: string) =>
     `${formatDay(displayDay(instant, timeZone), { day: "numeric", month: "long", year: "numeric" })}, ${formatEventOffsetTime(instant, timeZone)}`;

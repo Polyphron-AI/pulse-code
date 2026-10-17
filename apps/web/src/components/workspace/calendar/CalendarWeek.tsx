@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import {
   formatDay,
   formatEventOffsetTime,
+  formatEventOffset,
   formatEventRange,
   formatEventTime,
 } from "@t3tools/client-runtime/calendar/dates";
@@ -110,6 +111,7 @@ export function CalendarWeek(
                           render={
                             <p
                               tabIndex={0}
+                              aria-description={description}
                               className="mb-2 truncate text-3xs text-muted-foreground"
                             />
                           }
@@ -234,11 +236,13 @@ export function CalendarWeek(
                             timeZone,
                           )
                         : "All day";
+                    const height = (segment.endMinute - segment.startMinute) * PX_PER_MINUTE;
+                    const stacked = segment.ambiguous && height >= 20;
+                    // Short fold blocks keep only the offset; taller blocks put the full start below the title.
                     const start = segment.ambiguous
-                      ? formatEventOffsetTime(segment.start, timeZone).replace(
-                          /^\d{2}:\d{2}\s/u,
-                          "",
-                        )
+                      ? stacked
+                        ? formatEventOffsetTime(segment.start, timeZone)
+                        : formatEventOffset(segment.start, timeZone)
                       : formatEventTime(segment.start, timeZone);
                     return (
                       <button
@@ -258,9 +262,11 @@ export function CalendarWeek(
                           } as React.CSSProperties
                         }
                       >
-                        <span className="flex h-full min-w-0 items-center gap-1 overflow-hidden rounded-md bg-white/[0.015] px-1 whitespace-nowrap">
+                        <span
+                          className={`flex h-full min-w-0 overflow-hidden rounded-md bg-white/[0.015] px-1 whitespace-nowrap ${stacked ? "flex-col items-start justify-center leading-2.5" : "items-center gap-1"}`}
+                        >
                           <span
-                            className={`${segment.ambiguous ? "min-w-[4ch]" : "min-w-0"} ${(segment.endMinute - segment.startMinute) * PX_PER_MINUTE >= 36 ? "line-clamp-2 whitespace-normal" : "truncate"} font-semibold`}
+                            className={`${segment.ambiguous ? "min-w-[4ch]" : "min-w-0"} ${stacked ? "w-full shrink-0 truncate" : height >= 36 ? "line-clamp-2 whitespace-normal" : "truncate"} font-semibold`}
                           >
                             {segment.event.title}
                           </span>

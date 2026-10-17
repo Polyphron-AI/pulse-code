@@ -459,6 +459,7 @@ it.effect(
           );
           expect(reads).toBe(before);
           expect(maxActive).toBe(1);
+          const readsBeforeReconnect = reads;
           yield* withinAct(SubscriptionRef.set(env.supervisor.session, Option.none()));
           yield* Deferred.await(rangeStopped);
           revision = 2;
@@ -477,7 +478,8 @@ it.effect(
             stop();
           }
           expect(getByRole(node, "button", { name: "Reconnected review" })).toBeDefined();
-          expect(subscriptions).toBeGreaterThan(1);
+          expect(subscriptions).toBe(2);
+          expect(reads).toBe(readsBeforeReconnect + 1);
           expect(maxActive).toBe(1);
           expect(refreshes).toBe(0);
           expect(getAllByRole(node, "tab", { name: "Docs" })).toHaveLength(1);

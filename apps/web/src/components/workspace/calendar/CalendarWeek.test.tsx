@@ -86,72 +86,88 @@ it("opens overlapping and cross-midnight segments through focused native buttons
   }
 });
 
-it("keeps fold time labels unshrinkable before truncating their titles", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const node = document.createElement("div");
-  document.body.append(node);
-  const root = createRoot(node);
-  try {
-    await act(() =>
-      root.render(
-        <CalendarWeek
-          day="2026-11-01"
-          timeZone="America/New_York"
-          events={[
-            timed("First fold", "2026-11-01T05:30:00Z", "2026-11-01T05:45:00Z"),
-            timed("Second fold", "2026-11-01T06:30:00Z", "2026-11-01T06:45:00Z"),
-          ]}
-          dueTasks={[]}
-          onSelectDay={() => {}}
-          onSelect={() => {}}
-        />,
-      ),
-    );
-    expect(node.querySelectorAll("[data-calendar-week-day]")).toHaveLength(7);
-    expect(node.textContent).toContain("01:00 repeats");
-    expect(
-      node.querySelector('[aria-description="Clocks go back, 01:00 to 02:00 repeats"]'),
-    ).not.toBeNull();
-    for (const [name, offset] of [
-      ["First fold", "GMT-4"],
-      ["Second fold", "GMT-5"],
-    ]) {
-      const block = getByRole(node, "button", { name: new RegExp(`^${name},`) });
-      expect(block.textContent).toBe(`${name}${offset}`);
-      expect(block.querySelector(".font-semibold")!.className).toContain("min-w-[4ch]");
-      expect(block.getAttribute("aria-label")).toContain(`01:30 ${offset}`);
-      expect(block.getAttribute("aria-label")).toContain(`01:45 ${offset}`);
-      const time = block.querySelector(".text-muted-foreground")!;
-      expect(time.classList.contains("shrink-0")).toBe(true);
-      expect(time.classList.contains("whitespace-nowrap")).toBe(true);
-      expect(time.classList.contains("truncate")).toBe(false);
-      expect(time.previousElementSibling!.classList.contains("min-w-[4ch]")).toBe(true);
-      expect(time.previousElementSibling!.classList.contains("truncate")).toBe(true);
-    }
-    const notice = node.querySelector<HTMLElement>("[data-slot=tooltip-trigger]")!;
-    // Happy DOM does not implement keyboard :focus-visible matching.
-    const matches = notice.matches.bind(notice);
-    const focusVisible = vi
-      .spyOn(notice, "matches")
-      .mockImplementation((selector) => selector === ":focus-visible" || matches(selector));
+it.each([15, 25, 60])(
+  "keeps %s-minute fold starts distinct without stretching duration",
+  async (duration) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
     try {
-      await act(() => notice.focus());
+      await act(() =>
+        root.render(
+          <CalendarWeek
+            day="2026-11-01"
+            timeZone="America/New_York"
+            events={[
+              timed(
+                "First fold",
+                "2026-11-01T05:00:00Z",
+                new Date(Date.parse("2026-11-01T05:00:00Z") + duration * 60_000).toISOString(),
+              ),
+              timed(
+                "Second fold",
+                "2026-11-01T06:00:00Z",
+                new Date(Date.parse("2026-11-01T06:00:00Z") + duration * 60_000).toISOString(),
+              ),
+            ]}
+            dueTasks={[]}
+            onSelectDay={() => {}}
+            onSelect={() => {}}
+          />,
+        ),
+      );
+      expect(node.querySelectorAll("[data-calendar-week-day]")).toHaveLength(7);
+      expect(node.textContent).toContain("01:00 repeats");
+      expect(
+        node.querySelector('[aria-description="Clocks go back, 01:00 to 02:00 repeats"]'),
+      ).not.toBeNull();
+      for (const [name, offset] of [
+        ["First fold", "GMT-4"],
+        ["Second fold", "GMT-5"],
+      ]) {
+        const block = getByRole(node, "button", { name: new RegExp(`^${name},`) });
+        const start = duration >= 25 ? `01:00 ${offset}` : offset;
+        expect(block.textContent).toBe(`${name}${start}`);
+        expect(block.style.height).toBe(`${duration * 0.8}px`);
+        expect(block.firstElementChild!.classList.contains("flex-col")).toBe(duration >= 25);
+        expect(block.querySelector(".font-semibold")!.className).toContain("min-w-[4ch]");
+        expect(block.getAttribute("aria-label")).toContain(`01:00 ${offset}`);
+        const time = block.querySelector(".text-muted-foreground")!;
+        expect(time.classList.contains("shrink-0")).toBe(true);
+        expect(time.classList.contains("whitespace-nowrap")).toBe(true);
+        expect(time.classList.contains("truncate")).toBe(false);
+        expect(time.previousElementSibling!.classList.contains("min-w-[4ch]")).toBe(true);
+        expect(time.previousElementSibling!.classList.contains("truncate")).toBe(true);
+      }
+      const notice = node.querySelector<HTMLElement>("[data-slot=tooltip-trigger]")!;
+      expect(notice.getAttribute("aria-description")).toBe(
+        "Clocks go back, 01:00 to 02:00 repeats",
+      );
+      // Happy DOM does not implement keyboard :focus-visible matching.
+      const matches = notice.matches.bind(notice);
+      const focusVisible = vi
+        .spyOn(notice, "matches")
+        .mockImplementation((selector) => selector === ":focus-visible" || matches(selector));
+      try {
+        await act(() => notice.focus());
+      } finally {
+        focusVisible.mockRestore();
+      }
+      expect(document.querySelector("[data-slot=tooltip-popup]")?.textContent).toBe(
+        "Clocks go back, 01:00 to 02:00 repeats",
+      );
+      expect(node.textContent).not.toContain("24:00");
+      const region = getByRole(node, "region", { name: "Week schedule" });
+      expect(region.tabIndex).toBe(0);
+      expect(region.className).toContain("overflow-auto");
     } finally {
-      focusVisible.mockRestore();
+      await act(() => root.unmount());
+      node.remove();
+      vi.unstubAllGlobals();
     }
-    expect(document.querySelector("[data-slot=tooltip-popup]")?.textContent).toBe(
-      "Clocks go back, 01:00 to 02:00 repeats",
-    );
-    expect(node.textContent).not.toContain("24:00");
-    const region = getByRole(node, "region", { name: "Week schedule" });
-    expect(region.tabIndex).toBe(0);
-    expect(region.className).toContain("overflow-auto");
-  } finally {
-    await act(() => root.unmount());
-    node.remove();
-    vi.unstubAllGlobals();
-  }
-});
+  },
+);
 
 const timed = (id: string, start: string, end: string): CalendarOccurrenceSummary => ({
   id,

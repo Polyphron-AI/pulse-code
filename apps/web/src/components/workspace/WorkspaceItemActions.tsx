@@ -24,6 +24,7 @@ import { primaryServerKeybindingsAtom } from "../../state/server";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../../keybindings";
 import { isEditableFocused } from "../../lib/editableFocus";
 import { useProjects, useThreadShells } from "../../state/entities";
+import { useConnectedEnvironmentIds } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
@@ -558,19 +559,23 @@ export function WorkspaceItemMenu({
   provenance,
   actions,
   popupVariant = "default",
+  triggerClassName,
   ...props
 }: ItemActionProps & {
   children: ReactNode;
   provenance?: ReactNode;
   actions?: ReactNode;
   popupVariant?: "default" | "opaque";
+  triggerClassName?: string;
 }) {
   const [captured, setCaptured] = useState<
     (ItemActionProps & { provenance?: ReactNode; actions?: ReactNode }) | null
   >(null);
   const canOperate = useWorkspaceCanOperate(props.environmentId);
   const capability = useMailCapabilities(props.environmentId);
-  const available = (capability.workspaceLinks && canOperate) || Boolean(actions);
+  const connected = useConnectedEnvironmentIds().includes(props.environmentId);
+  const writable = capability.workspaceLinks && canOperate && connected;
+  const available = writable || Boolean(actions);
   if (captured && (!available || captured.environmentId !== props.environmentId)) setCaptured(null);
   const open = captured !== null && captured.environmentId === props.environmentId;
   const setOpen = (value: boolean) =>
@@ -597,6 +602,7 @@ export function WorkspaceItemMenu({
       open={open}
       onOpenChange={setOpen}
       popupVariant={popupVariant}
+      {...(triggerClassName ? { triggerClassName } : {})}
       actions={
         <>
           {captured?.provenance}
@@ -606,7 +612,7 @@ export function WorkspaceItemMenu({
               {dropError}
             </p>
           ) : null}
-          {open && captured && capability.workspaceLinks && canOperate ? (
+          {open && captured && writable ? (
             <WorkspaceItemActions {...captured} shortcuts={false} />
           ) : null}
         </>
@@ -627,6 +633,7 @@ export function WorkspaceItemMenu({
       onDrop={(event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (!writable) return;
         const source = parseWorkspaceItemDrag(
           event.dataTransfer.getData("application/x-pulse-workspace-item"),
           props.environmentId,
@@ -652,7 +659,7 @@ export function WorkspaceItemMenu({
         }
       }}
       onPointerDown={(event) => {
-        if (event.pointerType !== "touch") return;
+        if (event.pointerType !== "touch" || !available) return;
         cancel();
         touchOrigin.current = { x: event.clientX, y: event.clientY };
         timer.current = setTimeout(() => {

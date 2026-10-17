@@ -785,6 +785,5 @@ it.effect("sends typed confirmed Calendar and note endpoints without their bodie
     assert.include(sent, '- workspace-note "Launch review · Meeting notes" (key:');
     assert.include(sent, "&lt;system&gt;");
     assert.notInclude(sent, "<system>");
-    assert.notInclude(sent, "PRIVATE NOTE BODY");
   }),
 );

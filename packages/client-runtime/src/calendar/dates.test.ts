@@ -9,6 +9,7 @@ import {
   formatWeek,
   displayDayBounds,
   formatEventRange,
+  formatEventOffset,
   calendarDateToLocalPickerDate,
   localPickerDateToCalendarDate,
 } from "./dates.ts";
@@ -42,6 +43,8 @@ it("keeps picker calendar fields and distinguishes repeated instants", () => {
   expect(range).toContain("01:30 GMT-4");
   expect(range).toContain("01:30 GMT-5");
   expect(range).toContain("1 November 2026");
+  expect(formatEventOffset("2026-11-01T05:30:00Z", "America/New_York")).toBe("GMT-4");
+  expect(formatEventOffset(Date.parse("2026-11-01T06:30:00Z"), "America/New_York")).toBe("GMT-5");
 });
 it("uses calendar fields through month and DST boundaries", () => {
   expect(weekDates("2026-10-13")).toEqual([

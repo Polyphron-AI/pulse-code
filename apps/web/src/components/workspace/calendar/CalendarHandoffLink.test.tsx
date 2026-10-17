@@ -5,6 +5,38 @@ import { fireEvent, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { CalendarHandoffLink } from "./CalendarHandoffLink";
 
+it("retries a rejected desktop Join with the exact URL and clears recovery on success", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  const url = "https://tenant.zoom.us/j/123?pwd=AbC%2B123&tk=exact#keep";
+  const openExternal = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Desktop rejected Join"))
+    .mockResolvedValueOnce(undefined);
+  try {
+    await act(() =>
+      root.render(
+        <CalendarHandoffLink target={{ kind: "meeting", raw: url }} client={{ openExternal }} />,
+      ),
+    );
+    await act(() => fireEvent.click(getByRole(node, "button", { name: "Join meeting" })));
+    expect(openExternal).toHaveBeenCalledExactlyOnceWith(url);
+    expect(node.textContent).toContain("Unable to open meeting link.");
+    await act(() => fireEvent.click(getByRole(node, "link", { name: "Try again" })));
+    expect(openExternal.mock.calls).toEqual([[url], [url]]);
+    expect(queryByRole(node, "link", { name: "Try again" })).toBeNull();
+    expect(queryByRole(node, "button", { name: "Dismiss" })).toBeNull();
+    expect(queryByRole(node, "button", { name: "Copy meeting link" })).toBeNull();
+    expect(node.textContent).not.toContain("Unable to open");
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 it("announces copy failure in the existing status region and dismisses recovery", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div");

@@ -87,6 +87,7 @@ export function createWorkspaceCalendarAtoms<R, E>(
       subscribeDynamic(
         WS_METHODS.calendarSubscribeChanges,
         Effect.fnUntraced(function* (session) {
+          // Each replacement session must wait for its own live capability before subscribing.
           const config = yield* session.initialConfig.pipe(Effect.catch(() => Effect.never));
           return hasCalendarCapability(config) ? input : yield* Effect.never;
         }),

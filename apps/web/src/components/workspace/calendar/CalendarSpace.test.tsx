@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, type ReactNode } from "react";
+import { act, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { fireEvent, getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
@@ -8,6 +8,7 @@ import { MeetingsSpace } from "../meetings/MeetingsSpace";
 
 const boundaries = vi.hoisted(() => ({
   mutation: vi.fn(),
+  linkQuery: vi.fn(),
   rpcRequests: vi.fn(),
   copy: vi.fn().mockResolvedValue(undefined),
   oauth: vi.fn(),
@@ -18,6 +19,8 @@ const boundaries = vi.hoisted(() => ({
   navigate: vi.fn(),
   workspaceLinks: false,
   canOperate: false,
+  connected: false,
+  connectionListeners: new Set<() => void>(),
   joinUrl: "https://meet.google.com/abc-defg-hij?authuser=2&hs=122#keep" as string | undefined,
   search: { space: "calendar", day: "2026-10-13", environment: "remote-server" },
 }));
@@ -59,12 +62,26 @@ vi.mock("../../../state/query", () => ({
 vi.mock("../../../state/workspaceCalendar", () => ({
   workspaceCalendar: { range: (input: unknown) => input, loadMore: "loadMore" },
 }));
+vi.mock("../../../state/workspaceLinks", () => ({
+  workspaceLinks: { list: (input: unknown) => boundaries.linkQuery(input), link: "link" },
+}));
 vi.mock("../../../state/use-atom-command", () => ({ useAtomCommand: () => boundaries.mutation }));
 vi.mock("../../../hooks/useSettings", () => ({
   useEnvironmentSettings: () => "Africa/Johannesburg",
 }));
 vi.mock("../../../state/environments", () => ({
-  useConnectedEnvironmentIds: () => (boundaries.canOperate ? ["remote-server"] : []),
+  useConnectedEnvironmentIds: () => {
+    const connected = useSyncExternalStore(
+      (listener) => {
+        boundaries.connectionListeners.add(listener);
+        return () => {
+          boundaries.connectionListeners.delete(listener);
+        };
+      },
+      () => boundaries.connected,
+    );
+    return connected ? ["remote-server"] : [];
+  },
 }));
 vi.mock("../mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
@@ -285,9 +302,10 @@ it.each([false, true])(
       const card = node.querySelector("article")!;
       expect(card.textContent).not.toContain("Event actions");
       expect(getByRole(card, "button", { name: "Remote meeting" }).className).not.toContain("mr-");
-      const menuHost = card;
+      const menuHost = getByRole(card, "button", { name: "Remote meeting" });
       await act(() => fireEvent.contextMenu(menuHost));
       await act(() => fireEvent.keyDown(menuHost, { key: "F10", shiftKey: true }));
+      await act(() => fireEvent.keyDown(menuHost, { key: "ContextMenu" }));
       expect(queryByRole(document.body, "dialog")).toBeNull();
       expect(queryByRole(document.body, "link", { name: "Join meeting" })).toBeNull();
       expect(queryByRole(document.body, "button", { name: "Copy meeting link" })).toBeNull();
@@ -300,12 +318,12 @@ it.each([false, true])(
         ),
       );
       const trigger = getByRole(node, "button", { name: "Item actions" });
-      await act(() => fireEvent.click(trigger));
+      await act(() => fireEvent.contextMenu(getByRole(node, "button", { name: "Remote meeting" })));
       const menu = getByRole(document.body, "dialog");
       const host = trigger.closest("[data-workspace-menu-open=true]");
       expect(host).not.toBeNull();
-      expect(host!.parentElement!.className).toContain(
-        "has-[[data-workspace-menu-open=true]]:opacity-100",
+      expect(trigger.parentElement!.className).toContain(
+        "group-has-[[data-workspace-menu-open=true]]/event:opacity-100",
       );
       expect(getByRole(menu, "link", { name: "Join meeting" }).getAttribute("href")).toBe(url);
       expect(getAllByRole(menu, "button").map((button) => button.textContent)).toEqual([
@@ -333,6 +351,7 @@ it("offers generic actions on an operate-capable no-URL card without overlapping
   const root = createRoot(node);
   const url = boundaries.joinUrl;
   boundaries.canOperate = true;
+  boundaries.connected = true;
   boundaries.workspaceLinks = true;
   boundaries.joinUrl = undefined;
   try {
@@ -345,8 +364,8 @@ it("offers generic actions on an operate-capable no-URL card without overlapping
     );
     const title = getByRole(node, "button", { name: "Remote meeting" });
     const trigger = getByRole(node, "button", { name: "Item actions" });
-    expect(title.className).toContain("mr-10");
-    expect(trigger.parentElement!.parentElement!.className).toContain("right-3");
+    expect(title.closest(".has-\\[\\[data-workspace-menu-trigger\\]\\]\\:pr-10")).not.toBeNull();
+    expect(trigger.parentElement!.className).toContain("right-3");
     await act(() => fireEvent.click(trigger));
     const menu = getByRole(document.body, "dialog");
     expect(getByRole(menu, "button", { name: /Add to project/ })).toBeDefined();
@@ -358,10 +377,140 @@ it("offers generic actions on an operate-capable no-URL card without overlapping
     expect(document.activeElement).toBe(trigger);
   } finally {
     boundaries.canOperate = false;
+    boundaries.connected = false;
     boundaries.workspaceLinks = false;
     boundaries.joinUrl = url;
     await act(() => root.unmount());
     node.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each(
+  ["calendar", "meetings"].flatMap((space) =>
+    ["generic", "handoff"].flatMap((kind) =>
+      ["right-click", "Shift+F10", "ContextMenu"].map((gesture) => ({ space, kind, gesture })),
+    ),
+  ),
+)(
+  "opens the captured $kind menu from the $space title with $gesture",
+  async ({ space, kind, gesture }) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const url = boundaries.joinUrl;
+    boundaries.search.space = space;
+    boundaries.workspaceLinks = true;
+    boundaries.canOperate = kind === "generic";
+    boundaries.connected = true;
+    boundaries.joinUrl = kind === "generic" ? undefined : url;
+    boundaries.linkQuery.mockClear();
+    boundaries.mutation.mockClear();
+    boundaries.navigate.mockClear();
+    try {
+      await act(() =>
+        root.render(
+          <CalendarNotesProvider>
+            {space === "calendar" ? <CalendarSpace /> : <MeetingsSpace />}
+          </CalendarNotesProvider>,
+        ),
+      );
+      const title = getByRole(node, "button", { name: "Remote meeting" });
+      await act(() => {
+        title.focus();
+        if (gesture === "right-click") fireEvent.contextMenu(title);
+        else
+          fireEvent.keyDown(
+            title,
+            gesture === "Shift+F10" ? { key: "F10", shiftKey: true } : { key: "ContextMenu" },
+          );
+      });
+      const menu = getByRole(document.body, "dialog");
+      if (kind === "generic") {
+        expect(getByRole(menu, "button", { name: /Add to project/ })).toBeDefined();
+        expect(boundaries.linkQuery).toHaveBeenCalledWith({
+          environmentId: "remote-server",
+          input: {
+            item: {
+              type: "provider-resource",
+              provider: "workspace-calendar",
+              resourceId: "remote-event",
+            },
+          },
+        });
+      } else {
+        expect(getByRole(menu, "link", { name: "Join meeting" }).getAttribute("href")).toBe(url);
+        expect(getByRole(menu, "button", { name: "Copy meeting link" })).toBeDefined();
+        expect(queryByRole(menu, "button", { name: /Add to project/ })).toBeNull();
+      }
+      expect(boundaries.mutation).not.toHaveBeenCalled();
+      expect(boundaries.navigate).not.toHaveBeenCalled();
+      await act(() => fireEvent.keyDown(menu, { key: "Escape" }));
+      expect(queryByRole(document.body, "dialog")).toBeNull();
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      boundaries.canOperate = false;
+      boundaries.connected = false;
+      boundaries.workspaceLinks = false;
+      boundaries.joinUrl = url;
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it("keeps generic actions unavailable when disconnected despite operate scope, and keeps local handoffs", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  const url = boundaries.joinUrl;
+  boundaries.canOperate = true;
+  boundaries.workspaceLinks = true;
+  boundaries.joinUrl = undefined;
+  boundaries.connected = false;
+  const render = (key: string) =>
+    root.render(
+      <CalendarNotesProvider key={key}>
+        <CalendarSpace />
+      </CalendarNotesProvider>,
+    );
+  try {
+    await act(() => render("missing-link"));
+    await act(() => fireEvent.contextMenu(getByRole(node, "button", { name: "Remote meeting" })));
+    expect(queryByRole(node, "button", { name: "Item actions" })).toBeNull();
+    expect(queryByRole(document.body, "dialog")).toBeNull();
+    await act(() => {
+      boundaries.connected = true;
+      for (const listener of boundaries.connectionListeners) listener();
+    });
+    await act(() => fireEvent.contextMenu(getByRole(node, "button", { name: "Remote meeting" })));
+    expect(
+      getByRole(getByRole(document.body, "dialog"), "button", { name: /Add to project/ }),
+    ).toBeDefined();
+    await act(() => {
+      boundaries.connected = false;
+      for (const listener of boundaries.connectionListeners) listener();
+    });
+    expect(queryByRole(document.body, "dialog")).toBeNull();
+    boundaries.joinUrl = url;
+    await act(() => render("with-link"));
+    await act(() =>
+      fireEvent.keyDown(getByRole(node, "button", { name: "Remote meeting" }), {
+        key: "ContextMenu",
+      }),
+    );
+    const menu = getByRole(document.body, "dialog");
+    expect(getByRole(menu, "link", { name: "Join meeting" }).getAttribute("href")).toBe(url);
+    expect(queryByRole(menu, "button", { name: /Add to project/ })).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    boundaries.canOperate = false;
+    boundaries.connected = false;
+    boundaries.workspaceLinks = false;
+    boundaries.joinUrl = url;
     vi.unstubAllGlobals();
   }
 });

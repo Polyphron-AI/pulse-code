@@ -10,6 +10,7 @@ export function WorkspaceItemMenuView({
   actions,
   available,
   popupVariant = "default",
+  triggerClassName,
   children,
   ...props
 }: ComponentProps<"div"> & {
@@ -18,7 +19,13 @@ export function WorkspaceItemMenuView({
   readonly actions: ReactNode;
   readonly available: boolean;
   readonly popupVariant?: "default" | "opaque";
+  readonly triggerClassName?: string;
 }) {
+  const trigger = available ? (
+    <PopoverTrigger render={<Button size="icon-xs" variant="ghost" aria-label="Item actions" />}>
+      <MoreHorizontalIcon />
+    </PopoverTrigger>
+  ) : null;
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <div
@@ -27,13 +34,13 @@ export function WorkspaceItemMenuView({
         {...props}
       >
         {children}
-        {available ? (
-          <PopoverTrigger
-            render={<Button size="icon-xs" variant="ghost" aria-label="Item actions" />}
-          >
-            <MoreHorizontalIcon />
-          </PopoverTrigger>
-        ) : null}
+        {trigger && triggerClassName ? (
+          <div data-workspace-menu-trigger className={triggerClassName}>
+            {trigger}
+          </div>
+        ) : (
+          trigger
+        )}
       </div>
       {available ? (
         <PopoverPopup align="end" variant={popupVariant}>

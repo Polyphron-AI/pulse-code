@@ -11,7 +11,7 @@ export interface CalendarEventCardProps {
   readonly notesOpen?: boolean;
   readonly onJoin?: (event: CalendarOccurrenceSummary, url: string) => void;
   readonly handoffClient?: CalendarHandoffClient;
-  readonly menu?: ReactNode;
+  readonly renderMenu?: (title: ReactNode, triggerClassName: string) => ReactNode;
 }
 export function CalendarEventCard({
   event,
@@ -19,7 +19,7 @@ export function CalendarEventCard({
   onNotes,
   onJoin,
   handoffClient,
-  menu,
+  renderMenu,
   notesOpen = false,
 }: CalendarEventCardProps) {
   const url = useMemo(
@@ -33,28 +33,29 @@ export function CalendarEventCard({
     copies.set(identity, copy + 1);
     return { ...person, key: `${identity}:${copy}` };
   });
+  const title = (
+    <button
+      type="button"
+      onClick={() => onSelect(event)}
+      className="min-w-0 flex-1 text-left text-xs leading-5 font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      {event.title}
+    </button>
+  );
+  const triggerClassName = `absolute top-2 ${url ? "right-7" : "right-3"} opacity-0 group-has-[[data-workspace-menu-open=true]]/event:opacity-100 group-hover/event:opacity-100 group-focus-within/event:opacity-100 pointer-coarse:opacity-100`;
   return (
     <article className="group/event relative min-w-0 rounded-xl border border-border/60 bg-white/[0.015] px-3 py-3">
       <div className="flex items-start gap-2">
-        {/* Keep the menu's coarse-pointer hit area clear of the title. */}
-        <button
-          type="button"
-          onClick={() => onSelect(event)}
-          className={`min-w-0 flex-1 text-left text-xs leading-5 font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-ring${menu ? (url ? " mr-8" : " mr-10") : ""}`}
+        {/* Reserve space only when the shared menu actually offers a trigger. */}
+        <div
+          className={`min-w-0 flex-1 ${url ? "has-[[data-workspace-menu-trigger]]:pr-8" : "has-[[data-workspace-menu-trigger]]:pr-10"}`}
         >
-          {event.title}
-        </button>
+          {renderMenu ? renderMenu(title, triggerClassName) : <div className="flex">{title}</div>}
+        </div>
         {url ? (
           <VideoIcon aria-hidden="true" className="mt-1 size-3 shrink-0 text-primary" />
         ) : null}
       </div>
-      {menu ? (
-        <div
-          className={`absolute top-2 ${url ? "right-7" : "right-3"} opacity-0 has-[[data-workspace-menu-open=true]]:opacity-100 group-hover/event:opacity-100 group-focus-within/event:opacity-100 pointer-coarse:opacity-100`}
-        >
-          {menu}
-        </div>
-      ) : null}
       <p className="mt-1 text-3xs leading-4 text-muted-foreground">
         {event.time.kind === "timed"
           ? `${Math.round((Date.parse(event.time.end) - Date.parse(event.time.start)) / 60000)} minutes · `

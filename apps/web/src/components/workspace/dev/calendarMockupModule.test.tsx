@@ -8,11 +8,11 @@ import {
   createWorkspaceMockupSession,
   parseWorkspaceMockupRequest,
   workspaceCalendarMockupStates,
-  workspaceCalendarHandoffMockupStates,
+  workspaceCalendarAgendaMockupStates,
 } from "./workspaceMockupFixtures";
 it.each(
   workspaceCalendarMockupStates.filter(
-    (state) => !workspaceCalendarHandoffMockupStates.some((handoff) => handoff === state),
+    (state) => !workspaceCalendarAgendaMockupStates.some((agenda) => agenda === state),
   ),
 )("offers isolated %s capture with no live calls", async (state) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -51,7 +51,7 @@ it.each(
       ]);
       expect(
         blocks.map((block) => block.querySelector(".shrink-0.whitespace-nowrap")!.textContent),
-      ).toEqual(["GMT-4", "GMT-5"]);
+      ).toEqual(["01:30 GMT-4", "01:30 GMT-5"]);
     }
     if (state === "dst-gap") expect(document.body.textContent).toContain("02:00 skipped");
     if (state === "week-allday" || state === "week-overflow") {
@@ -303,3 +303,52 @@ it.each([
     vi.unstubAllGlobals();
   }
 });
+
+it.each(["07", "08"] as const)(
+  "opens %s title menus by context gesture with and without a meeting URL",
+  async (id) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      for (const state of [null, "no-url-menu"] as const) {
+        const session = createWorkspaceMockupSession(id, null, state);
+        const module = createWorkspaceMockupModule(session);
+        try {
+          await act(() => root.render(module.center));
+          const title = getByRole(node, "button", { name: "Website design handoff" });
+          for (const gesture of ["right-click", "Shift+F10", "ContextMenu"]) {
+            await act(() => {
+              title.focus();
+              if (gesture === "right-click") fireEvent.contextMenu(title);
+              else
+                fireEvent.keyDown(
+                  title,
+                  gesture === "Shift+F10" ? { key: "F10", shiftKey: true } : { key: "ContextMenu" },
+                );
+            });
+            const menu = getByRole(document.body, "dialog");
+            if (state === "no-url-menu")
+              expect(getByRole(menu, "button", { name: "Start thread" })).toBeDefined();
+            else
+              expect(getByRole(menu, "link", { name: "Join meeting" }).getAttribute("href")).toBe(
+                session.seed.events.find((event) => event.title === "Website design handoff")!
+                  .joinUrl,
+              );
+            await act(() => fireEvent.keyDown(menu, { key: "Escape" }));
+            expect(queryByRole(document.body, "dialog")).toBeNull();
+          }
+          expect(session.operations).toEqual([]);
+        } finally {
+          module.dispose();
+          session.dispose();
+        }
+      }
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);

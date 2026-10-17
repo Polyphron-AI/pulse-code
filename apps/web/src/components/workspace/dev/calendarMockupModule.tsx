@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "../../ui/button";
 import { MeetingRecordingsView } from "../meetings/MeetingRecordingsView";
 import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
@@ -116,13 +116,22 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
         }
       : {}),
   };
-  function EventMenu({ event }: { readonly event: CalendarOccurrenceSummary }) {
+  function EventMenu({
+    event,
+    children,
+    triggerClassName,
+  }: {
+    readonly event: CalendarOccurrenceSummary;
+    readonly children: ReactNode;
+    readonly triggerClassName: string;
+  }) {
     const [open, setOpen] = useState(false);
     const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
     const available = Boolean(url) || state === "no-url-menu";
     return (
       <WorkspaceItemMenuView
         available={available}
+        triggerClassName={triggerClassName}
         open={open}
         onOpenChange={(value) => setOpen(value && available)}
         onContextMenu={(event) => {
@@ -172,7 +181,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
           ) : null
         }
       >
-        <span className="sr-only">Event actions</span>
+        {children}
       </WorkspaceItemMenuView>
     );
   }
@@ -255,11 +264,11 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
           }
           onSchedule={(url) => record("schedule", undefined, url)}
           handoffClient={handoffClient}
-          renderMenu={(event) =>
-            (event.joinUrl && validatedConferenceUrl(event.joinUrl)) || state === "no-url-menu" ? (
-              <EventMenu event={event} />
-            ) : null
-          }
+          renderMenu={(event, title, triggerClassName) => (
+            <EventMenu event={event} triggerClassName={triggerClassName}>
+              {title}
+            </EventMenu>
+          )}
         />
       </div>
     );
