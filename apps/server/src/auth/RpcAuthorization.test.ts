@@ -199,6 +199,8 @@ it("requires explicit read or operate scopes for every Drive action", () => {
     WS_METHODS.driveListConnections,
     WS_METHODS.driveSearch,
     WS_METHODS.driveGetBinding,
+    WS_METHODS.driveGetBindings,
+    WS_METHODS.driveListChildren,
     WS_METHODS.driveGetProjectRoot,
     WS_METHODS.driveReadFile,
     WS_METHODS.driveSubscribeChanges,

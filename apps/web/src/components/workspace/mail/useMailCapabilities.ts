@@ -30,6 +30,7 @@ export function useMailCapabilities(targetEnvironmentId?: EnvironmentId) {
     workspaceTools: config?.pulseCapabilities?.workspaceTools === true,
     driveRead: config?.pulseCapabilities?.driveRead === true,
     driveProjectRoot: config?.pulseCapabilities?.driveProjectRoot === true,
+    driveExplorer: config?.pulseCapabilities?.driveExplorer === true,
     telegramRead: config?.pulseCapabilities?.telegramRead === true,
     mailReply: config?.pulseCapabilities?.mailReply === true,
     mailConversations: config?.pulseCapabilities?.mailConversations === true,

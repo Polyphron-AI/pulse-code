@@ -17,6 +17,7 @@ import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 
 const state = vi.hoisted(() => ({
   capable: true,
+  explorer: true,
   connected: true,
   operate: true,
   connectionConnected: true,
@@ -32,6 +33,8 @@ const state = vi.hoisted(() => ({
   rootQuery: vi.fn(),
   refresh: vi.fn(),
   bindRefresh: vi.fn(),
+  bindingQueries: vi.fn(),
+  batchQueries: vi.fn(),
   setRoot: vi.fn(),
   bind: vi.fn(),
 }));
@@ -47,6 +50,7 @@ const file = {
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
     driveProjectRoot: state.capable,
+    driveExplorer: state.explorer,
     driveRead: true,
     workspaceLinks: true,
   }),
@@ -62,7 +66,14 @@ vi.mock("../../state/drive", () => ({
       return "root";
     },
     connections: () => "connections",
-    binding: ({ input }: { input: { fileId: string } }) => `binding:${input.fileId}`,
+    binding: ({ input }: { input: { fileId: string } }) => {
+      state.bindingQueries(input.fileId);
+      return `binding:${input.fileId}`;
+    },
+    bindings: ({ input }: { input: { fileIds: string[] } }) => {
+      state.batchQueries(input.fileIds);
+      return `bindings:${input.fileIds.join(",")}`;
+    },
     setProjectRoot: "set",
     bind: "bind",
   },
@@ -87,23 +98,43 @@ vi.mock("../../state/query", () => ({
                   identity: state.identity,
                 },
               ]
-            : query?.startsWith("binding:")
+            : query?.startsWith("bindings:")
               ? {
-                  binding: state.bound
-                    ? {
-                        connectionId: "drv_00000000-0000-0000-0000-000000000001",
-                        file: {
-                          id: query.slice("binding:".length),
-                          name: query === "binding:other-folder" ? "Another folder" : "SynKEK",
-                          mimeType:
-                            state.folder && query !== "binding:document"
-                              ? "application/vnd.google-apps.folder"
-                              : "text/plain",
-                        },
-                      }
-                    : undefined,
+                  bindings: state.bound
+                    ? query
+                        .slice("bindings:".length)
+                        .split(",")
+                        .map((id) => ({
+                          connectionId,
+                          file: {
+                            ...file,
+                            id,
+                            name: id === "other-folder" ? "Another folder" : "SynKEK",
+                            mimeType:
+                              state.folder && id !== "document"
+                                ? "application/vnd.google-apps.folder"
+                                : "text/plain",
+                          },
+                        }))
+                    : [],
                 }
-              : null,
+              : query?.startsWith("binding:")
+                ? {
+                    binding: state.bound
+                      ? {
+                          connectionId: "drv_00000000-0000-0000-0000-000000000001",
+                          file: {
+                            id: query.slice("binding:".length),
+                            name: query === "binding:other-folder" ? "Another folder" : "SynKEK",
+                            mimeType:
+                              state.folder && query !== "binding:document"
+                                ? "application/vnd.google-apps.folder"
+                                : "text/plain",
+                          },
+                        }
+                      : undefined,
+                  }
+                : null,
     dataUpdatedAt: query === "links" ? state.linkVersion : 1,
     error: query === "root" ? state.rootError : null,
     failure:
@@ -113,7 +144,10 @@ vi.mock("../../state/query", () => ({
             message: state.rootError,
           })
         : null,
-    refresh: query?.startsWith("binding:") ? state.bindRefresh : state.refresh,
+    refresh:
+      query?.startsWith("binding:") || query?.startsWith("bindings:")
+        ? state.bindRefresh
+        : state.refresh,
   }),
 }));
 vi.mock("./mail/LinkedSection", () => ({
@@ -163,6 +197,7 @@ beforeEach(() => {
   document.body.append(node);
   domRoot = createRoot(node);
   state.capable =
+    state.explorer =
     state.connected =
     state.operate =
     state.connectionConnected =
@@ -202,6 +237,34 @@ beforeEach(() => {
     state.bound = true;
     return { _tag: "Success", value: { connectionId, file } };
   });
+});
+it("loads candidate bindings in one bounded batch instead of per-option reads", async () => {
+  const candidate = state.links.linked[0]!;
+  state.links = {
+    ...state.links,
+    linked: Array.from({ length: 200 }, (_, index) => ({
+      ...candidate,
+      id: `wl_${String(index).padStart(8, "0")}-0000-0000-0000-000000000001`,
+      item: {
+        ...candidate.item,
+        ref: { type: "file", provider: "google-drive", fileId: `folder-${index}` },
+      },
+    })),
+  };
+  await render();
+  expect(state.batchQueries).not.toHaveBeenCalled();
+  await click("Choose folder");
+  expect(new Set(state.batchQueries.mock.calls.map(([ids]) => ids.join(","))).size).toBe(1);
+  expect(state.batchQueries.mock.calls[0]![0]).toHaveLength(200);
+  expect(state.bindingQueries).not.toHaveBeenCalled();
+});
+it("keeps a root-only older server usable without calling unsupported batch reads", async () => {
+  state.explorer = false;
+  await render();
+  await choose();
+  expect(state.batchQueries).not.toHaveBeenCalled();
+  expect(state.bindingQueries).toHaveBeenCalledWith("folder");
+  expect(button("Use as project folder").disabled).toBe(false);
 });
 afterEach(async () => {
   await act(() => domRoot.unmount());

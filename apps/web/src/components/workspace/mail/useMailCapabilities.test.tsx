@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
         workspaceTools: boolean;
         workspaceTasksV2?: boolean;
         driveProjectRoot?: boolean;
+        driveExplorer?: boolean;
       };
       settings: object;
     };
@@ -65,45 +66,92 @@ it.each([
     expect(renderer!.root.findByType("span").children.join("")).toBe(String(expected));
   },
 );
-it("revokes a live Drive capability on downgrade and refuses a later cached true snapshot", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const id = EnvironmentId.make("drive-downgrade");
-  state.projection = {
-    source: "live",
-    config: { pulseCapabilities: { workspaceTools: true, driveProjectRoot: true }, settings: {} },
-  };
-  const registry = AtomRegistry.make();
-  function View() {
-    return <span>{String(useMailCapabilities(id).driveProjectRoot)}</span>;
-  }
-  try {
-    await act(() => {
-      renderer = create(
-        <RegistryContext value={registry}>
-          <View />
-        </RegistryContext>,
+it.each(["driveProjectRoot", "driveExplorer"] as const)(
+  "revokes live %s on downgrade and refuses a later cached true snapshot",
+  async (capability) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const id = EnvironmentId.make(`drive-downgrade-${capability}`);
+    state.projection = {
+      source: "live",
+      config: { pulseCapabilities: { workspaceTools: true, [capability]: true }, settings: {} },
+    };
+    const registry = AtomRegistry.make();
+    function View() {
+      return <span>{String(useMailCapabilities(id)[capability])}</span>;
+    }
+    try {
+      await act(() => {
+        renderer = create(
+          <RegistryContext value={registry}>
+            <View />
+          </RegistryContext>,
+        );
+      });
+      expect(renderer!.root.findByType("span").children.join("")).toBe("true");
+      await act(() =>
+        registry.set(
+          projections(id),
+          AsyncResult.success({
+            ...state.projection,
+            config: { ...state.projection.config, pulseCapabilities: { workspaceTools: true } },
+          }),
+        ),
       );
-    });
-    expect(renderer!.root.findByType("span").children.join("")).toBe("true");
-    await act(() =>
-      registry.set(
-        projections(id),
-        AsyncResult.success({
-          ...state.projection,
-          config: { ...state.projection.config, pulseCapabilities: { workspaceTools: true } },
-        }),
-      ),
+      expect(renderer!.root.findByType("span").children.join("")).toBe("false");
+      await act(() =>
+        registry.set(
+          projections(id),
+          AsyncResult.success({ ...state.projection, source: "cached" }),
+        ),
+      );
+      expect(renderer!.root.findByType("span").children.join("")).toBe("false");
+    } finally {
+      await act(() => renderer?.unmount());
+      renderer = undefined;
+      registry.dispose();
+    }
+  },
+);
+it.each([
+  ["live", undefined, false],
+  ["live", false, false],
+  ["cached", true, false],
+  ["live", true, true],
+] as const)("gates list requests on live driveExplorer: %s %s", async (source, flag, expected) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.projection = {
+    source,
+    config: {
+      pulseCapabilities: {
+        workspaceTools: true,
+        ...(flag === undefined ? {} : { driveExplorer: flag }),
+      },
+      settings: {},
+    },
+  };
+  const list = vi.fn();
+  function View() {
+    const { driveExplorer } = useMailCapabilities(
+      EnvironmentId.make(`explorer-${source}-${String(flag)}`),
     );
-    expect(renderer!.root.findByType("span").children.join("")).toBe("false");
-    await act(() =>
-      registry.set(projections(id), AsyncResult.success({ ...state.projection, source: "cached" })),
+    return (
+      <button
+        disabled={!driveExplorer}
+        onClick={() => {
+          if (driveExplorer) list();
+        }}
+      >
+        Browse
+      </button>
     );
-    expect(renderer!.root.findByType("span").children.join("")).toBe("false");
-  } finally {
-    await act(() => renderer?.unmount());
-    renderer = undefined;
-    registry.dispose();
   }
+  await act(() => {
+    renderer = create(<View />);
+  });
+  const button = renderer!.root.findByType("button");
+  expect(button.props.disabled).toBe(!expected);
+  await act(() => button.props.onClick());
+  expect(list).toHaveBeenCalledTimes(expected ? 1 : 0);
 });
 it.each([
   ["live", undefined, false],

@@ -30,6 +30,23 @@ export const DriveFile = Schema.Struct({
   modifiedTime: Schema.optionalKey(Schema.String),
   size: Schema.optionalKey(Schema.String),
   owner: Schema.optionalKey(Schema.String),
+  owners: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        displayName: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(160))),
+        emailAddress: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
+        me: Schema.optionalKey(Schema.Boolean),
+      }),
+    ).check(Schema.isMaxLength(100)),
+  ),
+  parents: Schema.optionalKey(Schema.Array(DriveFileId).check(Schema.isMaxLength(100))),
+  driveId: Schema.optionalKey(DriveFileId),
+  shortcutDetails: Schema.optionalKey(
+    Schema.Struct({
+      targetId: DriveFileId,
+      targetMimeType: Schema.String.check(Schema.isMaxLength(160)),
+    }),
+  ),
 });
 export type DriveFile = typeof DriveFile.Type;
 export const DriveBinding = Schema.Struct({ connectionId: DriveConnectionId, file: DriveFile });
@@ -53,6 +70,32 @@ export const DriveProjectRootResult = Schema.Struct({
   file: Schema.optionalKey(DriveFile),
 });
 export type DriveProjectRootResult = typeof DriveProjectRootResult.Type;
+export const DriveBrowseInput = Schema.Struct({
+  projectId: ProjectId,
+  connectionId: DriveConnectionId,
+  parentId: DriveFileId,
+  path: Schema.Array(DriveFileId).check(Schema.isMaxLength(16)),
+  query: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
+  type: Schema.optionalKey(
+    Schema.Literals(["folder", "document", "spreadsheet", "presentation", "other"]),
+  ),
+  owner: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
+  modifiedAfter: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+  modifiedBefore: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+  sort: Schema.Literals(["name", "modifiedTime"]),
+  direction: Schema.Literals(["asc", "desc"]),
+  limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
+  cursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(8192))),
+});
+export type DriveBrowseInput = typeof DriveBrowseInput.Type;
+export const DriveBrowsePage = Schema.Struct({
+  files: Schema.Array(DriveFile).check(Schema.isMaxLength(50)),
+  rootFile: Schema.optionalKey(DriveFile),
+  nextCursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(8192))),
+  incomplete: Schema.Boolean,
+  limitation: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(512))),
+});
+export type DriveBrowsePage = typeof DriveBrowsePage.Type;
 export const DriveReadResult = Schema.Struct({
   connectionId: DriveConnectionId,
   file: DriveFile,
@@ -102,8 +145,20 @@ export const PULSE_DRIVE_METHODS = {
   driveReadFile: "pulse.drive.readFile",
   driveGetProjectRoot: "pulse.drive.getProjectRoot",
   driveSetProjectRoot: "pulse.drive.setProjectRoot",
+  driveListChildren: "pulse.drive.listChildren",
+  driveGetBindings: "pulse.drive.getBindings",
 } as const;
 export const PulseDriveRpcs = [
+  Rpc.make(PULSE_DRIVE_METHODS.driveListChildren, {
+    payload: DriveBrowseInput,
+    success: DriveBrowsePage,
+    error,
+  }),
+  Rpc.make(PULSE_DRIVE_METHODS.driveGetBindings, {
+    payload: Schema.Struct({ fileIds: Schema.Array(DriveFileId).check(Schema.isMaxLength(200)) }),
+    success: Schema.Struct({ bindings: Schema.Array(DriveBinding).check(Schema.isMaxLength(200)) }),
+    error,
+  }),
   Rpc.make(PULSE_DRIVE_METHODS.driveGetProjectRoot, {
     payload: Schema.Struct({ projectId: ProjectId }),
     success: DriveProjectRootResult,

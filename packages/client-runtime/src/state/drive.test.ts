@@ -6,6 +6,8 @@ import {
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
+import * as Fiber from "effect/Fiber";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -26,7 +28,7 @@ import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { executeAtomQuery } from "./runtime.ts";
+import { executeAtomQuery, runAtomCommand } from "./runtime.ts";
 import { createDriveAtoms } from "./drive.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -41,6 +43,65 @@ const OTHER_TARGET = new PrimaryConnectionTarget({
   httpBaseUrl: "https://other.example.test",
   wsBaseUrl: "wss://other.example.test",
 });
+it.effect("keeps a deferred browse result attached to its originating environment and input", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const calls: string[] = [];
+      const input = {
+        projectId: ProjectId.make("same-project"),
+        connectionId: "drv_00000000-0000-0000-0000-000000000001",
+        parentId: "root-a",
+        path: [],
+        sort: "name" as const,
+        direction: "asc" as const,
+        limit: 20,
+      };
+      const slow = {
+        [WS_METHODS.driveListChildren]: (value: typeof input) =>
+          Effect.gen(function* () {
+            calls.push(value.parentId);
+            yield* Deferred.succeed(entered, undefined);
+            yield* Deferred.await(release);
+            return {
+              files: [],
+              rootFile: {
+                id: value.parentId,
+                name: "Original root",
+                mimeType: "application/vnd.google-apps.folder",
+                url: `https://drive.google.com/drive/folders/${value.parentId}`,
+              },
+              incomplete: false,
+            };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const fast = {
+        [WS_METHODS.driveListChildren]: () => Effect.succeed({ files: [], incomplete: true }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(slow, fast);
+      expect(atoms.listChildren).toBeDefined();
+      const old = yield* Effect.promise(() =>
+        runAtomCommand(registry, atoms.listChildren, {
+          environmentId: TARGET.environmentId,
+          input,
+        }),
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(entered);
+      const current = yield* Effect.promise(() =>
+        runAtomCommand(registry, atoms.listChildren, {
+          environmentId: OTHER_TARGET.environmentId,
+          input: { ...input, parentId: "root-b" },
+        }),
+      );
+      expect(AsyncResult.getOrThrow(current)).toEqual({ files: [], incomplete: true });
+      yield* Deferred.succeed(release, undefined);
+      expect(AsyncResult.getOrThrow(yield* Fiber.join(old)).rootFile?.id).toBe("root-a");
+      expect(input.parentId).toBe("root-a");
+      expect(calls).toEqual(["root-a"]);
+    }),
+  ),
+);
 
 function session(client: WsRpcProtocolClient): RpcSession {
   return {

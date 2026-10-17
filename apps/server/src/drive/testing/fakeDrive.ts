@@ -5,6 +5,14 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+type Gate = { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> };
+type ListScript = {
+  status?: number;
+  files?: readonly unknown[];
+  nextPageToken?: string;
+  incompleteSearch?: boolean;
+  gate?: Gate;
+};
 export const makeFakeDrive = () => {
   const calls: Array<{ url: URL; method: string; body: URLSearchParams }> = [];
   const state = {
@@ -16,6 +24,8 @@ export const makeFakeDrive = () => {
     mimeType: "application/vnd.google-apps.document",
     refreshToken: true,
     tokenCalls: 0,
+    listRequests: [] as ListScript[],
+    metadata: {} as Record<string, unknown>,
     metadataGate: undefined as
       | { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> }
       | undefined,
@@ -59,13 +69,25 @@ export const makeFakeDrive = () => {
         };
       else if (url.pathname.endsWith("/export") || url.searchParams.get("alt") === "media")
         return HttpClientResponse.fromWeb(request, new Response(state.content, { status }));
-      else if (url.pathname.endsWith("/files"))
-        result = {
-          files: [{ id: "file-one", name: "Launch brief", mimeType: state.mimeType }],
-          nextPageToken: "next",
-        };
-      else
-        result = {
+      else if (url.pathname.endsWith("/files")) {
+        const script = state.listRequests.shift();
+        if (script?.gate) {
+          yield* Deferred.succeed(script.gate.entered, undefined);
+          yield* Deferred.await(script.gate.release);
+        }
+        status = script?.status ?? status;
+        result = script
+          ? {
+              files: script.files ?? [],
+              nextPageToken: script.nextPageToken,
+              incompleteSearch: script.incompleteSearch,
+            }
+          : {
+              files: [{ id: "file-one", name: "Launch brief", mimeType: state.mimeType }],
+              nextPageToken: "next",
+            };
+      } else
+        result = state.metadata[url.pathname.split("/").pop()!] ?? {
           id: url.pathname.split("/").pop(),
           name: "Launch brief",
           mimeType: state.mimeType,

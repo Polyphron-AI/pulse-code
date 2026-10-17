@@ -72,6 +72,501 @@ const seedRootLink = Effect.gen(function* () {
   yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Drive project','/synthetic','[]','2026-10-13T08:30:00Z','2026-10-13T08:30:00Z')`;
   yield* sql`INSERT INTO workspace_links(link_id,key_a,key_b,ref_a_json,ref_b_json,status,source_json,created_at,updated_at) VALUES(${rootLinkId},${workspaceItemKey(a!)},${workspaceItemKey(b!)},${encodeJson(a)},${encodeJson(b)},'confirmed',${encodeJson({ type: "user" })},'2026-10-13T08:30:00Z','2026-10-13T08:30:00Z')`;
 });
+const browseSetup = Effect.gen(function* () {
+  const context = yield* setup;
+  const sign = yield* context.signIn;
+  yield* context.oauth.complete(sign.flow.flowId, sign.returned.href);
+  yield* seedRootLink;
+  context.fake.state.mimeType = "application/vnd.google-apps.folder";
+  yield* context.service.bindFile({ connectionId: context.connection.id, fileId: "synkek-root" });
+  const root = { linkId: rootLinkId, connectionId: context.connection.id, fileId: "synkek-root" };
+  yield* context.service.setProjectRoot({ projectId, root });
+  const input = {
+    projectId,
+    connectionId: context.connection.id,
+    parentId: root.fileId,
+    path: [],
+    sort: "name" as const,
+    direction: "asc" as const,
+    limit: 20,
+  };
+  return { ...context, root, input };
+});
+describe("project Drive folder browsing", () => {
+  it.effect("rejects a provider token whose encoded cursor exceeds the wire bound", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      fake.state.listRequests.push({ files: [], nextPageToken: '"'.repeat(4096) });
+      expect((yield* service.listChildren(input).pipe(Effect.flip)).kind).toBe("unavailable");
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("bounds a verified 16-folder path to 17 metadata reads and one list request", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      const path = Array.from({ length: 16 }, (_, index) => `folder-${index}`);
+      for (const [index, id] of path.entries())
+        fake.state.metadata[id] = {
+          id,
+          name: "Folder",
+          mimeType: "application/vnd.google-apps.folder",
+          parents: [index === 0 ? "synkek-root" : path[index - 1]!],
+        };
+      fake.state.listRequests.push({ files: [] });
+      const before = fake.calls.length;
+      expect(
+        (yield* service.listChildren({ ...input, path, parentId: path.at(-1)! })).files,
+      ).toEqual([]);
+      expect(fake.calls).toHaveLength(before + 18);
+      expect(
+        fake.calls.slice(before).filter((call) => call.url.pathname.endsWith("/files")),
+      ).toHaveLength(1);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("fails unavailable on malformed provider metadata while retaining the root", () =>
+    Effect.gen(function* () {
+      const { service, fake, input, root } = yield* browseSetup;
+      fake.state.listRequests.push({
+        files: [{ id: "../outside", name: "Invalid", mimeType: "text/plain" }],
+      });
+      const before = fake.calls.length;
+      expect((yield* service.listChildren(input).pipe(Effect.flip)).kind).toBe("unavailable");
+      expect(fake.calls).toHaveLength(before + 2);
+      expect((yield* service.getProjectRoot({ projectId })).root).toEqual(root);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each(["replace", "relink"] as const)(
+    "rejects a continuation after a valid root %s before Google access",
+    (change) =>
+      Effect.gen(function* () {
+        const { service, fake, input, root } = yield* browseSetup;
+        fake.state.listRequests.push({ files: [], nextPageToken: "next" });
+        const page = yield* service.listChildren(input);
+        const sql = yield* SqlClient.SqlClient;
+        const nextLinkId = "wl_00000000-0000-0000-0000-000000000002";
+        if (change === "relink") {
+          yield* sql`UPDATE workspace_links SET link_id=${nextLinkId} WHERE link_id=${rootLinkId}`;
+          yield* service.setProjectRoot({ projectId, root: { ...root, linkId: nextLinkId } });
+        } else {
+          const file = {
+            type: "file" as const,
+            provider: "google-drive" as const,
+            fileId: "replacement",
+          };
+          yield* sql`INSERT INTO workspace_links(link_id,key_a,key_b,ref_a_json,ref_b_json,status,source_json,created_at,updated_at) SELECT ${nextLinkId},${workspaceItemKey(file)},key_b,${encodeJson(file)},ref_b_json,status,source_json,created_at,updated_at FROM workspace_links WHERE link_id=${rootLinkId}`;
+          yield* service.bindFile({ connectionId: input.connectionId, fileId: file.fileId });
+          yield* service.setProjectRoot({
+            projectId,
+            root: { ...root, fileId: file.fileId, linkId: nextLinkId },
+          });
+        }
+        expect((yield* service.getProjectRoot({ projectId })).state).toBe("available");
+        const before = fake.calls.length;
+        expect(
+          (yield* service.listChildren({ ...input, cursor: page.nextCursor! }).pipe(Effect.flip))
+            .kind,
+        ).toBe("conflict");
+        expect(fake.calls).toHaveLength(before);
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("bounds opaque cursors and normalizes query whitespace and equivalent UTC bounds", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      fake.state.listRequests.push({ files: [], nextPageToken: "x".repeat(4096) }, { files: [] });
+      const page = yield* service.listChildren({
+        ...input,
+        query: "  brief  ",
+        modifiedAfter: "2026-10-10T02:00:00+02:00",
+      });
+      expect(page.nextCursor!.length).toBeLessThanOrEqual(8192);
+      yield* service.listChildren({
+        ...input,
+        query: "brief",
+        modifiedAfter: "2026-10-10T00:00:00Z",
+        cursor: page.nextCursor!,
+      });
+      expect(fake.calls.at(-1)!.url.searchParams.get("pageToken")).toBe("x".repeat(4096));
+      expect(fake.calls.at(-1)!.url.searchParams.has("cursor")).toBe(false);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("bounds batched local binding reads without Google access", () =>
+    Effect.gen(function* () {
+      const { service, fake } = yield* browseSetup;
+      const before = fake.calls.length;
+      expect(yield* service.getBindings({ fileIds: [] })).toEqual({ bindings: [] });
+      const ids = ["synkek-root", ...Array.from({ length: 199 }, (_, index) => `missing-${index}`)];
+      expect(
+        (yield* service.getBindings({ fileIds: ids })).bindings.map((binding) => binding.file.id),
+      ).toEqual(["synkek-root"]);
+      expect(
+        (yield* service.getBindings({ fileIds: [...ids, "extra"] }).pipe(Effect.flip)).kind,
+      ).toBe("invalid-input");
+      expect((yield* service.getBindings({ fileIds: ["../invalid"] }).pipe(Effect.flip)).kind).toBe(
+        "invalid-input",
+      );
+      expect(fake.calls).toHaveLength(before);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each([
+    { connectionId: "drv_00000000-0000-0000-0000-000000000099" },
+    { projectId: ProjectId.make("other-project") },
+    { parentId: "other-folder" },
+    { path: ["other-folder"] },
+    { query: "changed" },
+    { type: "document" as const },
+    { owner: "me" },
+    { modifiedAfter: "2026-10-10T00:00:00Z" },
+    { modifiedBefore: "2026-10-11T00:00:00Z" },
+    { sort: "modifiedTime" as const },
+    { direction: "desc" as const },
+    { limit: 10 },
+  ])("rejects a cursor when its browse scope changes: %j", (change) =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      fake.state.listRequests.push({ files: [], nextPageToken: "provider-token" });
+      const first = yield* service.listChildren(input);
+      const before = fake.calls.length;
+      expect(
+        (yield* service
+          .listChildren({ ...input, ...change, cursor: first.nextCursor! })
+          .pipe(Effect.flip)).kind,
+      ).toBe("conflict");
+      expect(fake.calls).toHaveLength(before);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("rejects raw, tampered, expired and previous-server cursors before Google access", () =>
+    Effect.gen(function* () {
+      const { service, fake, input, api, oauth } = yield* browseSetup;
+      fake.state.listRequests.push({ files: [], nextPageToken: "provider-token" });
+      const first = yield* service.listChildren(input);
+      const before = fake.calls.length;
+      expect(
+        (yield* service.listChildren({ ...input, cursor: "provider-token" }).pipe(Effect.flip))
+          .kind,
+      ).toBe("invalid-input");
+      const tampered = `A${first.nextCursor!.slice(1)}`;
+      expect(
+        (yield* service.listChildren({ ...input, cursor: tampered }).pipe(Effect.flip)).kind,
+      ).toBe("conflict");
+      const restarted = yield* Service.make.pipe(
+        Effect.provideService(Api.DriveApi, api),
+        Effect.provideService(OAuth.DriveOAuth, oauth),
+      );
+      expect(
+        (yield* restarted.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
+          .kind,
+      ).toBe("conflict");
+      yield* TestClock.adjust("10 minutes");
+      expect(
+        (yield* service.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
+          .kind,
+      ).toBe("conflict");
+      expect(fake.calls).toHaveLength(before);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect(
+    "rejects a cursor after a same-identity reconnect and preserves current-generation health",
+    () =>
+      Effect.gen(function* () {
+        const { service, fake, input, connection, store, oauth, signIn } = yield* browseSetup;
+        fake.state.listRequests.push({ files: [], nextPageToken: "next" });
+        const first = yield* service.listChildren(input);
+        yield* store.disconnect(connection.id);
+        const sign = yield* signIn;
+        yield* oauth.complete(sign.flow.flowId, sign.returned.href);
+        const before = fake.calls.length;
+        expect(
+          (yield* service.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
+            .kind,
+        ).toBe("conflict");
+        expect(fake.calls).toHaveLength(before);
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each(["unlinked", "binding-changed", "disconnected", "deleted", "corrupt"] as const)(
+    "gates %s roots before Google access",
+    (state) =>
+      Effect.gen(function* () {
+        const { service, fake, input, connection, store } = yield* browseSetup;
+        const sql = yield* SqlClient.SqlClient;
+        if (state === "unlinked")
+          yield* sql`UPDATE workspace_links SET status='dismissed' WHERE link_id=${rootLinkId}`;
+        if (state === "binding-changed")
+          yield* sql`DELETE FROM drive_file_bindings WHERE file_id='synkek-root'`;
+        if (state === "disconnected") yield* store.disconnect(connection.id);
+        if (state === "deleted")
+          yield* sql`UPDATE projection_projects SET deleted_at='2026-10-14T00:00:00Z' WHERE project_id=${projectId}`;
+        if (state === "corrupt")
+          yield* sql`UPDATE workspace_project_config SET drive_root_json='invalid-json'`;
+        const before = fake.calls.length;
+        expect((yield* service.listChildren(input).pipe(Effect.flip)).kind).toBe(
+          state === "disconnected"
+            ? "auth-required"
+            : state === "deleted"
+              ? "not-found"
+              : "unavailable",
+        );
+        expect(fake.calls).toHaveLength(before);
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each([
+    "unlink",
+    "clear",
+    "replace",
+    "rebind",
+    "disconnect",
+    "reconnect",
+    "delete",
+    "storage",
+  ] as const)("discards a page when %s happens during the GET", (change) =>
+    Effect.gen(function* () {
+      const { service, fake, input, connection, store, oauth, signIn, root } = yield* browseSetup;
+      const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
+      fake.state.listRequests.push({
+        files: [{ id: "late", name: "Late", mimeType: "text/plain" }],
+        gate,
+      });
+      const pending = yield* service.listChildren(input).pipe(Effect.flip, Effect.forkChild);
+      yield* Deferred.await(gate.entered);
+      const sql = yield* SqlClient.SqlClient;
+      if (change === "unlink")
+        yield* sql`UPDATE workspace_links SET status='dismissed' WHERE link_id=${rootLinkId}`;
+      if (change === "clear") yield* service.setProjectRoot({ projectId, root: null });
+      if (change === "replace")
+        yield* sql`UPDATE workspace_project_config SET drive_root_json=${encodeJson({ ...root, fileId: "replacement" })}`;
+      if (change === "rebind")
+        yield* sql`UPDATE drive_file_bindings SET connection_id='other' WHERE file_id='synkek-root'`;
+      if (change === "disconnect" || change === "reconnect") yield* store.disconnect(connection.id);
+      if (change === "reconnect") {
+        const sign = yield* signIn;
+        yield* oauth.complete(sign.flow.flowId, sign.returned.href);
+      }
+      if (change === "delete")
+        yield* sql`UPDATE projection_projects SET deleted_at='2026-10-14T00:00:00Z' WHERE project_id=${projectId}`;
+      if (change === "storage") yield* sql`ALTER TABLE workspace_links RENAME TO unavailable_links`;
+      yield* Deferred.succeed(gate.release, undefined);
+      expect((yield* Fiber.join(pending)).kind).toBe(
+        change === "storage" ? "unavailable" : "conflict",
+      );
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each([401, 403, 404])(
+    "sanitizes provider %s without alternate-account retries",
+    (status) =>
+      Effect.gen(function* () {
+        const { service, fake, input, store, connection } = yield* browseSetup;
+        fake.state.listRequests.push({ status });
+        const before = fake.calls.length;
+        const error = yield* service.listChildren(input).pipe(Effect.flip);
+        expect(error.kind).toBe(
+          status === 401 ? "auth-required" : status === 404 ? "not-found" : "unavailable",
+        );
+        expect(error.message).not.toContain("synthetic");
+        expect(fake.calls).toHaveLength(before + 2);
+        expect((yield* store.get(connection.id)).connected).toBe(status !== 401);
+        expect((yield* service.getProjectRoot({ projectId })).root).not.toBeNull();
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each([true, false])("reports incompleteSearch with continuation=%s", (continuation) =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      fake.state.listRequests.push({
+        files: [],
+        incompleteSearch: true,
+        ...(continuation ? { nextPageToken: "next" } : {}),
+      });
+      const page = yield* service.listChildren(input);
+      expect(page.incomplete).toBe(true);
+      expect(page.limitation).toBe("Results may be incomplete. Refresh or open Google Drive.");
+      expect(Boolean(page.nextCursor)).toBe(continuation);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect(
+    "verifies bounded parent metadata and returns a fresh root without rewriting its binding",
+    () =>
+      Effect.gen(function* () {
+        const { service, fake, input } = yield* browseSetup;
+        fake.state.metadata["synkek-root"] = {
+          id: "synkek-root",
+          name: "Renamed root",
+          mimeType: "application/vnd.google-apps.folder",
+        };
+        fake.state.metadata["child-folder"] = {
+          id: "child-folder",
+          name: "Folder",
+          mimeType: "application/vnd.google-apps.folder",
+          parents: ["synkek-root"],
+          driveId: "shared",
+        };
+        fake.state.listRequests.push({ files: [] });
+        const before = fake.calls.length;
+        const page = yield* service.listChildren({
+          ...input,
+          parentId: "child-folder",
+          path: ["child-folder"],
+        });
+        expect(page.rootFile?.name).toBe("Renamed root");
+        expect(fake.calls).toHaveLength(before + 3);
+        expect((yield* service.getBinding({ fileId: "synkek-root" })).binding?.file.name).toBe(
+          "Launch brief",
+        );
+        expect(
+          yield* service.getBindings({ fileIds: ["synkek-root", "child-folder", "synkek-root"] }),
+        ).toMatchObject({ bindings: [{ file: { id: "synkek-root" } }] });
+        expect(fake.calls).toHaveLength(before + 3);
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each([
+    "shortcut",
+    "wrong-parent",
+    "missing-parents",
+    "trashed",
+    "cycle",
+    "duplicate",
+    "deep",
+    "wrong-end",
+  ] as const)("refuses %s paths without a listing", (invalid) =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      fake.state.metadata["child-folder"] = {
+        id: "child-folder",
+        name: "Folder",
+        mimeType:
+          invalid === "shortcut"
+            ? "application/vnd.google-apps.shortcut"
+            : "application/vnd.google-apps.folder",
+        ...(invalid === "missing-parents"
+          ? {}
+          : { parents: [invalid === "wrong-parent" ? "outside" : "synkek-root"] }),
+        ...(invalid === "trashed" ? { trashed: true } : {}),
+      };
+      const path =
+        invalid === "cycle"
+          ? ["synkek-root", "child-folder"]
+          : invalid === "duplicate"
+            ? ["child-folder", "child-folder"]
+            : invalid === "deep"
+              ? Array.from({ length: 17 }, (_, index) => `folder-${index}`)
+              : ["child-folder"];
+      const before = fake.calls.length;
+      const error = yield* service
+        .listChildren({
+          ...input,
+          parentId: invalid === "wrong-end" ? "different" : path.at(-1)!,
+          path,
+        })
+        .pipe(Effect.flip);
+      expect(error.kind).toBe(
+        invalid === "shortcut" || invalid === "missing-parents"
+          ? "unsupported"
+          : invalid === "trashed"
+            ? "not-found"
+            : "invalid-input",
+      );
+      expect(
+        fake.calls.slice(before).filter((call) => call.url.pathname.endsWith("/files")),
+      ).toHaveLength(0);
+      if (["cycle", "duplicate", "deep", "wrong-end"].includes(invalid))
+        expect(fake.calls).toHaveLength(before);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect(
+    "pages metadata without binding descendants, fetching bodies or writing relationships",
+    () =>
+      Effect.gen(function* () {
+        const { service, fake, input, store } = yield* browseSetup;
+        const sql = yield* SqlClient.SqlClient;
+        const firstFiles = Array.from({ length: 20 }, (_, index) => ({
+          id: `child-${index}`,
+          name: "Same name",
+          mimeType: "text/plain",
+        }));
+        fake.state.listRequests.push(
+          { files: firstFiles, nextPageToken: "provider-next" },
+          {
+            files: [
+              firstFiles[19],
+              { id: "shared", name: "Same name", mimeType: "text/plain", driveId: "shared-drive" },
+            ],
+          },
+          { files: [] },
+        );
+        const before = fake.calls.length;
+        const counter = Option.getOrThrow(yield* Stream.runHead(store.changes));
+        const configs = yield* sql`SELECT * FROM workspace_project_config`;
+        expect(configs).toHaveLength(1);
+        expect(yield* service.getBinding({ fileId: "child-0" })).toEqual({});
+        expect((yield* service.readFile({ fileId: "child-0" }).pipe(Effect.flip)).kind).toBe(
+          "connection-required",
+        );
+        expect(fake.calls).toHaveLength(before);
+        const first = yield* service.listChildren(input);
+        expect(first.files).toHaveLength(20);
+        expect(first.nextCursor).toBeTruthy();
+        expect(first.nextCursor).not.toContain("provider-next");
+        const second = yield* service.listChildren({ ...input, cursor: first.nextCursor! });
+        const collected = new Map([...first.files, ...second.files].map((file) => [file.id, file]));
+        expect([...collected.keys()]).toEqual([...firstFiles.map((file) => file.id), "shared"]);
+        expect(second.files.at(-1)?.owners).toBeUndefined();
+        expect(second.nextCursor).toBeUndefined();
+        expect((yield* service.listChildren(input)).files).toEqual([]);
+        const browseCalls = fake.calls.slice(before);
+        expect(browseCalls).toHaveLength(6);
+        expect(browseCalls.filter((call) => call.url.pathname.endsWith("/files"))).toHaveLength(3);
+        expect(
+          browseCalls.filter((call) => call.url.pathname.endsWith("/files/synkek-root")),
+        ).toHaveLength(3);
+        expect(
+          browseCalls.every(
+            (call) =>
+              call.method === "GET" &&
+              !call.url.pathname.endsWith("/export") &&
+              !call.url.searchParams.has("alt"),
+          ),
+        ).toBe(true);
+        expect(yield* sql`SELECT file_id FROM drive_file_bindings`).toEqual([
+          { file_id: "synkek-root" },
+        ]);
+        expect(yield* sql`SELECT link_id FROM workspace_links`).toEqual([{ link_id: rootLinkId }]);
+        expect(Option.getOrThrow(yield* Stream.runHead(store.changes))).toBe(counter);
+        expect(yield* sql`SELECT * FROM workspace_project_config`).toEqual(configs);
+        expect(yield* service.getBinding({ fileId: "child-0" })).toEqual({});
+        const readsBefore = fake.calls.length;
+        expect((yield* service.readFile({ fileId: "child-0" }).pipe(Effect.flip)).kind).toBe(
+          "connection-required",
+        );
+        expect(fake.calls).toHaveLength(readsBefore);
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("rejects a continuation after root clear before any Google request", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      fake.state.listRequests.push({ files: [], nextPageToken: "next" });
+      const first = yield* service.listChildren(input);
+      const before = fake.calls.length;
+      yield* service.setProjectRoot({ projectId, root: null });
+      expect(
+        (yield* service.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
+          .kind,
+      ).toBe("conflict");
+      expect(fake.calls).toHaveLength(before);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect(
+    "retains an unavailable designation when stored root metadata is no longer a folder",
+    () =>
+      Effect.gen(function* () {
+        const { service, fake, root, input } = yield* browseSetup;
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`UPDATE drive_file_bindings SET file_json=${encodeJson({ id: root.fileId, name: "Changed", mimeType: "text/plain", url: "https://drive.google.com/file/d/synkek-root/view" })} WHERE file_id=${root.fileId}`;
+        expect(yield* service.getProjectRoot({ projectId })).toMatchObject({
+          root,
+          state: "unavailable",
+        });
+        const before = fake.calls.length;
+        expect((yield* service.listChildren(input).pipe(Effect.flip)).kind).toBe("unavailable");
+        expect(fake.calls).toHaveLength(before);
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+});
 describe("Drive read-only account and file lifecycle", () => {
   it.effect("retains unavailable designations through unlink, rebind, disconnect and restart", () =>
     Effect.gen(function* () {

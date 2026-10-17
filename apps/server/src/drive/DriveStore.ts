@@ -53,6 +53,9 @@ const fileJson = Schema.fromJsonString(DriveFile);
 const credentialJson = Schema.fromJsonString(DriveCredential);
 const decodeIdentity = Schema.decodeUnknownEffect(identityJson);
 const decodeFile = Schema.decodeUnknownEffect(fileJson);
+const decodeFileIds = Schema.decodeUnknownEffect(
+  Schema.Array(DriveFile.fields.id).check(Schema.isMaxLength(200)),
+);
 const decodeCredential = Schema.decodeUnknownEffect(credentialJson);
 const encodeIdentity = Schema.encodeSync(identityJson);
 const encodeFile = Schema.encodeSync(fileJson);
@@ -365,6 +368,24 @@ export const make = Effect.gen(function* () {
         ),
       ),
     binding,
+    bindings: (fileIds: readonly string[]) =>
+      safe(
+        Effect.gen(function* () {
+          const ids = yield* decodeFileIds(fileIds).pipe(
+            Effect.mapError(() => fail("invalid-input", "Use at most 200 valid Drive file IDs.")),
+          );
+          if (ids.length === 0) return [];
+          const rows = yield* sql<{
+            connectionId: string;
+            fileJson: string;
+          }>`SELECT connection_id AS "connectionId",file_json AS "fileJson" FROM drive_file_bindings WHERE file_id IN ${sql.in([...new Set(ids)])}`;
+          return yield* Effect.forEach(rows, (row) =>
+            decodeFile(row.fileJson).pipe(
+              Effect.map((file) => ({ connectionId: row.connectionId, file })),
+            ),
+          );
+        }),
+      ),
     bind: (connectionId: string, generation: number, file: typeof DriveFile.Type) =>
       mutate(
         Effect.gen(function* () {

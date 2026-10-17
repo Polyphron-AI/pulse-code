@@ -1,40 +1,120 @@
-import { DriveError, type DriveFile } from "@t3tools/contracts";
+import { DriveBrowseInput, DriveError, DriveFile, DriveFileId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
 const Metadata = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  mimeType: Schema.String,
+  id: DriveFileId,
+  name: Schema.String.check(Schema.isMaxLength(300)),
+  mimeType: Schema.String.check(Schema.isMaxLength(160)),
   trashed: Schema.optionalKey(Schema.Boolean),
-  modifiedTime: Schema.optionalKey(Schema.String),
-  size: Schema.optionalKey(Schema.String),
-  owners: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        displayName: Schema.optionalKey(Schema.String),
-        emailAddress: Schema.optionalKey(Schema.String),
-      }),
-    ),
-  ),
+  modifiedTime: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+  size: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(30))),
+  owners: DriveFile.fields.owners,
+  parents: DriveFile.fields.parents,
+  driveId: DriveFile.fields.driveId,
+  shortcutDetails: DriveFile.fields.shortcutDetails,
 });
-const fields = "id,name,mimeType,trashed,modifiedTime,size,owners(displayName,emailAddress)";
+const fields =
+  "id,name,mimeType,trashed,modifiedTime,size,owners(displayName,emailAddress,me),parents,driveId,shortcutDetails(targetId,targetMimeType)";
+const mimeByType = {
+  folder: "application/vnd.google-apps.folder",
+  document: "application/vnd.google-apps.document",
+  spreadsheet: "application/vnd.google-apps.spreadsheet",
+  presentation: "application/vnd.google-apps.presentation",
+} as const;
+const quote = (value: string) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+const ProviderToken = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096));
+const ListInput = Schema.Struct({
+  parentId: DriveFileId,
+  pageToken: Schema.optionalKey(ProviderToken),
+  query: DriveBrowseInput.fields.query,
+  type: DriveBrowseInput.fields.type,
+  owner: DriveBrowseInput.fields.owner,
+  modifiedAfter: DriveBrowseInput.fields.modifiedAfter,
+  modifiedBefore: DriveBrowseInput.fields.modifiedBefore,
+  sort: DriveBrowseInput.fields.sort,
+  direction: DriveBrowseInput.fields.direction,
+  limit: DriveBrowseInput.fields.limit,
+});
+const decodeListInput = Schema.decodeUnknownEffect(ListInput);
+const validDate = (value: string) => {
+  const parts =
+    /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
+      value,
+    );
+  if (!parts || Option.isNone(DateTime.make(value))) return false;
+  const year = Number(parts[1]),
+    month = Number(parts[2]),
+    day = Number(parts[3]);
+  const max =
+    [
+      31,
+      year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
+      31,
+      30,
+      31,
+      30,
+      31,
+      31,
+      30,
+      31,
+      30,
+      31,
+    ][month - 1] ?? 0;
+  return day >= 1 && day <= max;
+};
+export const validateListInput = Effect.fnUntraced(function* (input: typeof ListInput.Type) {
+  const decoded = yield* decodeListInput(input).pipe(
+    Effect.mapError(() =>
+      fail("invalid-input", "Use valid folder filters and a page size from 1 to 50."),
+    ),
+  );
+  if (
+    (decoded.owner !== undefined &&
+      !/^(?:me|[^\s@,;'"\\]+@[^\s@,;'"\\]+\.[^\s@,;'"\\]+)$/.test(decoded.owner)) ||
+    (decoded.modifiedAfter !== undefined && !validDate(decoded.modifiedAfter)) ||
+    (decoded.modifiedBefore !== undefined && !validDate(decoded.modifiedBefore)) ||
+    (decoded.modifiedAfter &&
+      decoded.modifiedBefore &&
+      Date.parse(decoded.modifiedAfter) >= Date.parse(decoded.modifiedBefore))
+  )
+    return yield* fail(
+      "invalid-input",
+      "Use one owner email or me, and valid ordered RFC3339 date bounds.",
+    );
+  return decoded;
+});
 const isDriveError = Schema.is(DriveError);
 const fail = (kind: DriveError["kind"], message: string) => new DriveError({ kind, message });
 const metadata = (value: typeof Metadata.Type): DriveFile => ({
   id: value.id,
   name: value.name.slice(0, 300),
   mimeType: value.mimeType.slice(0, 160),
-  url: `https://drive.google.com/file/d/${encodeURIComponent(value.id)}/view`,
+  url:
+    value.mimeType === mimeByType.folder
+      ? `https://drive.google.com/drive/folders/${value.id}`
+      : value.mimeType === mimeByType.document
+        ? `https://docs.google.com/document/d/${value.id}/edit`
+        : value.mimeType === mimeByType.spreadsheet
+          ? `https://docs.google.com/spreadsheets/d/${value.id}/edit`
+          : value.mimeType === mimeByType.presentation
+            ? `https://docs.google.com/presentation/d/${value.id}/edit`
+            : `https://drive.google.com/file/d/${value.id}/view`,
   ...(value.modifiedTime ? { modifiedTime: value.modifiedTime.slice(0, 64) } : {}),
   ...(value.size ? { size: value.size.slice(0, 30) } : {}),
   ...(value.owners?.[0]
     ? { owner: (value.owners[0].displayName ?? value.owners[0].emailAddress ?? "").slice(0, 160) }
     : {}),
+  ...(value.owners ? { owners: value.owners } : {}),
+  ...(value.parents ? { parents: value.parents } : {}),
+  ...(value.driveId ? { driveId: value.driveId } : {}),
+  ...(value.shortcutDetails ? { shortcutDetails: value.shortcutDetails } : {}),
 });
 export const DRIVE_CONTENT_LIMIT = 262144;
 export const make = Effect.gen(function* () {
@@ -120,6 +200,49 @@ export const make = Effect.gen(function* () {
         })),
       ),
     file,
+    listChildren: Effect.fnUntraced(function* (token: string, raw: typeof ListInput.Type) {
+      const input = yield* validateListInput(raw);
+      const clauses = ["trashed = false", `${quote(input.parentId)} in parents`];
+      if (input.query?.trim()) clauses.push(`name contains ${quote(input.query.trim())}`);
+      if (input.type && input.type !== "other")
+        clauses.push(`mimeType = ${quote(mimeByType[input.type])}`);
+      if (input.type === "other") {
+        for (const mime of Object.values(mimeByType)) clauses.push(`mimeType != ${quote(mime)}`);
+        clauses.push("mimeType != 'application/vnd.google-apps.shortcut'");
+      }
+      if (input.owner) clauses.push(`${quote(input.owner)} in owners`);
+      if (input.modifiedAfter) clauses.push(`modifiedTime >= ${quote(input.modifiedAfter)}`);
+      if (input.modifiedBefore) clauses.push(`modifiedTime < ${quote(input.modifiedBefore)}`);
+      const modifier = input.direction === "desc" ? " desc" : "";
+      const result = yield* json(
+        token,
+        "files",
+        Schema.Struct({
+          files: Schema.Array(Metadata).check(Schema.isMaxLength(input.limit)),
+          nextPageToken: Schema.optionalKey(ProviderToken),
+          incompleteSearch: Schema.optionalKey(Schema.Boolean),
+        }),
+        {
+          q: clauses.join(" and "),
+          orderBy:
+            input.sort === "name"
+              ? `folder,name${modifier}`
+              : `folder,modifiedTime${modifier},name`,
+          pageSize: String(input.limit),
+          ...(input.pageToken ? { pageToken: input.pageToken } : {}),
+          supportsAllDrives: "true",
+          includeItemsFromAllDrives: "true",
+          fields: `nextPageToken,incompleteSearch,files(${fields})`,
+        },
+      );
+      if (result.files.some((file) => file.trashed))
+        return yield* fail("unavailable", "Google Drive returned unavailable file metadata.");
+      return {
+        files: result.files.map(metadata),
+        ...(result.nextPageToken ? { nextPageToken: result.nextPageToken } : {}),
+        incomplete: result.incompleteSearch === true,
+      };
+    }),
     search: (token: string, query: string, limit: number) =>
       json(
         token,

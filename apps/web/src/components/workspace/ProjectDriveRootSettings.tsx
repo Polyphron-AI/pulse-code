@@ -73,27 +73,8 @@ function ProjectDriveLinks({ environmentId, projectId }: Props) {
   );
 }
 
-function DriveFolderOption({
-  environmentId,
-  fileId,
-  linkId,
-  title,
-}: {
-  environmentId: EnvironmentId;
-  fileId: string;
-  linkId: string;
-  title: string;
-}) {
-  const binding = useEnvironmentQuery(drive.binding({ environmentId, input: { fileId } }));
-  if (
-    binding.data?.binding &&
-    binding.data.binding.file.mimeType !== "application/vnd.google-apps.folder"
-  )
-    return null;
-  return <option value={linkId}>{title}</option>;
-}
-
 function AvailableRootSettings({ environmentId, projectId }: Props) {
+  const { driveExplorer } = useMailCapabilities(environmentId);
   const root = useEnvironmentQuery(drive.projectRoot({ environmentId, input: { projectId } }));
   const links = useEnvironmentQuery(
     workspaceLinks.list({ environmentId, input: { item: { type: "project", projectId } } }),
@@ -132,9 +113,30 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
     ) ?? [];
   const selected = candidates.find((link) => link.id === linkId);
   const fileId = selected?.item.ref.type === "file" ? selected.item.ref.fileId : null;
-  const binding = useEnvironmentQuery(
-    fileId ? drive.binding({ environmentId, input: { fileId } }) : null,
+  const singleBinding = useEnvironmentQuery(
+    !driveExplorer && fileId ? drive.binding({ environmentId, input: { fileId } }) : null,
   );
+  const bindings = useEnvironmentQuery(
+    driveExplorer && choosing && candidates.length
+      ? drive.bindings({
+          environmentId,
+          input: {
+            fileIds: candidates.flatMap((link) =>
+              link.item.ref.type === "file" ? [link.item.ref.fileId] : [],
+            ),
+          },
+        })
+      : null,
+  );
+  const bindingsById = new Map(bindings.data?.bindings.map((value) => [value.file.id, value]));
+  const binding = driveExplorer
+    ? {
+        ...bindings,
+        data: bindings.data
+          ? { binding: fileId ? bindingsById.get(fileId) : undefined }
+          : undefined,
+      }
+    : singleBinding;
   const saved = root.data?.root;
   const selectedBinding = binding.data?.binding;
   const folder =
@@ -273,17 +275,18 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
               }}
             >
               <option value="">Choose a linked item to verify</option>
-              {candidates.map((link) =>
-                link.item.ref.type === "file" ? (
-                  <DriveFolderOption
-                    key={link.id}
-                    environmentId={environmentId}
-                    fileId={link.item.ref.fileId}
-                    linkId={link.id}
-                    title={link.item.title ?? link.item.ref.fileId}
-                  />
-                ) : null,
-              )}
+              {candidates.map((link) => {
+                if (link.item.ref.type !== "file") return null;
+                const id = link.item.ref.fileId;
+                const known = bindingsById.get(id);
+                if (known && known.file.mimeType !== "application/vnd.google-apps.folder")
+                  return null;
+                return (
+                  <option key={link.id} value={link.id}>
+                    {link.item.title ?? id}
+                  </option>
+                );
+              })}
             </select>
           </label>
           {selectedBinding ? (
