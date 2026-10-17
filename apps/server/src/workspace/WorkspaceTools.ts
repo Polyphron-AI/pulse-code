@@ -306,6 +306,7 @@ export const make = Effect.gen(function* () {
           }),
         ),
       ),
+    currentChange: SubscriptionRef.get(counter),
     changes: SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
     saveConfig: (input: WorkspaceProjectConfigSave) =>
       locks.withLock(

@@ -1,4 +1,19 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { useEnvironmentQuery } from "../state/query";
+import { workspaceCalendar } from "../state/workspaceCalendar";
+import { useEnvironmentSettings } from "../hooks/useSettings";
+import {
+  calendarOccurrenceDay,
+  parseCalendarLocation,
+} from "../components/workspace/calendar/calendarItemRef";
+import {
+  WorkspaceItemActions,
+  WorkspaceItemMenu,
+} from "../components/workspace/WorkspaceItemActions";
+import { WorkspaceLinkedContext } from "../components/workspace/WorkspaceLinkedContext";
+import { useWorkspaceItemOpener } from "../components/workspace/useWorkspaceItemOpener";
+import { Button } from "../components/ui/button";
 
 import { CommunicationsWorkspace } from "../components/workspace/CommunicationsWorkspace";
 import { MailSpace } from "../components/workspace/mail/MailSpace";
@@ -43,8 +58,9 @@ function WorkspaceRouteView() {
     case "tasks":
       return <TasksSpace />;
     case "meetings":
-    case "calendar":
       return <UnavailableWorkspace space={search.space} />;
+    case "calendar":
+      return <CalendarWorkspace />;
     case undefined:
       return null;
     default: {
@@ -52,6 +68,104 @@ function WorkspaceRouteView() {
       throw new Error(`Unknown workspace destination: ${unknownSpace}`);
     }
   }
+}
+
+function CalendarWorkspace() {
+  const search = Route.useSearch();
+  const { environmentId } = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
+  const ref = parseCalendarLocation(search.item);
+  return environmentId && ref ? (
+    <LinkedCalendarEvent
+      key={`${environmentId}:${ref.resourceId}`}
+      environmentId={environmentId}
+      item={ref}
+    />
+  ) : (
+    <UnavailableWorkspace space="calendar" />
+  );
+}
+
+/** Deep links resolve only their selected ID before choosing its visible day. */
+function LinkedCalendarEvent({
+  environmentId,
+  item,
+}: {
+  environmentId: EnvironmentId;
+  item: NonNullable<ReturnType<typeof parseCalendarLocation>>;
+}) {
+  const search = Route.useSearch();
+  const navigate = useNavigate();
+  const open = useWorkspaceItemOpener(environmentId);
+  const timeZone =
+    useEnvironmentSettings(environmentId, (settings) => settings.workspaceDisplayTimeZone) ?? "UTC";
+  const detail = useEnvironmentQuery(
+    workspaceCalendar.detail({ environmentId, input: { id: item.resourceId } }),
+  );
+  const event =
+    !detail.error && detail.data && "id" in detail.data && detail.data.id === item.resourceId
+      ? detail.data
+      : null;
+  const endpoint = { ref: item, ...(event ? { title: event.title } : {}) };
+  const header = useWorkspaceHeaderModel(environmentId, "Calendar", "Calendar");
+  const day = event ? calendarOccurrenceDay(event.time, timeZone) : undefined;
+  useEffect(() => {
+    if (day && day !== search.day)
+      void navigate({ to: "/workspace", replace: true, search: { ...search, day } });
+  }, [day, search, navigate]);
+  return (
+    <WorkspaceEngagement
+      environmentId={environmentId}
+      space="calendar"
+      layout="full"
+      header={header}
+      resources={<WorkspaceProjectResources />}
+      linkedContext={{
+        item: endpoint,
+        render: (selected) => (
+          <WorkspaceLinkedContext environmentId={environmentId} item={selected} onOpen={open} />
+        ),
+      }}
+    >
+      <section aria-label="Calendar event" className="flex flex-col gap-3 p-5 sm:p-8">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const { item: _item, ...rest } = search;
+            void navigate({ to: "/workspace", search: rest, replace: true });
+          }}
+        >
+          Close event
+        </Button>
+        {detail.error ? <p role="alert">{detail.error}</p> : null}
+        {detail.error ? (
+          <Button variant="ghost" size="sm" onClick={detail.refresh}>
+            Retry event
+          </Button>
+        ) : null}
+        {detail.data && "unavailableReason" in detail.data ? (
+          <p>{detail.data.unavailableReason}</p>
+        ) : null}
+        {!event && !detail.error && !detail.data ? <p>Loading event...</p> : null}
+        {event ? (
+          <>
+            <WorkspaceItemMenu environmentId={environmentId} item={endpoint}>
+              <h2 className="text-base font-semibold">{event.title}</h2>
+            </WorkspaceItemMenu>
+            <p className="text-sm text-muted-foreground">
+              {day} · {event.sourceLabel}
+            </p>
+            {event.description ? (
+              <p className="whitespace-pre-wrap text-sm">{event.description}</p>
+            ) : null}
+            <WorkspaceItemActions environmentId={environmentId} item={endpoint} shortcuts />
+          </>
+        ) : null}
+      </section>
+    </WorkspaceEngagement>
+  );
 }
 
 function UnavailableWorkspace({

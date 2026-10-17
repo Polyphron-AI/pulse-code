@@ -61,3 +61,43 @@ it.each([true, false, undefined])(
     }
   },
 );
+
+it("opens a calendar ref in the captured environment without granting it", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  boundary.navigate.mockClear();
+  const ref = {
+    type: "provider-resource",
+    provider: "workspace-calendar",
+    resourceId: "wce_00000000-0000-0000-0000-000000000001",
+  } as const;
+  const capture =
+    vi.fn<(open: (item: import("@t3tools/contracts").WorkspaceItemRef) => void) => void>();
+  function Harness({ environment }: { environment: string }) {
+    const open = useWorkspaceItemOpener(EnvironmentId.make(environment));
+    return createElement("button", {
+      onClick: () => {
+        capture(open);
+      },
+    });
+  }
+  let renderer!: ReactTestRenderer;
+  await act(() => {
+    renderer = create(createElement(Harness, { environment: "original" }));
+  });
+  try {
+    await act(() => renderer.root.findByType("button").props.onClick());
+    await act(() => renderer.update(createElement(Harness, { environment: "other" })));
+    const captured = capture.mock.calls[0]![0];
+    await act(() => captured(ref));
+    expect(boundary.navigate).toHaveBeenLastCalledWith({
+      to: "/workspace",
+      search: { space: "calendar", environment: "original", item: JSON.stringify(ref) },
+    });
+    boundary.navigate.mockClear();
+    await act(() => captured({ ...ref, resourceId: "wce_invalid" }));
+    expect(boundary.navigate).not.toHaveBeenCalled();
+  } finally {
+    await act(() => renderer.unmount());
+    vi.unstubAllGlobals();
+  }
+});

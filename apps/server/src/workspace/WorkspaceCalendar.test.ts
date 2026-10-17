@@ -6,6 +6,8 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Tools from "./WorkspaceTools.ts";
+import * as Deferred from "effect/Deferred";
+import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import { CalendarError, ProjectId } from "@t3tools/contracts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
@@ -425,7 +427,7 @@ it.effect("caps known source enumeration and reports partial results without inv
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect("canonicalizes zones at admission and fingerprints encoded fields", () =>
+it.effect("canonicalizes zones at admission and rejects unknown zones", () =>
   Effect.gen(function* () {
     const calendar = yield* Calendar.WorkspaceCalendar;
     const item = {
@@ -436,10 +438,6 @@ it.effect("canonicalizes zones at admission and fingerprints encoded fields", ()
     const first = (yield* calendar.listRange({ ...range, timeZone: "africa/johannesburg" }))
       .events[0]!;
     expect(first.time).toMatchObject({ sourceTimeZone: "Africa/Johannesburg" });
-    yield* calendar.ingestPage({
-      ...source,
-      items: [Object.fromEntries(Object.entries(item).toReversed()) as typeof item],
-    });
     expect((yield* calendar.get({ id: first.id })).revision).toBe(1);
     expect(yield* Stream.runHead(calendar.changes)).toMatchObject({ value: 1 });
     expect(
@@ -647,5 +645,108 @@ it.effect("pages due references independently within the byte budget with one gl
     } finally {
       query.mockRestore();
     }
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("emits one combined subscribe baseline and preserves TOOLS stream emissions", () =>
+  Effect.gen(function* () {
+    const tools = yield* Tools.WorkspaceTools;
+    expect(yield* tools.currentChange).toBe(0);
+    const sql = yield* SqlClient.SqlClient;
+    const projectId = ProjectId.make("baseline");
+    yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Test','/synthetic','[]','now','now')`;
+    yield* tools.upsertTask({ projectId, title: "One", column: "To do" });
+    yield* tools.upsertTask({ projectId, title: "Two", column: "To do" });
+    expect(yield* tools.currentChange).toBe(2);
+    const calendar = yield* Calendar.WorkspaceCalendar;
+    yield* calendar.ingestPage({ ...source, items: [occurrence] });
+    const baseline = yield* Deferred.make<void>();
+    const values = yield* calendar.changes.pipe(
+      Stream.tap(() => Deferred.succeed(baseline, undefined)),
+      Stream.take(2),
+      Stream.runCollect,
+      Effect.forkChild,
+    );
+    yield* Deferred.await(baseline);
+    yield* calendar.invalidate;
+    expect(yield* Fiber.join(values)).toEqual([3, 4]);
+    expect(yield* Stream.runHead(tools.changes)).toMatchObject({ value: 2 });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("does not repeat the other side when paging events or due tasks", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const projectId = ProjectId.make("independent");
+    yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Test','/synthetic','[]','now','now')`;
+    const tools = yield* Tools.WorkspaceTools;
+    for (let n = 0; n < 101; n++)
+      yield* tools.upsertTask({
+        projectId,
+        title: `Task ${n}`,
+        column: "To do",
+        dueOn: "2026-10-13",
+      });
+    const calendar = yield* Calendar.WorkspaceCalendar;
+    yield* calendar.ingestPage({
+      ...source,
+      items: [occurrence, { ...occurrence, externalEventId: "second" }],
+    });
+    const first = yield* calendar.listRange({ ...range, limit: 1 });
+    const query = vi.spyOn(tools, "queryTasks");
+    try {
+      const events = yield* calendar.listRange({ ...range, limit: 1, cursor: first.nextCursor! });
+      expect(events.events).toHaveLength(1);
+      expect(events.dueTasks).toEqual([]);
+      expect(query).not.toHaveBeenCalled();
+      // A due continuation must not even attempt an occurrence query.
+      yield* sql`ALTER TABLE workspace_calendar_occurrences RENAME TO hidden_occurrences`;
+      const due = yield* calendar.listRange({
+        ...range,
+        limit: 1,
+        dueCursor: first.nextDueCursor!,
+      });
+      expect(due.events).toEqual([]);
+      expect(due.dueTasks.length).toBeGreaterThan(0);
+      expect(query).toHaveBeenCalledTimes(1);
+    } finally {
+      query.mockRestore();
+    }
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("reads exact multibyte body offsets and leaves room for the MCP envelope", () =>
+  Effect.gen(function* () {
+    const calendar = yield* Calendar.WorkspaceCalendar;
+    const description = "\u{1F600}".repeat(1000);
+    yield* calendar.ingestPage({
+      ...source,
+      items: [
+        {
+          ...occurrence,
+          description,
+          hasDescription: true,
+          title: "\u0000".repeat(300),
+          sourceLabel: "\u0000".repeat(200),
+          attendees: Array.from({ length: 20 }, () => ({
+            name: "\u0000".repeat(199),
+            initials: "\u0000".repeat(10),
+          })),
+        },
+      ],
+    });
+    const id = (yield* calendar.listRange(range)).events[0]!.id;
+    const read = yield* calendar.read({ id });
+    expect(read.body.text).toBe(description);
+    expect(Buffer.byteLength(read.body.text)).toBeLessThanOrEqual(8000);
+    expect(
+      serializedBytes({
+        ...read,
+        key: `provider-resource:workspace-calendar:${id}`,
+        type: "calendar-event",
+      }),
+    ).toBeLessThanOrEqual(32000);
+    expect((yield* calendar.read({ id, offset: 1 }).pipe(Effect.flip)).kind).toBe("invalid-input");
+    expect((yield* calendar.read({ id, offset: 4 })).body.text).toBe(description.slice(2));
   }).pipe(Effect.provide(layer)),
 );

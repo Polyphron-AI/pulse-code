@@ -68,7 +68,7 @@ export const WorkspaceToolkit = Toolkit.make(
   LinkedItemsTool,
   tool("workspace_read_item", {
     title: "Read a linked item",
-    description: `Read one linked item by its key. A mail message returns headers and a text body; pass body.nextOffset as offset to continue. A Telegram message returns only that received message. A Telegram chat returns a bounded page of received messages; pass nextOffset as offset to continue. A task returns its title and project column. A Drive file returns bounded plain text using the connection explicitly chosen by the user; unsupported files stay unavailable. A web page returns its address. ${NO_AUTHORITY}`,
+    description: `Read one linked item by its key. A mail message returns headers and a text body; pass body.nextOffset as offset to continue. A Telegram message returns only that received message. A Telegram chat returns a bounded page of received messages; pass nextOffset as offset to continue. A task returns its title and project column. A Drive file returns bounded plain text using the connection explicitly chosen by the user; unsupported files stay unavailable. A calendar event returns one exact confirmed occurrence with bounded metadata and text; pass body.nextOffset as offset to continue. It never lists calendars or related notes. A web page returns its address. ${NO_AUTHORITY}`,
     parameters: {
       key: Schema.String.check(Schema.isMaxLength(8_192)).annotate({
         description: "A key from <linked_items> or workspace_linked_items.",

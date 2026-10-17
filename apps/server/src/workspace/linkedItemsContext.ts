@@ -69,8 +69,13 @@ export const renderLinkedItems = (context: WorkspaceContext): string => {
   const lines: Array<string> = [];
   let used = 0;
   for (const { key, item } of context.items.slice(0, LINKED_ITEMS_MAX)) {
-    const title = sanitizeLinkTitle(item.title ?? "") || UNTITLED[item.ref.type];
-    const line = `- ${item.ref.type} "${title}" (key: ${key})\n`;
+    const label =
+      item.ref.type === "provider-resource" && item.ref.provider === "workspace-calendar"
+        ? "calendar-event"
+        : item.ref.type;
+    const fallback = label === "calendar-event" ? "Calendar event" : UNTITLED[item.ref.type];
+    const title = sanitizeLinkTitle(item.title ?? "") || fallback;
+    const line = `- ${label} "${title}" (key: ${key})\n`;
     const size = byteLength(line);
     if (used + size > budget) continue;
     lines.push(line);

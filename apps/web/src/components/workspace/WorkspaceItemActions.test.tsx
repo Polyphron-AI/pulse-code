@@ -7,7 +7,13 @@ import { getByRole } from "@testing-library/dom";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
-import { EnvironmentId, ProjectId, ThreadId, type ScopedProjectRef } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  ThreadId,
+  type ScopedProjectRef,
+  type WorkspaceLinkEndpoint,
+} from "@t3tools/contracts";
 import { useComposerDraftStore, type DraftId } from "../../composerDraftStore";
 import { newDraftId } from "../../lib/utils";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
@@ -487,11 +493,21 @@ it.each(["long-press", "move", "cancel", "release", "unmount"])(
     }
   },
 );
-it("dispatches one selected-item shortcut beside an open resource menu and aborts detached palette targets", async () => {
+it.each<WorkspaceLinkEndpoint>([
+  a,
+  {
+    ref: {
+      type: "provider-resource",
+      provider: "workspace-calendar",
+      resourceId: "wce_00000000-0000-0000-0000-000000000001",
+    },
+    title: "Calendar event",
+  },
+])("dispatches one selected-item shortcut and captured palette action for %j", async (source) => {
   const node = document.createElement("div");
   document.body.append(node);
   const root = createRoot(node);
-  function App({ selected }: { selected: typeof a }) {
+  function App({ selected }: { selected: WorkspaceLinkEndpoint }) {
     return (
       <>
         <WorkspaceItemActions environmentId={environmentId} item={selected} shortcuts />
@@ -504,7 +520,7 @@ it("dispatches one selected-item shortcut beside an open resource menu and abort
   mocks.contextMenuShow.mockResolvedValue(choiceId);
   mocks.linkToProject.mockResolvedValue(undefined);
   try {
-    await act(() => root.render(<App selected={a} />));
+    await act(() => root.render(<App selected={source} />));
     await act(() =>
       node
         .querySelector('[draggable="true"]')!
@@ -523,7 +539,7 @@ it("dispatches one selected-item shortcut beside an open resource menu and abort
       );
     });
     expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
-    expect(mocks.linkToProject).toHaveBeenCalledWith(a, expect.anything(), expect.anything());
+    expect(mocks.linkToProject).toHaveBeenCalledWith(source, expect.anything(), expect.anything());
     const palette = buildWorkspaceActionItems(null).find(
       (action) => action.shortcutCommand === "workspace.addToProject",
     )!;
@@ -694,6 +710,45 @@ it("starts from a stable task ref with its structural project as explicit contex
     expect(mocks.linkToProject).not.toHaveBeenCalled();
   } finally {
     addContexts.mockRestore();
+    await act(() => view.unmount());
+  }
+});
+
+it("keeps an event and its environment captured across delayed project selection", async () => {
+  const event = {
+    ref: {
+      type: "provider-resource",
+      provider: "workspace-calendar",
+      resourceId: "wce_00000000-0000-0000-0000-000000000001",
+    },
+    title: "Captured event",
+  } as const;
+  let resolve!: (choice: string) => void;
+  const choice = new Promise<string>((done) => {
+    resolve = done;
+  });
+  mocks.contextMenuShow.mockReturnValueOnce(choice);
+  mocks.linkToProject.mockResolvedValue(undefined);
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(<WorkspaceItemActions environmentId={environmentId} item={event} />);
+  });
+  try {
+    await act(() => {
+      add(view).props.onClick({ currentTarget: target });
+    });
+    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+    await act(async () => {
+      resolve(choiceId);
+      await choice;
+    });
+    expect(mocks.linkToProject).toHaveBeenCalledWith(
+      event,
+      expect.objectContaining({ id: "project-a" }),
+      { type: "action", action: "add-to-project" },
+    );
+    expect(mocks.startThread).not.toHaveBeenCalled();
+  } finally {
     await act(() => view.unmount());
   }
 });

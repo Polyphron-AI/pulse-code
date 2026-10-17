@@ -145,7 +145,7 @@ it.effect("shares changes and never refreshes on clock advance", () =>
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const stopped = yield* Deferred.make<void>();
-      const counter = yield* SubscriptionRef.make(0);
+      const counter = yield* SubscriptionRef.make(7);
       let reads = 0,
         starts = 0,
         refreshes = 0;
@@ -155,7 +155,7 @@ it.effect("shares changes and never refreshes on clock advance", () =>
           Stream.unwrap(
             Effect.sync(() => {
               starts++;
-              return SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0));
+              return SubscriptionRef.changes(counter);
             }),
           ).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
         [WS_METHODS.calendarListRange]: () =>
@@ -186,6 +186,7 @@ it.effect("shares changes and never refreshes on clock advance", () =>
       expect({ reads, starts }).toEqual({ reads: 1, starts: 1 });
       yield* Deferred.succeed(release, undefined);
       yield* Effect.promise(() => executeAtomQuery(registry, first));
+      expect(reads).toBe(1);
       a();
       const updated = Latch.makeUnsafe();
       const watch = registry.subscribe(first, (result) => {
@@ -193,7 +194,7 @@ it.effect("shares changes and never refreshes on clock advance", () =>
           updated.openUnsafe();
       });
       title = "After";
-      yield* SubscriptionRef.set(counter, 1);
+      yield* SubscriptionRef.set(counter, 8);
       yield* updated.await;
       yield* TestClock.adjust("1 hour");
       expect({ reads, starts, refreshes }).toEqual({ reads: 2, starts: 1, refreshes: 0 });
@@ -289,17 +290,22 @@ it.effect("revalidates saved metadata and resubscribes on reconnect without prov
     Effect.gen(function* () {
       let title = "Before",
         refreshes = 0,
-        starts = 0;
+        starts = 0,
+        reads = 0;
       const stopped = yield* Deferred.make<void>();
       const client = {
         [WS_METHODS.calendarSubscribeChanges]: () =>
           Stream.unwrap(
             Effect.sync(() => {
               starts++;
-              return Stream.never;
+              return Stream.concat(Stream.succeed(7), Stream.never);
             }),
           ).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
-        [WS_METHODS.calendarListRange]: () => Effect.sync(() => page(title)),
+        [WS_METHODS.calendarListRange]: () =>
+          Effect.sync(() => {
+            reads++;
+            return page(title);
+          }),
         [WS_METHODS.calendarRefresh]: () =>
           Effect.sync(() => {
             refreshes++;
@@ -334,6 +340,7 @@ it.effect("revalidates saved metadata and resubscribes on reconnect without prov
       yield* changed.await;
       expect(refreshes).toBe(0);
       expect(starts).toBe(2);
+      expect(reads).toBe(2);
     }),
   ),
 );
@@ -412,8 +419,7 @@ it.effect("shares one explicit refresh and updates mounted reads on two clients"
       let refreshes = 0,
         title = "Before";
       const client = {
-        [WS_METHODS.calendarSubscribeChanges]: () =>
-          SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
+        [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
         [WS_METHODS.calendarListRange]: () => Effect.sync(() => page(title)),
         [WS_METHODS.calendarRefresh]: () =>
           Effect.gen(function* () {
@@ -504,8 +510,7 @@ it.effect("discards a pending continuation after an invalidation", () =>
       let title = "Before",
         reads = 0;
       const client = {
-        [WS_METHODS.calendarSubscribeChanges]: () =>
-          SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
+        [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
         [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
           Effect.gen(function* () {
             reads++;
@@ -621,7 +626,7 @@ it.effect("does not restart on a cursor reused with the wrong range", () =>
   ),
 );
 
-it.effect("revalidates a pending range on replayed invalidation without overlapping reads", () =>
+it.effect("treats the replayed counter as a baseline without overlapping reads", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const counter = yield* SubscriptionRef.make(1);
@@ -653,19 +658,63 @@ it.effect("revalidates a pending range on replayed invalidation without overlapp
       const stops = [registry.mount(query), registry.mount(atoms.range(target))];
       yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((s) => s())));
       yield* Deferred.await(entered);
-      const emitted = Latch.makeUnsafe();
-      const watch = registry.subscribe(
-        atoms.changes({ environmentId: target.environmentId, input: {} }),
-        (result) => {
-          if (AsyncResult.isSuccess(result) && result.value === 1) emitted.openUnsafe();
-        },
-        { immediate: true },
-      );
-      yield* Effect.addFinalizer(() => Effect.sync(watch));
-      yield* emitted.await;
-      expect({ reads, peak }).toEqual({ reads: 2, peak: 1 });
+      expect({ reads, peak }).toEqual({ reads: 1, peak: 1 });
       yield* Deferred.succeed(release, undefined);
       yield* Effect.promise(() => executeAtomQuery(registry, query));
+    }),
+  ),
+);
+
+it.effect("mounts only the selected detail and releases its shared stream while hidden", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(5);
+      const stopped = yield* Deferred.make<void>();
+      const requested: string[] = [];
+      let starts = 0;
+      const client = {
+        [WS_METHODS.calendarSubscribeChanges]: () => {
+          starts++;
+          return SubscriptionRef.changes(counter).pipe(
+            Stream.ensuring(Deferred.succeed(stopped, undefined)),
+          );
+        },
+        [WS_METHODS.calendarGet]: ({ id }: { id: string }) =>
+          Effect.sync(() => {
+            requested.push(id);
+            return { ...event, id, revision: requested.length };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const selected = atoms.detail({
+        environmentId: target.environmentId,
+        input: { id: event.id },
+      });
+      atoms.detail({
+        environmentId: target.environmentId,
+        input: { id: "wce_00000000-0000-0000-0000-000000000002" },
+      });
+      const stop = registry.mount(selected);
+      yield* Effect.promise(() => executeAtomQuery(registry, selected));
+      expect(requested).toEqual([event.id]);
+      const changed = Latch.makeUnsafe();
+      const watch = registry.subscribe(selected, (result) => {
+        if (
+          AsyncResult.isSuccess(result) &&
+          "revision" in result.value &&
+          result.value.revision === 2
+        )
+          changed.openUnsafe();
+      });
+      yield* SubscriptionRef.set(counter, 6);
+      yield* changed.await;
+      watch();
+      stop();
+      yield* Deferred.await(stopped);
+      yield* SubscriptionRef.set(counter, 7);
+      yield* TestClock.adjust("1 hour");
+      expect(requested).toEqual([event.id, event.id]);
+      expect(starts).toBe(1);
     }),
   ),
 );

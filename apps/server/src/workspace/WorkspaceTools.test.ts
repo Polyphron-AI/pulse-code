@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
 import { ProjectId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
@@ -701,4 +702,22 @@ it.effect(
       ).toBe("conflict");
       expect((yield* tools.config(projectId)).completedColumn).toBe("Done");
     }).pipe(Effect.provide(layer)),
+);
+
+it.effect("reads the current counter without changing the existing changes stream", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    expect(yield* tools.currentChange).toBe(0);
+    const emitted = yield* tools.changes.pipe(
+      Stream.take(2),
+      Stream.runCollect,
+      Effect.forkChild({ startImmediately: true }),
+    );
+    yield* tools.upsertTask({ projectId, title: "First", column: "To do" });
+    expect(yield* tools.currentChange).toBe(1);
+    yield* tools.upsertTask({ projectId, title: "Second", column: "To do" });
+    expect(yield* tools.currentChange).toBe(2);
+    expect(yield* Fiber.join(emitted)).toEqual([1, 2]);
+  }).pipe(Effect.provide(layer)),
 );

@@ -1,3 +1,7 @@
+import { vi } from "vite-plus/test";
+import * as Schema from "effect/Schema";
+import * as Calendar from "../../../workspace/WorkspaceCalendar.ts";
+import { CalendarError } from "@t3tools/contracts";
 import * as WorkspaceTools from "../../../workspace/WorkspaceTools.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { DriveService } from "../../../drive/DriveService.ts";
@@ -171,6 +175,8 @@ const setup = (linked: (accountId: string) => ReadonlyArray<WorkspaceContextItem
       );
     return { server, call, account, owners };
   });
+
+const decodeCalendarError = Schema.decodeUnknownEffect(CalendarError);
 
 const errorText = (result: McpSchema.CallToolResult) => {
   const [first] = result.content;
@@ -523,3 +529,188 @@ describe("workspace MCP toolkit", () => {
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 });
+
+it.effect("reads only direct confirmed calendar occurrences and revokes reads after unlink", () =>
+  Effect.gen(function* () {
+    const calendar = yield* Calendar.WorkspaceCalendar;
+    const links = yield* WorkspaceLinks;
+    const source = { connectionId: "synthetic", calendarId: "primary", generation: 1 };
+    yield* calendar.ingestPage({
+      ...source,
+      items: [
+        {
+          externalEventId: "original",
+          occurrenceKey: "original-start",
+          title: "Calendar title",
+          status: "confirmed",
+          time: { kind: "all-day", startOn: "2026-10-13", endBefore: "2026-10-14" },
+          sourceLabel: "Synthetic",
+          attendees: [],
+          attendeesTruncated: false,
+          hasDescription: true,
+          description: "Inert body",
+        },
+      ],
+    });
+    const id = (yield* calendar.listRange({
+      startOn: "2026-10-13",
+      endBefore: "2026-10-14",
+      timeZone: "UTC",
+    })).events[0]!.id;
+    const ref = {
+      type: "provider-resource",
+      provider: "workspace-calendar",
+      resourceId: id,
+    } as const;
+    const owner = { ref: { type: "thread", threadId } } as const;
+    const via = { ref: { type: "url", url: "https://example.test/via" } } as const;
+    yield* links.link({ a: owner, b: via });
+    yield* links.link({ a: via, b: { ref } });
+    const reads = vi.spyOn(calendar, "read");
+    const ranges = vi.spyOn(calendar, "listRange");
+    const refreshes = vi.spyOn(calendar, "refresh");
+    const context = yield* Layer.build(
+      McpServer.toolkit(WorkspaceToolkit).pipe(
+        Layer.provide(WorkspaceHandlers.layer()),
+        Layer.provideMerge(McpServer.McpServer.layer),
+      ),
+    );
+    const server = Context.get(context, McpServer.McpServer);
+    const rawHandlers = yield* WorkspaceHandlers.make();
+    const read = (key = workspaceItemKey(ref), offset?: number) =>
+      server
+        .callTool({
+          name: "workspace_read_item",
+          arguments: { key, ...(offset !== undefined ? { offset } : {}) },
+        })
+        .pipe(
+          Effect.provideService(McpInvocationContext.McpInvocationContext, {
+            environmentId: EnvironmentId.make("env"),
+            threadId,
+            providerSessionId: "calendar-fixture",
+            providerInstanceId: ProviderInstanceId.make("codex"),
+            capabilities: new Set<McpInvocationContext.McpCapability>(["workspace"]),
+            issuedAt: 1,
+          }),
+          Effect.provideService(McpSchema.McpServerClient, client),
+        );
+    try {
+      expect(errorText(yield* read())).toContain("not linked");
+      yield* links.saveSuggestions({
+        item: owner,
+        suggestions: [{ item: { ref }, reason: "Related" }],
+        model: "test",
+        modelKey: "test",
+        revision: "1",
+        incomplete: false,
+      });
+      expect(errorText(yield* read())).toContain("not linked");
+      const suggestion = (yield* links.list(owner.ref)).suggested[0]!;
+      yield* links.dismissSuggestion(suggestion.id);
+      expect(errorText(yield* read())).toContain("not linked");
+      expect(reads).not.toHaveBeenCalled();
+      const link = yield* links.link({
+        a: { ref: { type: "project", projectId } },
+        b: { ref, title: "Saved title" },
+      });
+      const result = yield* read(undefined, 4);
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        type: "calendar-event",
+        id,
+        body: { text: "t body" },
+      });
+      expect(reads).toHaveBeenLastCalledWith({ id, offset: 4 });
+      expect(ranges).not.toHaveBeenCalled();
+      expect(refreshes).not.toHaveBeenCalled();
+      for (const kind of [
+        "not-found",
+        "disconnected",
+        "rate-limited",
+        "invalid-input",
+        "conflict",
+        "unavailable",
+      ] as const) {
+        const error = yield* decodeCalendarError({
+          _tag: "CalendarError",
+          kind,
+          message: `Source ${kind}`,
+        });
+        reads.mockReturnValueOnce(Effect.fail(error));
+        const failed = yield* read();
+        expect(errorText(failed)).toBe(`Source ${kind}`);
+        reads.mockReturnValueOnce(Effect.fail(error));
+        const mapped = yield* rawHandlers.workspace_read_item({ key: workspaceItemKey(ref) }).pipe(
+          Effect.flip,
+          Effect.provideService(McpInvocationContext.McpInvocationContext, {
+            environmentId: EnvironmentId.make("env"),
+            threadId,
+            providerSessionId: "calendar-fixture",
+            providerInstanceId: ProviderInstanceId.make("codex"),
+            capabilities: new Set<McpInvocationContext.McpCapability>(["workspace"]),
+            issuedAt: 1,
+          }),
+        );
+        expect(mapped).toMatchObject({
+          _tag: "WorkspaceLinksError",
+          kind: kind === "not-found" ? "not-found" : "unavailable",
+          message: `Source ${kind}`,
+        });
+      }
+      yield* calendar.ingestPage({
+        ...source,
+        items: [
+          { status: "cancelled", externalEventId: "original", occurrenceKey: "original-start" },
+        ],
+      });
+      expect(errorText(yield* read())).toContain("cancelled");
+      expect((yield* links.list(ref)).linked).toHaveLength(2);
+      const readCount = reads.mock.calls.length;
+      yield* links.unlink(link.id);
+      expect(errorText(yield* read())).toContain("not linked");
+      expect(reads).toHaveBeenCalledTimes(readCount);
+      yield* links.link({ a: owner, b: { ref, title: "Renamed title" } });
+      expect(
+        (yield* links.contextFor({ threadId, projectId })).items.find(
+          (item) => item.key === workspaceItemKey(ref),
+        )?.item.title,
+      ).toBe("Renamed title");
+    } finally {
+      reads.mockRestore();
+      ranges.mockRestore();
+      refreshes.mockRestore();
+    }
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(
+      Layer.mergeAll(
+        WorkspaceLinksLive,
+        Layer.effect(
+          Calendar.WorkspaceCalendar,
+          Calendar.make({
+            resolveSource: () => Effect.succeed({ connected: true, selected: true, generation: 1 }),
+          }),
+        ),
+      ).pipe(
+        Layer.provideMerge(WorkspaceTools.layer),
+        Layer.provideMerge(SqlitePersistenceMemory),
+        Layer.provideMerge(baseLayer()),
+      ),
+    ),
+  ),
+);
+
+it.effect(
+  "keeps a confirmed calendar reference unavailable when the optional service is absent",
+  () =>
+    Effect.gen(function* () {
+      const ref = {
+        type: "provider-resource",
+        provider: "workspace-calendar",
+        resourceId: "wce_00000000-0000-0000-0000-000000000001",
+      } as const;
+      const { call } = yield* setup(() => [linkedItem(ref)]);
+      const result = yield* call("workspace_read_item", { key: workspaceItemKey(ref) });
+      expect(errorText(result)).toBe("Calendar is unavailable. Its links have been kept.");
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+);

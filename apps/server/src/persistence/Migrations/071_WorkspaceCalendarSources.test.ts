@@ -2,6 +2,7 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import { calendarRangeSql } from "../../workspace/WorkspaceCalendar.ts";
 import migration from "./071_WorkspaceCalendarSources.ts";
 import { runMigrations } from "../Migrations.ts";
 
@@ -15,9 +16,27 @@ it.effect("backfills a small source registry and seeks bounded calendar continua
     expect(yield* sql`SELECT connection_id,calendar_id FROM workspace_calendar_sources`).toEqual([
       { connection_id: "connection", calendar_id: "calendar" },
     ]);
-    const plan = yield* sql<{
-      detail: string;
-    }>`EXPLAIN QUERY PLAN SELECT id,summary_json FROM workspace_calendar_occurrences WHERE status='confirmed' AND sort_key<100 AND ((connection_id='connection' AND calendar_id='calendar') OR (connection_id='other' AND calendar_id='other')) AND ((time_kind='timed' AND start_ms<100 AND end_ms>10) OR (time_kind='all-day' AND start_on<'2026-10-14' AND end_before>'2026-10-13')) AND (sort_key,id)>(10,'event') ORDER BY sort_key,id LIMIT 101`;
+    const [statement, parameters] = calendarRangeSql(
+      sql,
+      {
+        startOn: "2026-10-13",
+        endBefore: "2026-10-14",
+        timeZone: "UTC",
+        limit: 100,
+      },
+      [
+        { connectionId: "connection", calendarId: "calendar" },
+        { connectionId: "other", calendarId: "other" },
+      ],
+      {
+        sortKey: 10,
+        id: "wce_00000000-0000-0000-0000-000000000001",
+      },
+    ).compile();
+    const plan = yield* sql.unsafe<{ detail: string }>(
+      `EXPLAIN QUERY PLAN ${statement}`,
+      parameters,
+    );
     expect(plan.map((row) => row.detail).join(" ")).toMatch(
       /workspace_calendar_range.*\(sort_key,id\)>.*sort_key</,
     );

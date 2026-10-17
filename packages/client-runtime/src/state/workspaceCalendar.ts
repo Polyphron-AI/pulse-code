@@ -64,7 +64,7 @@ export function createWorkspaceCalendarAtoms<R, E>(
       Stream.unwrap(
         supported.pipe(
           Effect.orElseSucceed(() => false),
-          Effect.map((available) => (available ? stream : Stream.empty)),
+          Effect.map((available) => (available ? stream.pipe(Stream.drop(1)) : Stream.empty)),
         ),
       ),
   });

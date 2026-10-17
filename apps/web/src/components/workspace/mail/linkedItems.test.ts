@@ -177,3 +177,25 @@ it("prefers a live thread title after Send and keeps the saved fallback when una
   });
   expect(linkedItemLabel(row, null, new Map())).toEqual({ title: "Saved title" });
 });
+
+it("recognizes calendar events and keeps unsupported references visible", () => {
+  const ref = {
+    type: "provider-resource",
+    provider: "workspace-calendar",
+    resourceId: "wce_00000000-0000-0000-0000-000000000001",
+  } as const;
+  expect(canOpenLinkedItem(ref)).toBe(true);
+  expect(linkedItemLabel(view({ ref }), null)).toEqual({ title: "Calendar event" });
+  expect(workspaceEndpointTitle({ ref })).toBe("Calendar event");
+  expect(linkedItemLabel(view({ ref, title: "Renamed event" }), null).title).toBe("Renamed event");
+  for (const unsupported of [
+    { ...ref, resourceId: "wce_one" },
+    { ...ref, provider: "future-source" },
+  ]) {
+    expect(canOpenLinkedItem(unsupported)).toBe(false);
+    expect(linkedItemLabel(view({ ref: unsupported, title: "Kept title" }), null)).toEqual({
+      title: "Kept title",
+      unavailable: "Unavailable: this source cannot be opened here.",
+    });
+  }
+});

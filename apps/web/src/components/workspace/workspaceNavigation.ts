@@ -1,3 +1,4 @@
+import { parseCalendarLocation } from "./calendar/calendarItemRef";
 import { WorkspaceTaskDueOn } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import type { EnvironmentId } from "@t3tools/contracts";
@@ -41,6 +42,7 @@ export interface WorkspaceSearch {
   readonly project?: string;
   readonly environment?: string;
   readonly item?: string;
+  readonly day?: string;
   readonly taskLayout?: "list" | "board";
   readonly taskText?: string;
   readonly taskLimit?: number;
@@ -65,11 +67,17 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
   const account = carriesIdentity ? text(raw.account) : undefined;
   const folder = !telegram && carriesIdentity ? text(raw.folder) : undefined;
   const project = text(raw.project);
-  const item = telegram
-    ? text(raw.item)
-    : (carriesIdentity || taskScope) && typeof raw.item === "string" && raw.item.length <= 8192
+  const calendar = destination === "calendar";
+  const day = calendar && isTaskDate(raw.day) ? raw.day : undefined;
+  const item = calendar
+    ? typeof raw.item === "string" && raw.item.length <= 8192 && parseCalendarLocation(raw.item)
       ? raw.item
-      : undefined;
+      : undefined
+    : telegram
+      ? text(raw.item)
+      : (carriesIdentity || taskScope) && typeof raw.item === "string" && raw.item.length <= 8192
+        ? raw.item
+        : undefined;
   const view = (workspaceViews[destination] as readonly unknown[]).includes(raw.view)
     ? (raw.view as WorkspaceView)
     : undefined;
@@ -107,6 +115,7 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
       raw.taskOwner === "unassigned")
       ? { taskOwner: raw.taskOwner }
       : {}),
+    ...(day ? { day } : {}),
     ...(view !== undefined ? { view } : {}),
     ...(environment !== undefined ? { environment } : {}),
     ...(telegram ? { communicationProvider: "telegram" as const } : {}),

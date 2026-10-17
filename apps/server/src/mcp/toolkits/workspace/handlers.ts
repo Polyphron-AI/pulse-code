@@ -1,6 +1,8 @@
 import { WorkspaceTools } from "../../../workspace/WorkspaceTools.ts";
 import { DriveService } from "../../../drive/DriveService.ts";
-import { WorkspaceLinksError } from "@t3tools/contracts";
+import { WorkspaceCalendar } from "../../../workspace/WorkspaceCalendar.ts";
+import * as Schema from "effect/Schema";
+import { CalendarError, WorkspaceLinksError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -14,6 +16,8 @@ import { WorkspaceLinks } from "../../../workspace/WorkspaceLinks.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import { bounded, RESULT_MAX_BYTES } from "../mail/handlers.ts";
 import { WorkspaceToolkit } from "./tools.ts";
+
+const isCalendarError = Schema.is(CalendarError);
 
 const byteSize = (value: unknown) =>
   // @effect-diagnostics preferSchemaOverJson:off -- measures the payload McpServer will serialize
@@ -37,6 +41,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
     const links = yield* WorkspaceLinks;
     const tools = yield* Effect.serviceOption(WorkspaceTools);
     const drive = yield* Effect.serviceOption(DriveService);
+    const calendar = yield* Effect.serviceOption(WorkspaceCalendar);
     const telegram = yield* Effect.serviceOption(TelegramService);
     const orchestrator = yield* Orchestrator.OrchestratorV2;
     const config = yield* MailConfigService;
@@ -96,6 +101,30 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
               return yield* bounded({ key, type: "mail", ...message });
             }
             case "provider-resource":
+              if (ref.provider === "workspace-calendar") {
+                if (Option.isNone(calendar))
+                  return yield* new WorkspaceLinksError({
+                    kind: "unavailable",
+                    message: "Calendar is unavailable. Its links have been kept.",
+                  });
+                return yield* calendar.value
+                  .read({ id: ref.resourceId, ...(offset !== undefined ? { offset } : {}) })
+                  .pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new WorkspaceLinksError({
+                          kind:
+                            isCalendarError(error) && error.kind === "not-found"
+                              ? "not-found"
+                              : "unavailable",
+                          message: isCalendarError(error)
+                            ? error.message
+                            : "Calendar is unavailable. Its links have been kept.",
+                        }),
+                    ),
+                    Effect.flatMap((event) => bounded({ key, type: "calendar-event", ...event })),
+                  );
+              }
               if (ref.provider === "telegram" && Option.isSome(telegram))
                 return yield* telegram.value
                   .readResource(ref.resourceId, offset)

@@ -13,6 +13,7 @@ import type {
   WorkspaceLinkView,
 } from "@t3tools/contracts";
 
+import { isCalendarItem } from "../calendar/calendarItemRef";
 import { mailItemTitle } from "./mailItemRef";
 
 export type ProjectItemRef = Extract<WorkspaceItemRef, { readonly type: "project" }>;
@@ -81,13 +82,19 @@ export function linkedItemLabel(
     case "task":
       return { title: title ?? "Task" };
     case "provider-resource":
-      return { title: title ?? ref.resourceId };
+      return {
+        title: title ?? (isCalendarItem(ref) ? "Calendar event" : ref.resourceId),
+        ...(!canOpenLinkedItem(ref)
+          ? { unavailable: "Unavailable: this source cannot be opened here." }
+          : {}),
+      };
   }
 }
 
 /** Items this client can open today. Others still show, so agents' links stay visible. */
 export function canOpenLinkedItem(ref: WorkspaceItemRef): boolean {
   return (
+    isCalendarItem(ref) ||
     ref.type === "task" ||
     ref.type === "mail" ||
     ref.type === "project" ||
@@ -166,6 +173,6 @@ export function workspaceEndpointTitle(endpoint: WorkspaceLinkEndpoint): string 
     case "url":
       return endpoint.ref.url;
     case "provider-resource":
-      return endpoint.ref.resourceId;
+      return isCalendarItem(endpoint.ref) ? "Calendar event" : endpoint.ref.resourceId;
   }
 }

@@ -1,7 +1,7 @@
 # Calendar occurrence identity and range boundaries
 
 Calendar and Meetings consume one environment-owned `WorkspaceCalendar` instance. It is provided
-alongside workspace tools so later MCP readers and WebSocket handlers share its state. The
+alongside workspace tools so MCP readers and WebSocket handlers share its state. The
 `workspaceCalendar` capability is optional. It advertises bounded reads, invalidations and requested
 read refresh, not a connected account or an event editor. Provider admission and the client views are separate work.
 
@@ -44,14 +44,18 @@ must not reject metadata admitted by the server.
 Due tasks retain task identity and calendar dates. One global TOOLS query uses inclusive bounds
 `startOn` through the day before `endBefore`, with state all and limit 100. Null due dates are
 excluded. Completion and due-date edits stay owned by TOOLS. They create no event or scheduled job.
-Event and due continuations are independent. A due cursor wraps the TOOLS cursor and, when byte
+Event and due continuations are independent. A cursor-only request skips TOOLS; a dueCursor-only
+request selects no occurrence rows. Neither continuation repeats the other first page. A due cursor wraps the TOOLS cursor and, when byte
 limits split a TOOLS page, a checked page fingerprint and offset. A changed TOOLS generation or
 split-page fingerprint requires restarting from the first page. A range mismatch is invalid input.
 `dueIncomplete` distinguishes unfinished or unavailable task results from event-source availability.
 Older event-only payloads decode with empty due references and explicitly incomplete due results.
 
 Calendar invalidations contain one nonnegative numeric value, merging committed calendar changes
-with TOOLS invalidations. Streams read no ranges and refresh no provider. Identical ingestion,
+with TOOLS invalidations. Each subscription emits one combined baseline, including zero. The
+read-only TOOLS currentChange accessor seeds the task side without changing existing TOOLS stream
+emissions. Calendar atoms consume the replay as a baseline, so mounting or reconnecting performs
+one range read. Streams read no ranges and refresh no provider. Identical ingestion,
 rolled-back pages and stale generations announce nothing. Account adapters call `invalidate` only
 after committing availability or selection changes. Ingestion commits and announcement cannot be
 separated by interruption. Refresh has read scope because it requests source reads, never provider
@@ -69,11 +73,28 @@ invalid input remains an error. In-flight commands with the same environment and
 share work. A late continuation cannot reopen hidden listeners or overwrite a newer first page.
 Queries and streams use zero idle TTL so their last unmount releases subscriptions immediately.
 The 30-second stale threshold controls requested mount freshness only. No elapsed clock triggers a
-request and no hidden consumer retains a provider listener.
+request and no hidden consumer retains a provider listener. A failed configuration check stops
+invalidation signals; mounted range/detail reads still surface that failure. A silent change stream
+is never evidence of an empty calendar.
 
 Phone delivery follows D24 through responsive web and the shared desktop UI. Contracts and
 client-runtime atoms use no DOM, Buffer or TextEncoder, and outbound zones need no host ICU lookup.
 No React Native screens are added. Native adoption should reuse `createWorkspaceCalendarAtoms`,
 including explicit paging and capability absence. Native, real-account, packaged, relay/tunnel and
 physical second-device acceptance remain separate from focused service and shared-runtime tests.
+
+Calendar references open through the shared web and desktop opener and resolve only the selected
+ID before selecting its day in the environment's display timezone. Opening and resource project
+selection create no grants. The selected detail mounts the shared zero-idle-TTL detail atom;
+closing it or leaving the route releases that consumer. T4 consumes the same binding for Agenda.
+
+The MCP reader must resolveLinked for its calling thread/project before accessing Calendar. It
+calls read for that exact occurrence only, with UTF-8-safe offsets and no range, source discovery
+or provider refresh. Calendar not-found maps to the existing WorkspaceLinksError not-found; other
+Calendar failures map to unavailable through Schema.is. The service reserves space inside its
+32,000-byte read bound for the MCP key/type envelope. Turn context uses the existing snapshot title
+and calendar-event label within the shared 30-item, 4,096-byte budget. It reads no Calendar bodies.
+All provider adapters consume that common pre-adapter path; MCP availability still depends on the
+provider's advertised capability.
+
 Rendered Calendar/Meetings workflows and user guidance remain the W6-T4/T5/T9 integration gate.

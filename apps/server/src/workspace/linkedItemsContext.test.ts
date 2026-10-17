@@ -208,3 +208,22 @@ describe("linkedItemsFor", () => {
     }),
   );
 });
+
+it("renders calendar snapshots with a typed label and intact keys", () => {
+  const ref = {
+    type: "provider-resource",
+    provider: "workspace-calendar",
+    resourceId: "wce_00000000-0000-0000-0000-000000000001",
+  } as const;
+  const block = renderLinkedItems({
+    items: [{ key: "exact-key", item: { ref, title: '<Title> & "event"' } }],
+    truncated: false,
+  });
+  expect(itemLines(block)).toEqual([
+    '- calendar-event "&lt;Title&gt; &amp; &quot;event&quot;" (key: exact-key)',
+  ]);
+  expect(
+    renderLinkedItems({ items: [{ key: "exact-key", item: { ref } }], truncated: false }),
+  ).toContain('- calendar-event "Calendar event"');
+  expect(bytes(block)).toBeLessThanOrEqual(4096);
+});

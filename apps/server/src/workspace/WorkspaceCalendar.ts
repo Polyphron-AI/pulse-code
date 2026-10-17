@@ -69,13 +69,15 @@ const fail = (kind: CalendarError["kind"], message: string) => new CalendarError
 const hash = (input: unknown) =>
   NodeCrypto.createHash("sha256").update(encodeJson(input)).digest("hex");
 const bytes = (input: unknown) => Buffer.byteLength(encodeJson(input), "utf8");
-const boundAttendees = <A extends CalendarOccurrenceSummary>(occurrence: A) => {
+// Leave room for the exact occurrence key and type in workspace_read_item.
+const READ_MAX_BYTES = 31800;
+const boundAttendees = <A extends CalendarOccurrenceSummary>(occurrence: A, maxBytes = 32000) => {
   const result = {
     ...occurrence,
     attendees: [...occurrence.attendees],
     attendeesTruncated: occurrence.attendeesTruncated,
   };
-  while (bytes(result) > 32000 && result.attendees.length) {
+  while (bytes(result) > maxBytes && result.attendees.length) {
     result.attendees.pop();
     result.attendeesTruncated = true;
   }
@@ -124,6 +126,24 @@ const normalize = (item: CalendarIngestItem) => {
     ...(validatedJoin ? { joinUrl: validatedJoin } : {}),
   };
 };
+
+/** The range query is shared with the index-plan regression test. */
+export function calendarRangeSql(
+  sql: SqlClient.SqlClient,
+  input: CalendarRangeInput,
+  selected: readonly { connectionId: string; calendarId: string }[],
+  cursor?: Pick<typeof Cursor.Type, "sortKey" | "id">,
+) {
+  const from = dayStart(input.startOn, input.timeZone);
+  const until = dayStart(input.endBefore, input.timeZone);
+  const upperSortKey = Math.max(until, dayStart(input.endBefore, "UTC"));
+  return sql<{
+    id: string;
+    payload: string;
+    revision: number;
+    sortKey: number;
+  }>`SELECT id,summary_json AS payload,revision,sort_key AS "sortKey" FROM workspace_calendar_occurrences WHERE status='confirmed' AND sort_key<${upperSortKey} AND ${sql.or(selected.map((source) => sql`(connection_id=${source.connectionId} AND calendar_id=${source.calendarId})`))} AND ((time_kind='timed' AND start_ms<${until} AND end_ms>${from}) OR (time_kind='all-day' AND start_on<${input.endBefore} AND end_before>${input.startOn})) AND ${cursor ? sql`(sort_key,id)>(${cursor.sortKey},${cursor.id})` : sql`1=1`} ORDER BY sort_key,id LIMIT ${(input.limit ?? 50) + 1}`;
+}
 
 interface SourceAvailability {
   readonly connected: boolean;
@@ -190,9 +210,14 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
   }, safe);
 
   const changes = SubscriptionRef.changes(counter).pipe(
-    Stream.zipLatest(Stream.concat(Stream.succeed(0), tools.changes)),
+    Stream.zipLatest(
+      Stream.unwrap(
+        tools.currentChange.pipe(
+          Effect.map((current) => Stream.concat(Stream.succeed(current), tools.changes)),
+        ),
+      ),
+    ),
     Stream.map(([calendar, tasks]) => calendar + tasks),
-    Stream.filter((n) => n > 0),
     Stream.changes,
   );
   const service = {
@@ -211,10 +236,13 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
         return yield* fail("invalid-input", "Use a valid calendar text offset.");
       return yield* decode(
         CalendarReadResult,
-        boundAttendees({
-          ...metadata,
-          body: sliceUtf8(text, offset, 8000),
-        }),
+        boundAttendees(
+          {
+            ...metadata,
+            body: sliceUtf8(text, offset, 8000),
+          },
+          READ_MAX_BYTES,
+        ),
       );
     }, safe),
     ingestPage: Effect.fnUntraced(
@@ -339,18 +367,11 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
             "The calendar selection changed. Restart from the first page.",
           );
       }
-      const from = dayStart(input.startOn, input.timeZone);
-      const until = dayStart(input.endBefore, input.timeZone);
-      const upperSortKey = Math.max(until, dayStart(input.endBefore, "UTC"));
       const selected = sourceStates.filter((state) => state.state === "ready");
-      const rows = !selected.length
-        ? []
-        : yield* sql<{
-            id: string;
-            payload: string;
-            revision: number;
-            sortKey: number;
-          }>`SELECT id,summary_json AS payload,revision,sort_key AS "sortKey" FROM workspace_calendar_occurrences WHERE status='confirmed' AND sort_key<${upperSortKey} AND ${sql.or(selected.map((source) => sql`(connection_id=${source.connectionId} AND calendar_id=${source.calendarId})`))} AND ((time_kind='timed' AND start_ms<${until} AND end_ms>${from}) OR (time_kind='all-day' AND start_on<${input.endBefore} AND end_before>${input.startOn})) AND ${cursor ? sql`(sort_key,id)>(${cursor.sortKey},${cursor.id})` : sql`1=1`} ORDER BY sort_key,id LIMIT ${limit + 1}`;
+      const rows =
+        (input.dueCursor !== undefined && input.cursor === undefined) || !selected.length
+          ? []
+          : yield* calendarRangeSql(sql, input, selected, cursor);
       let dueCursor: typeof DueCursor.Type | undefined;
       if (input.dueCursor) {
         dueCursor = yield* decode(
@@ -368,14 +389,17 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
             "This task page belongs to a different calendar range.",
           );
       }
-      const taskResult = yield* tools
-        .queryTasks({
-          ...dueTaskQuery(input.startOn, input.endBefore),
-          ...(dueCursor?.toolsCursor ? { cursor: dueCursor.toolsCursor } : {}),
-        })
-        .pipe(Effect.result);
+      const taskResult =
+        input.cursor !== undefined && input.dueCursor === undefined
+          ? undefined
+          : yield* tools
+              .queryTasks({
+                ...dueTaskQuery(input.startOn, input.endBefore),
+                ...(dueCursor?.toolsCursor ? { cursor: dueCursor.toolsCursor } : {}),
+              })
+              .pipe(Effect.result);
       if (
-        taskResult._tag === "Failure" &&
+        taskResult?._tag === "Failure" &&
         isToolsError(taskResult.failure) &&
         taskResult.failure.kind === "invalid-input"
       )
@@ -383,7 +407,7 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
           input.dueCursor ? "conflict" : "invalid-input",
           "Tasks changed. Restart from the first page.",
         );
-      const taskPage = taskResult._tag === "Success" ? taskResult.success : undefined;
+      const taskPage = taskResult?._tag === "Success" ? taskResult.success : undefined;
       const dueItems = taskPage?.tasks.filter(hasDueOn).map(dueTaskItem) ?? [];
       const dueFingerprint = hash(dueItems);
       if (
@@ -477,7 +501,7 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
       const last = rows[page.events.length - 1];
       return yield* decode(CalendarPage, {
         ...page,
-        dueIncomplete: !taskPage || nextDueCursor !== undefined,
+        dueIncomplete: taskResult !== undefined && (!taskPage || nextDueCursor !== undefined),
         ...(nextDueCursor ? { nextDueCursor } : {}),
         ...(last && rows.length > page.events.length
           ? { nextCursor: continuation(last.sortKey, last.id) }

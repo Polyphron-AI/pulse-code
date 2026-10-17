@@ -250,3 +250,32 @@ it("retains task filters through the route parser re-export", () => {
     taskOwner: "unassigned",
   });
 });
+
+it("retains exact calendar deep links and validates the independent selected day", () => {
+  const item = JSON.stringify({
+    type: "provider-resource",
+    provider: "workspace-calendar",
+    resourceId: "wce_00000000-0000-0000-0000-000000000001",
+  });
+  expect(
+    parseWorkspaceSearch({
+      space: "calendar",
+      environment: "remote",
+      item,
+      day: "2026-10-13",
+      project: "resources",
+    }),
+  ).toEqual({
+    space: "calendar",
+    environment: "remote",
+    item,
+    day: "2026-10-13",
+    project: "resources",
+  });
+  expect(parseWorkspaceSearch({ space: "calendar", item, day: "2026-02-30" })).toEqual({
+    space: "calendar",
+    item,
+  });
+  expect(parseWorkspaceSearch({ space: "calendar", item: "{" })).toEqual({ space: "calendar" });
+  expect(parseWorkspaceSearch({ space: "mail", day: "2026-10-13" })).not.toHaveProperty("day");
+});

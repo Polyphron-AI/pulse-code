@@ -15,3 +15,8 @@ Saving first creates an idle thread and confirms its source and project links. O
 Saved automations appear in **Settings > Scheduled tasks**, using the existing enable, disable, **Run now**, edit, and delete controls. Disabling or deleting stops future scheduled runs. Their confirmed source links remain. Scheduled sends use the existing provider and approval rules; an automation does not bypass exact mail-send approval.
 
 Code thread menus retain their branch, rename, lifecycle, handoff, and copy operations, with a **Workspace actions** group added. Project right-click retains **Project settings** and adds scoped workspace actions. If a grouped project spans environments, choose its environment before starting work. These optional tools need a supporting server; existing native operations and manual links remain available on older servers.
+
+An agent can read a Calendar event only when that exact event is directly linked to its thread or
+project. A saved reference, suggestion, meeting note or related item does not grant access. Unlinking
+revokes future reads unless another direct thread or project link remains. Event reads return bounded
+text and metadata; they do not browse calendars, refresh a provider or read related notes.

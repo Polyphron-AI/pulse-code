@@ -7,6 +7,8 @@ import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { readLocalApi } from "../../localApi";
 import { buildThreadRouteParams } from "../../threadRoutes";
 
+import { isCalendarItem } from "./calendar/calendarItemRef";
+
 const isWorkspaceItem = Schema.is(WorkspaceItemRef);
 
 export function parseMailLocation(raw: string | undefined) {
@@ -62,6 +64,15 @@ export function useWorkspaceItemOpener(environmentId: EnvironmentId | null) {
             space: "mail",
             environment: environmentId,
             account: ref.accountId,
+            item: JSON.stringify(ref),
+          },
+        });
+      if (isCalendarItem(ref))
+        void navigate({
+          to: "/workspace",
+          search: {
+            space: "calendar",
+            environment: environmentId,
             item: JSON.stringify(ref),
           },
         });

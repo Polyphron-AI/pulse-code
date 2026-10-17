@@ -8,6 +8,12 @@ Calendar availability depends on the connected environment's supported calendar 
 unavailable or partial calendar does not establish that you have no events. Existing local Office
 calendar tools remain available through Open local Office tools.
 
+Open a linked Calendar event to see that occurrence in its original environment, even when it is
+outside the currently selected dates. Its day follows the environment's display timezone. All-day
+events keep their calendar date. Close event returns to the same date and resource project.
+Opening an event creates no links or agent access. A cancelled event or disconnected calendar
+keeps its link and explains why the event is unavailable.
+
 ## Resources and Linked context
 
 Resources shows the project you choose, even before you select an item. Its tabs are Files, Browser, Agents, Tasks, Docs and PRs. A tab explains when its contents are unavailable. Choosing or browsing a project does not create a link or give an agent access to its contents.
