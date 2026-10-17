@@ -47,7 +47,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     {
       ...events[0]!,
       id: "fixture-fold-first",
-      title: "First 01:30",
+      title: "Ops sync",
       time: {
         kind: "timed",
         start: "2026-11-01T05:30:00Z",
@@ -58,7 +58,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     {
       ...events[0]!,
       id: "fixture-fold-second",
-      title: "Second 01:30",
+      title: "Ops sync",
       time: {
         kind: "timed",
         start: "2026-11-01T06:30:00Z",

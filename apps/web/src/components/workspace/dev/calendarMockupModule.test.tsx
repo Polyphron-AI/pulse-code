@@ -39,7 +39,17 @@ it.each(workspaceCalendarMockupStates)(
           state === "picker" ? {} : { name: "Week schedule" },
         ),
       ).toBeDefined();
-      if (state === "dst-fold") expect(node.textContent).toContain("01:30 GMT-5");
+      if (state === "dst-fold") {
+        const blocks = getAllByRole(node, "button", { name: /^Ops sync,/ });
+        expect(blocks).toHaveLength(2);
+        expect(blocks.map((block) => block.querySelector(".font-semibold")!.textContent)).toEqual([
+          "Ops sync",
+          "Ops sync",
+        ]);
+        expect(
+          blocks.map((block) => block.querySelector(".shrink-0.whitespace-nowrap")!.textContent),
+        ).toEqual(["01:30 GMT-4", "01:30 GMT-5"]);
+      }
       if (state === "dst-gap") expect(document.body.textContent).toContain("02:00 skipped");
       if (state === "week-allday" || state === "week-overflow") {
         expect(document.body.textContent).toContain("Launch planning");

@@ -86,7 +86,7 @@ it("opens overlapping and cross-midnight segments through focused native buttons
   }
 });
 
-it("names both fold offsets and keeps seven date columns inside a bounded scrolling region", async () => {
+it("keeps fold time labels unshrinkable before truncating their titles", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div");
   const root = createRoot(node);
@@ -119,6 +119,12 @@ it("names both fold offsets and keeps seven date columns inside a bounded scroll
       expect(block.textContent).toBe(`${name}01:30 ${offset}`);
       expect(block.getAttribute("aria-label")).toContain(`01:30 ${offset}`);
       expect(block.getAttribute("aria-label")).toContain(`01:45 ${offset}`);
+      const time = block.querySelector(".text-muted-foreground")!;
+      expect(time.classList.contains("shrink-0")).toBe(true);
+      expect(time.classList.contains("whitespace-nowrap")).toBe(true);
+      expect(time.classList.contains("truncate")).toBe(false);
+      expect(time.previousElementSibling!.classList.contains("min-w-0")).toBe(true);
+      expect(time.previousElementSibling!.classList.contains("truncate")).toBe(true);
     }
     expect(node.textContent).not.toContain("24:00");
     const region = getByRole(node, "region", { name: "Week schedule" });
@@ -170,6 +176,12 @@ it("renders true durations and touching packing with the title before muted time
     expect(first.style.width).toBe(next.style.width);
     expect(first.textContent).toBe("First09:00");
     expect(first.querySelector(".text-muted-foreground")?.textContent).toBe("09:00");
+    const time = first.querySelector(".text-muted-foreground")!;
+    expect(time.classList.contains("@container")).toBe(true);
+    expect(time.classList.contains("truncate")).toBe(false);
+    expect(time.firstElementChild!.classList.contains("hidden")).toBe(true);
+    expect(time.firstElementChild!.classList.contains("@min-[5ch]:block")).toBe(true);
+    expect(time.firstElementChild!.classList.contains("whitespace-nowrap")).toBe(true);
     expect(first.textContent).not.toContain("GMT");
     const late = getByRole(node, "button", { name: /^Late,/ });
     expect(Number.parseFloat(late.style.top) + Number.parseFloat(late.style.height)).toBe(1152);
@@ -233,8 +245,8 @@ it.each([
 );
 
 it.each([
-  ["2026-10-15", 148],
-  ["2026-10-16", 228],
+  ["2026-10-15", 160],
+  ["2026-10-16", 240],
   ["2026-10-17", 296],
   ["2026-10-18", 296],
 ] as const)(
@@ -277,6 +289,8 @@ it.each([
       await render(day, []);
       const region = getByRole(node, "region", { name: "Week schedule" });
       expect(region.scrollLeft).toBe(left);
+      // Whole columns meet the gutter unless the rightmost scroll limit clamps the snap.
+      expect(region.scrollLeft % 80 === 0 || region.scrollLeft === 296).toBe(true);
       await render(day);
       const column = node.querySelector<HTMLElement>(`[data-calendar-week-day="${day}"]`)!;
       expect(region.scrollTop).toBe(384);
@@ -287,6 +301,8 @@ it.each([
       );
       const gutter = node.querySelector('[data-calendar-hour="09:00"]')!.parentElement!;
       expect(gutter.className).toContain("sticky left-0");
+      expect(gutter.classList.contains("border-r")).toBe(true);
+      expect(gutter.classList.contains("border-border/60")).toBe(true);
       expect(
         getByRole(node, "group", { name: "Choose day" }).firstElementChild!.className,
       ).toContain("sticky left-0");
@@ -297,7 +313,7 @@ it.each([
       await render(day === "2026-10-16" ? "2026-10-15" : "2026-10-16");
       expect([region.scrollTop, region.scrollLeft]).toEqual([
         384,
-        day === "2026-10-16" ? 148 : 228,
+        day === "2026-10-16" ? 160 : 240,
       ]);
     } finally {
       await act(() => root.unmount());
@@ -335,11 +351,55 @@ it("caps overflowing untimed items below sticky day labels and keeps every item 
     const items = getByRole(node, "region", { name: "All-day items" });
     expect(items.className).toContain("max-h-36");
     expect(items.className).toContain("overflow-y-auto");
+    expect(items.classList.contains("overscroll-contain")).toBe(false);
     expect(items.tabIndex).toBe(0);
     expect(items.textContent).not.toContain("Tue 13");
     expect(getAllByRole(items, "button")).toHaveLength(12);
     await act(() => getByRole(items, "button", { name: "All day 11" }).click());
     expect(select).toHaveBeenCalledWith(events[11]);
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("pins the opaque all-day gutter outside the capped item scroller", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(() =>
+      root.render(
+        <CalendarWeek
+          day="2026-10-15"
+          timeZone="Africa/Johannesburg"
+          events={[
+            {
+              ...timed("Planning", "2026-10-13T09:00:00Z", "2026-10-13T09:30:00Z"),
+              time: { kind: "all-day", startOn: "2026-10-13", endBefore: "2026-10-16" },
+            },
+          ]}
+          dueTasks={[]}
+          onSelectDay={() => {}}
+          onSelect={() => {}}
+        />,
+      ),
+    );
+    const items = getByRole(node, "region", { name: "All-day items" });
+    const lane = items.previousElementSibling!;
+    expect(lane.getAttribute("aria-hidden")).toBe("true");
+    for (const name of [
+      "sticky",
+      "left-0",
+      "z-10",
+      "bg-background",
+      "border-r",
+      "border-border/60",
+    ]) {
+      expect(lane.classList.contains(name)).toBe(true);
+    }
+    expect(items.parentElement!.className).not.toContain("overflow");
+    expect(getAllByRole(items, "button", { name: "Planning" })).toHaveLength(3);
   } finally {
     await act(() => root.unmount());
     vi.unstubAllGlobals();

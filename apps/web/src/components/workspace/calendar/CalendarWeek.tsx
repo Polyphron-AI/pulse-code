@@ -40,15 +40,15 @@ export function CalendarWeek(
     if (!scroll.current) return;
     const column = grid.current?.querySelector<HTMLElement>(`[data-calendar-week-day="${day}"]`);
     if (column && scrolledDay.current !== selection) {
+      const width = column.offsetWidth;
+      const target =
+        column.offsetLeft -
+        (grid.current?.offsetLeft ?? 0) -
+        (scroll.current.clientWidth + (gutter.current?.offsetWidth ?? 0) - width) / 2;
+      const snapped = width > 0 ? Math.round(target / width) * width : 0;
       scroll.current.scrollLeft = Math.max(
         0,
-        Math.min(
-          scroll.current.scrollWidth - scroll.current.clientWidth,
-          column.offsetLeft -
-            (grid.current?.offsetLeft ?? 0) -
-            (scroll.current.clientWidth + (gutter.current?.offsetWidth ?? 0) - column.offsetWidth) /
-              2,
-        ),
+        Math.min(scroll.current.scrollWidth - scroll.current.clientWidth, snapped),
       );
       scrolledDay.current = selection;
     }
@@ -89,7 +89,7 @@ export function CalendarWeek(
               className="rounded-t-lg border border-border/60 bg-background"
             >
               <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))]">
-                <span className="sticky left-0 z-10 bg-background p-1 text-3xs text-muted-foreground">
+                <span className="sticky left-0 z-10 border-r border-border/60 bg-background p-1 text-3xs text-muted-foreground">
                   All day
                 </span>
                 {days.map(({ date, note }) => (
@@ -110,47 +110,52 @@ export function CalendarWeek(
                 ))}
               </div>
               {untimed.length || props.dueTasks.length ? (
-                <div
-                  role="region"
-                  aria-label="All-day items"
-                  tabIndex={0}
-                  className="grid max-h-36 grid-cols-[40px_repeat(7,minmax(0,1fr))] overflow-y-auto overscroll-contain [scrollbar-width:thin] focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <span aria-hidden="true" className="sticky left-0 z-10 bg-background" />
-                  {days.map(({ date }) => (
-                    <div key={date} className="min-w-0 border-l border-border/60 p-1">
-                      {untimed
-                        .filter(
-                          (event) =>
-                            event.time.kind === "all-day" &&
-                            event.time.startOn <= date &&
-                            date < event.time.endBefore,
-                        )
-                        .map((event) => (
-                          <button
-                            key={event.id}
-                            type="button"
-                            onClick={() => props.onSelect(event)}
-                            className="mb-1 min-h-8 w-full cursor-pointer rounded-md border border-border/60 bg-white/[0.015] p-1 text-left text-3xs wrap-anywhere focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-11"
-                          >
-                            {event.title}
-                          </button>
-                        ))}
-                      {props.dueTasks
-                        .filter((task) => task.dueOn === date)
-                        .map((task) => (
-                          <button
-                            key={task.ref.taskId}
-                            type="button"
-                            onClick={() => props.onOpenTask?.(task)}
-                            className="mb-1 min-h-8 w-full cursor-pointer rounded-md p-1 text-left text-3xs wrap-anywhere underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-11"
-                          >
-                            {task.title}
-                            {task.done ? " · Completed" : ""}
-                          </button>
-                        ))}
-                    </div>
-                  ))}
+                <div className="grid grid-cols-[40px_minmax(0,1fr)]">
+                  <span
+                    aria-hidden="true"
+                    className="sticky left-0 z-10 border-r border-border/60 bg-background"
+                  />
+                  <div
+                    role="region"
+                    aria-label="All-day items"
+                    tabIndex={0}
+                    className="grid max-h-36 grid-cols-7 overflow-y-auto [scrollbar-width:thin] focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {days.map(({ date }) => (
+                      <div key={date} className="min-w-0 border-l border-border/60 p-1">
+                        {untimed
+                          .filter(
+                            (event) =>
+                              event.time.kind === "all-day" &&
+                              event.time.startOn <= date &&
+                              date < event.time.endBefore,
+                          )
+                          .map((event) => (
+                            <button
+                              key={event.id}
+                              type="button"
+                              onClick={() => props.onSelect(event)}
+                              className="mb-1 min-h-8 w-full cursor-pointer rounded-md border border-border/60 bg-white/[0.015] p-1 text-left text-3xs wrap-anywhere focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-11"
+                            >
+                              {event.title}
+                            </button>
+                          ))}
+                        {props.dueTasks
+                          .filter((task) => task.dueOn === date)
+                          .map((task) => (
+                            <button
+                              key={task.ref.taskId}
+                              type="button"
+                              onClick={() => props.onOpenTask?.(task)}
+                              className="mb-1 min-h-8 w-full cursor-pointer rounded-md p-1 text-left text-3xs wrap-anywhere underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-11"
+                            >
+                              {task.title}
+                              {task.done ? " · Completed" : ""}
+                            </button>
+                          ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -163,7 +168,7 @@ export function CalendarWeek(
             <div
               ref={gutter}
               aria-hidden="true"
-              className="sticky left-0 z-10 bg-background text-3xs text-muted-foreground"
+              className="sticky left-0 z-10 border-r border-border/60 bg-background text-3xs text-muted-foreground"
             >
               {timeline.hours.map(({ label, minute }) => (
                 <span
@@ -238,10 +243,20 @@ export function CalendarWeek(
                         }
                       >
                         <span className="flex h-full min-w-0 items-center gap-1 overflow-hidden rounded-md bg-white/[0.015] px-1 whitespace-nowrap">
-                          <span className="truncate font-semibold">{segment.event.title}</span>
-                          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                            {start}
+                          <span className="min-w-0 truncate font-semibold">
+                            {segment.event.title}
                           </span>
+                          {segment.ambiguous ? (
+                            <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+                              {start}
+                            </span>
+                          ) : (
+                            <span className="@container min-w-0 flex-1 text-muted-foreground">
+                              <span className="hidden whitespace-nowrap @min-[5ch]:block">
+                                {start}
+                              </span>
+                            </span>
+                          )}
                         </span>
                       </button>
                     );
