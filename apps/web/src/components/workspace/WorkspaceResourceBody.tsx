@@ -7,11 +7,10 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useConnectedEnvironmentIds } from "../../state/environments";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { serverEnvironment } from "../../state/server";
-import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
+import { useWorkspaceNoteSession, WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { isWorkspaceNote } from "./meetings/meetingNotes";
-import type { NoteDraft } from "./meetings/WorkspaceNoteView";
 import type { WorkspaceItemRef, WorkspaceLinkEndpoint } from "@t3tools/contracts";
-import { lazy, Suspense, useContext, useState, type ReactNode } from "react";
+import { lazy, Suspense, useContext, type ReactNode } from "react";
 import type { WorkspaceResourceScope, WorkspaceResourceTab } from "./workspaceResourceState";
 
 export interface WorkspaceResourceBodyProps extends WorkspaceResourceScope {
@@ -104,12 +103,11 @@ const NativeNote = lazy(async () => {
       const update = useAtomCommand(workspaceNotes.update, { reportFailure: false });
       const remove = useAtomCommand(workspaceNotes.delete, { reportFailure: false });
       const restore = useAtomCommand(workspaceNotes.restore, { reportFailure: false });
-      const [draft, setDraft] = useState<NoteDraft | null>(null);
-      const [pending, setPending] = useState(false);
-      const [error, setError] = useState<string | null>(null);
-      const [deletedRevision, setDeletedRevision] = useState<number | null>(null);
-      const [confirming, setConfirming] = useState<"cancel" | "reload" | null>(null);
-      const [retry, setRetry] = useState<{ fingerprint: string; requestId: string } | null>(null);
+      const [session, patch] = useWorkspaceNoteSession(
+        environmentId,
+        ref && isWorkspaceNote(ref) ? ref.resourceId : null,
+      );
+      const { draft, pending, error, deletedRevision, confirming, retry } = session;
       const note = query.data;
       const discard = (action: "cancel" | "reload") => {
         if (
@@ -117,13 +115,10 @@ const NativeNote = lazy(async () => {
           (draft.title !== note?.title || draft.body !== note?.body) &&
           confirming !== action
         ) {
-          setConfirming(action);
+          patch({ confirming: action });
           return;
         }
-        setDraft(null);
-        setConfirming(null);
-        setRetry(null);
-        setError(null);
+        patch({ draft: null, confirming: null, retry: null, error: null });
         if (action === "reload") query.refresh();
       };
       const mutate = async (action: "save" | "delete" | "restore") => {
@@ -148,9 +143,7 @@ const NativeNote = lazy(async () => {
         });
         const requestId =
           retry?.fingerprint === fingerprint ? retry.requestId : randomUUID().toLowerCase();
-        setRetry({ fingerprint, requestId });
-        setPending(true);
-        setError(null);
+        patch({ retry: { fingerprint, requestId }, pending: true, error: null });
         try {
           const input = {
             environmentId,
@@ -168,28 +161,32 @@ const NativeNote = lazy(async () => {
           if (result._tag === "Failure") {
             const failure = Cause.squash(result.cause);
             if (action === "restore" && isNotesError(failure) && failure.kind === "conflict") {
-              setError("This note was changed or already restored. Reload it.");
+              patch({ error: "This note was changed or already restored. Reload it." });
               query.refresh();
             } else
-              setError(
-                failure instanceof Error
-                  ? failure.message
-                  : "Notes are unavailable. Their links have been kept.",
-              );
+              patch({
+                error:
+                  failure instanceof Error
+                    ? failure.message
+                    : "Notes are unavailable. Their links have been kept.",
+              });
           } else {
-            setDraft(null);
-            setRetry(null);
-            setDeletedRevision(action === "delete" ? expectedRevision + 1 : null);
+            patch({
+              draft: null,
+              retry: null,
+              deletedRevision: action === "delete" ? expectedRevision + 1 : null,
+            });
             query.refresh();
           }
         } catch (cause) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Notes are unavailable. Their links have been kept.",
-          );
+          patch({
+            error:
+              cause instanceof Error
+                ? cause.message
+                : "Notes are unavailable. Their links have been kept.",
+          });
         } finally {
-          setPending(false);
+          patch({ pending: false });
         }
       };
       if (!ref || !isWorkspaceNote(ref))
@@ -215,13 +212,13 @@ const NativeNote = lazy(async () => {
           draft={draft}
           deleted={deletedRevision !== null && !(note && note.revision > deletedRevision)}
           confirming={confirming}
-          onEdit={setDraft}
+          onEdit={(draft) => patch({ draft })}
           onSave={() => void mutate("save")}
           onDelete={() => void mutate("delete")}
           onRestore={() => void mutate("restore")}
           onCancel={() => discard("cancel")}
           onReload={() => discard("reload")}
-          onKeepDraft={() => setConfirming(null)}
+          onKeepDraft={() => patch({ confirming: null })}
         />
       );
     },

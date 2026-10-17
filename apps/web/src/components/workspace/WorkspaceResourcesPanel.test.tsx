@@ -4,7 +4,13 @@ import { openMeetingNote } from "./meetings/meetingNotes";
 import { act, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { fireEvent, getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
-import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  WorkspaceNotesError,
+  type WorkspaceNote,
+  type WorkspaceLinkEndpoint,
+} from "@t3tools/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceResourcesPanel } from "./WorkspaceResourcesPanel";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
@@ -24,6 +30,10 @@ const bodies = vi.hoisted(() => ({
   start: vi.fn(),
   toolsAvailable: true,
   noteReads: vi.fn(),
+  noteVersion: 0,
+  noteListeners: new Set<() => void>(),
+  refresh: vi.fn(),
+  notes: new Map<string, WorkspaceNote>(),
   note: {
     id: "wsn_00000000-0000-0000-0000-000000000001",
     title: "Launch review",
@@ -89,7 +99,7 @@ vi.mock("../../state/workspaceNotes", () => ({
   workspaceNotes: {
     get: (input: unknown) => {
       bodies.noteReads(input);
-      return "note";
+      return `note:${JSON.stringify(input)}`;
     },
     update: "update",
     delete: "delete",
@@ -98,17 +108,40 @@ vi.mock("../../state/workspaceNotes", () => ({
 }));
 vi.mock("../../state/server", () => ({ serverEnvironment: { configProjection: () => "config" } }));
 vi.mock("../../state/query", () => ({
-  useEnvironmentQuery: (query: unknown) => ({
-    data:
-      query === "config"
-        ? { source: "live", config: { pulseCapabilities: { workspaceNotes: true } } }
-        : query === "note"
-          ? bodies.note
-          : null,
-    error: null,
-    isPending: false,
-    refresh: () => {},
-  }),
+  useEnvironmentQuery: (query: unknown) => {
+    useSyncExternalStore(
+      (listener) => {
+        if (typeof query !== "string" || !query.startsWith("note:")) return () => {};
+        bodies.noteListeners.add(listener);
+        return () => {
+          bodies.noteListeners.delete(listener);
+        };
+      },
+      () => bodies.noteVersion,
+    );
+    return {
+      data:
+        query === "config"
+          ? { source: "live", config: { pulseCapabilities: { workspaceNotes: true } } }
+          : typeof query === "string" && query.startsWith("note:")
+            ? (() => {
+                const input = JSON.parse(query.slice(5)) as {
+                  environmentId: string;
+                  input: { id: string };
+                };
+                return (
+                  bodies.notes.get(JSON.stringify([input.environmentId, input.input.id])) ?? {
+                    ...bodies.note,
+                    id: input.input.id,
+                  }
+                );
+              })()
+            : null,
+      error: null,
+      isPending: false,
+      refresh: bodies.refresh,
+    };
+  },
 }));
 vi.mock("../../state/environments", () => ({
   useConnectedEnvironmentIds: () => {
@@ -121,7 +154,7 @@ vi.mock("../../state/environments", () => ({
       },
       () => bodies.connected,
     );
-    return connected ? ["a"] : [];
+    return connected ? ["a", "b"] : [];
   },
 }));
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => bodies.operate }));
@@ -139,6 +172,7 @@ afterEach(async () => {
   bodies.active = 0;
   bodies.max = 0;
   bodies.toolsAvailable = true;
+  bodies.notes.clear();
   vi.unstubAllGlobals();
 });
 function Opener() {
@@ -149,7 +183,7 @@ function Opener() {
       <button
         onClick={() =>
           openMeetingNote(resources, {
-            environmentId: a,
+            environmentId: resources.environmentId!,
             projectId: p,
             note: {
               type: "provider-resource",
@@ -160,6 +194,36 @@ function Opener() {
         }
       >
         Open note
+      </button>
+      <button
+        onClick={() =>
+          openResource({
+            projectId: p,
+            tab: "docs",
+            request: {
+              type: "provider-resource",
+              provider: "workspace-note",
+              resourceId: "wsn_00000000-0000-0000-0000-000000000002",
+            },
+          })
+        }
+      >
+        Open second note
+      </button>
+      <button
+        onClick={() =>
+          openResource({
+            projectId: ProjectId.make("other"),
+            tab: "docs",
+            request: {
+              type: "provider-resource",
+              provider: "workspace-note",
+              resourceId: bodies.note.id,
+            },
+          })
+        }
+      >
+        Open note in other project
       </button>
       <button
         onClick={() =>
@@ -179,10 +243,12 @@ function App({
   environmentId = a,
   unavailable = false,
   linked = retainedLinkedPage,
+  selectedItem = null,
 }: {
   environmentId?: EnvironmentId;
   unavailable?: boolean;
   linked?: ReactNode;
+  selectedItem?: WorkspaceLinkEndpoint | null;
 }) {
   const wide = useMediaQuery("xl");
   const state = useWorkspaceResourceState(environmentId, {
@@ -207,11 +273,11 @@ function App({
                   ? { kind: "unavailable", projectId: p }
                   : {
                       kind: "selected",
-                      scope: { environmentId, projectId: p },
+                      scope: { environmentId, projectId: state.projectId },
                       title: `${environmentId} project`,
                     }
             }
-            selectedItem={null}
+            selectedItem={selectedItem}
             onOpen={() => {}}
             footer={<p>Connection status unavailable</p>}
           />
@@ -522,4 +588,195 @@ it("unmounts note reads when disconnected and keeps read-only writes disabled af
     bodies.operate = true;
     bodies.connected = true;
   }
+});
+
+async function editNote(body = "Unsaved navigation draft", app: ReactNode = <App />) {
+  await mount(app);
+  await act(() => getByRole(node, "button", { name: "Open note" }).click());
+  await act(() => getByRole(node, "button", { name: "Edit note" }).click());
+  await act(() =>
+    fireEvent.change(getByRole(node, "textbox", { name: "Note text" }), {
+      target: { value: body },
+    }),
+  );
+}
+async function closeAndReopenNote() {
+  const reads = bodies.noteReads.mock.calls.length;
+  await act(() => getByRole(node, "button", { name: "Close resources" }).click());
+  expect(bodies.noteReads).toHaveBeenCalledTimes(reads);
+  expect(bodies.noteListeners.size).toBe(0);
+  await act(() => getByRole(node, "button", { name: "Resources" }).click());
+}
+it("retains a dirty note across resource close and reopen", async () => {
+  await editNote();
+  await closeAndReopenNote();
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    "Unsaved navigation draft",
+  );
+});
+it("retains a dirty note when switching from Docs to Files and back", async () => {
+  await editNote(
+    "Unsaved navigation draft",
+    <App
+      selectedItem={{
+        ref: {
+          type: "provider-resource",
+          provider: "workspace-note",
+          resourceId: bodies.note.id,
+        },
+      }}
+    />,
+  );
+  await act(() => getByRole(node, "tab", { name: "Files" }).click());
+  expect(bodies.noteListeners.size).toBe(0);
+  await act(() => getByRole(node, "tab", { name: "Docs" }).click());
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    "Unsaved navigation draft",
+  );
+});
+it("retains a conflict draft and its identical retry request across close", async () => {
+  await editNote();
+  bodies.start.mockResolvedValue({
+    _tag: "Failure",
+    cause: Cause.fail(
+      new WorkspaceNotesError({
+        kind: "conflict",
+        message: "This note changed. Your draft has been kept.",
+      }),
+    ),
+  });
+  await act(() => getByRole(node, "button", { name: "Save note" }).click());
+  const captured = bodies.start.mock.calls.at(-1);
+  await closeAndReopenNote();
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    "Unsaved navigation draft",
+  );
+  expect(getByRole(node, "alert").textContent).toContain("draft has been kept");
+  await act(() => getByRole(node, "button", { name: "Save note" }).click());
+  expect(bodies.start.mock.calls.at(-1)).toEqual(captured);
+});
+
+it("isolates drafts by note and environment while retaining them across project changes", async () => {
+  await editNote("Environment a first note");
+  await act(() => getByRole(node, "button", { name: "Open note in other project" }).click());
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    "Environment a first note",
+  );
+  await act(() => getByRole(node, "button", { name: "Open second note" }).click());
+  expect(queryByRole(node, "textbox", { name: "Note text" })).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Edit note" }).click());
+  await act(() =>
+    fireEvent.change(getByRole(node, "textbox", { name: "Note text" }), {
+      target: { value: "Second note draft" },
+    }),
+  );
+  await act(() => root!.render(<App environmentId={EnvironmentId.make("b")} />));
+  await act(() => getByRole(node, "button", { name: "Open note" }).click());
+  expect(queryByRole(node, "textbox", { name: "Note text" })).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Edit note" }).click());
+  await act(() =>
+    fireEvent.change(getByRole(node, "textbox", { name: "Note text" }), {
+      target: { value: "Environment b draft" },
+    }),
+  );
+  await act(() => root!.render(<App />));
+  await act(() => getByRole(node, "button", { name: "Open note" }).click());
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    "Environment a first note",
+  );
+  await act(() => getByRole(node, "button", { name: "Open second note" }).click());
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    "Second note draft",
+  );
+});
+it("settles a delayed save only in the captured note after its body unmounts", async () => {
+  await editNote();
+  let settle!: (result: { _tag: "Success"; value: undefined }) => void;
+  bodies.start.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+  );
+  await act(() => getByRole(node, "button", { name: "Save note" }).click());
+  expect(bodies.start.mock.calls.at(-1)?.[1]).toMatchObject({
+    environmentId: a,
+    input: { id: bodies.note.id },
+  });
+  await closeAndReopenNote();
+  expect((getByRole(node, "button", { name: "Save note" }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  await act(() => getByRole(node, "button", { name: "Open second note" }).click());
+  await act(() => getByRole(node, "button", { name: "Edit note" }).click());
+  await act(() =>
+    fireEvent.change(getByRole(node, "textbox", { name: "Note text" }), {
+      target: { value: "Keep second draft" },
+    }),
+  );
+  await act(() => settle({ _tag: "Success", value: undefined }));
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    "Keep second draft",
+  );
+  await act(() => getByRole(node, "button", { name: "Open note" }).click());
+  expect(queryByRole(node, "textbox", { name: "Note text" })).toBeNull();
+});
+it("settles a closed pending failure and retries its original request after reopening", async () => {
+  await editNote();
+  let settle!: (result: unknown) => void;
+  bodies.start.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+  );
+  await act(() => getByRole(node, "button", { name: "Save note" }).click());
+  const captured = bodies.start.mock.calls.at(-1);
+  await act(() => getByRole(node, "button", { name: "Close resources" }).click());
+  await act(() =>
+    settle({ _tag: "Failure", cause: Cause.fail(new Error("Disconnected during save")) }),
+  );
+  await act(() => getByRole(node, "button", { name: "Resources" }).click());
+  expect(getByRole(node, "alert").textContent).toContain("Disconnected during save");
+  bodies.start.mockResolvedValueOnce({ _tag: "Success", value: undefined });
+  await act(() => getByRole(node, "button", { name: "Save note" }).click());
+  expect(bodies.start.mock.calls.at(-1)).toEqual(captured);
+  expect(queryByRole(node, "textbox", { name: "Note text" })).toBeNull();
+});
+it("shows a typed restore conflict and hides Undo when a newer active revision arrives", async () => {
+  await mount();
+  await act(() => getByRole(node, "button", { name: "Open note" }).click());
+  bodies.start.mockResolvedValueOnce({ _tag: "Success", value: undefined });
+  await act(() => getByRole(node, "button", { name: "Delete note" }).click());
+  await closeAndReopenNote();
+  bodies.start.mockResolvedValueOnce({
+    _tag: "Failure",
+    cause: Cause.fail(new WorkspaceNotesError({ kind: "conflict", message: "Stale tombstone" })),
+  });
+  await act(() => getByRole(node, "button", { name: "Undo delete" }).click());
+  expect(getByRole(node, "alert").textContent).toBe(
+    "This note was changed or already restored. Reload it.",
+  );
+  expect(getByRole(node, "button", { name: "Undo delete" })).toBeDefined();
+  bodies.notes.set(JSON.stringify([a, bodies.note.id]), {
+    ...bodies.note,
+    id: bodies.note.id as WorkspaceNote["id"],
+    revision: 5,
+    body: "Restored elsewhere",
+  });
+  await act(() => {
+    bodies.noteVersion++;
+    for (const listener of bodies.noteListeners) listener();
+  });
+  expect(bodies.refresh).toHaveBeenCalled();
+  expect(queryByRole(node, "button", { name: "Undo delete" })).toBeNull();
+  expect(node.textContent).toContain("Restored elsewhere");
+});
+it("drops edit sessions when the workspace provider is disposed", async () => {
+  await editNote();
+  await act(() => root!.unmount());
+  root = createRoot(node);
+  await act(() => root!.render(<App />));
+  await act(() => getByRole(node, "button", { name: "Open note" }).click());
+  expect(queryByRole(node, "textbox", { name: "Note text" })).toBeNull();
 });

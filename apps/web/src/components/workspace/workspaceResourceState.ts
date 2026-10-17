@@ -1,3 +1,4 @@
+import type { NoteDraft } from "./meetings/WorkspaceNoteView";
 import { ProjectId, WorkspaceItemRef, type EnvironmentId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import {
@@ -9,6 +10,8 @@ import {
   useMemo,
   useState,
   type ReactNode,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 
 export type WorkspaceResourceTab = "files" | "browser" | "agents" | "tasks" | "docs" | "prs";
@@ -314,11 +317,57 @@ export const WorkspaceResourcesBodyContext = createContext<{
   readonly restoreFocus: () => void;
   readonly hidden: boolean;
 } | null>(null);
+interface NoteEditSession {
+  readonly draft: NoteDraft | null;
+  readonly pending: boolean;
+  readonly error: string | null;
+  readonly deletedRevision: number | null;
+  readonly confirming: "cancel" | "reload" | null;
+  readonly retry: { fingerprint: string; requestId: string } | null;
+}
+const emptyNoteSession: NoteEditSession = {
+  draft: null,
+  pending: false,
+  error: null,
+  deletedRevision: null,
+  confirming: null,
+  retry: null,
+};
+type NoteSessions = ReadonlyMap<string, NoteEditSession>;
+const NoteSessionsContext = createContext<{
+  sessions: NoteSessions;
+  setSessions: Dispatch<SetStateAction<NoteSessions>>;
+} | null>(null);
+
+/** Drafts live only for this resource provider's lifetime, never in persisted navigation settings. */
+export function useWorkspaceNoteSession(environmentId: EnvironmentId, noteId: string | null) {
+  const value = useContext(NoteSessionsContext);
+  if (value === null) throw new Error("Note sessions require WorkspaceResourcesProvider.");
+  const key = JSON.stringify([environmentId, noteId]);
+  const { sessions, setSessions } = value;
+  const patch = useCallback(
+    (change: Partial<NoteEditSession>) => {
+      setSessions((previous) => {
+        const next = new Map(previous);
+        next.set(key, { ...(previous.get(key) ?? emptyNoteSession), ...change });
+        return next;
+      });
+    },
+    [key, setSessions],
+  );
+  return [sessions.get(key) ?? emptyNoteSession, patch] as const;
+}
 export function WorkspaceResourcesProvider(props: {
   readonly value: WorkspaceResourcesState;
   readonly children: ReactNode;
 }): ReactNode {
-  return createElement(WorkspaceResourcesContext, { value: props.value }, props.children);
+  const [sessions, setSessions] = useState<NoteSessions>(() => new Map());
+  const notes = useMemo(() => ({ sessions, setSessions }), [sessions]);
+  return createElement(
+    WorkspaceResourcesContext,
+    { value: props.value },
+    createElement(NoteSessionsContext, { value: notes }, props.children),
+  );
 }
 export function useWorkspaceResources(): WorkspaceResourcesState {
   const value = useContext(WorkspaceResourcesContext);
