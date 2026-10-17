@@ -152,6 +152,7 @@ export function WorkspaceAgentsView({
               {!row.hideOpen ? (
                 <button
                   type="button"
+                  data-slot="agent-open-link"
                   className="rounded-sm text-3xs leading-4 text-info-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:text-muted-foreground pointer-coarse:min-h-11"
                   disabled={Boolean(row.unavailableReason)}
                   aria-description={row.unavailableReason}
@@ -182,7 +183,9 @@ export function WorkspaceAgentsView({
                   aria-label={`Actions for ${row.title}`}
                 >
                   <div className="flex flex-col items-start gap-1">
-                    {renderRowProvenance?.(row.key)}
+                    {renderRowProvenance ? (
+                      <div className="mb-1">{renderRowProvenance(row.key)}</div>
+                    ) : null}
                     {disabledReason ? (
                       <p className="max-w-56 px-1.75 text-sm text-muted-foreground sm:text-xs">
                         {disabledReason}

@@ -277,6 +277,13 @@ it("shows only confirmed project-thread assignments", async () => {
     ),
   ).toBe(true);
 });
+it("identifies Open for its own focus ring and opens the assigned conversation", async () => {
+  await mount();
+  const open = getByRole(node, "button", { name: "Open conversation →" });
+  expect(open.getAttribute("data-slot")).toBe("agent-open-link");
+  await act(() => open.click());
+  expect(onOpen).toHaveBeenCalledExactlyOnceWith({ type: "thread", threadId: "t1" });
+});
 it.each(["empty", "suggested-only"])("keeps %s assignments empty", async (state) => {
   lists.set(projectKey(), {
     ...projectList,
@@ -486,7 +493,7 @@ it("prioritizes reconnect over a cached archived assignment and skips its lookup
   expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
 });
 
-it("places row provenance before Unassign", async () => {
+it("places row provenance before Unassign with its own bottom gap", async () => {
   await mount();
   await click("Actions for SEO analyst");
   const provenance = getByText(document.body, "Linked by you");
@@ -494,6 +501,9 @@ it("places row provenance before Unassign", async () => {
   expect(provenance.compareDocumentPosition(unassign) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
     0,
   );
+  const spacing = provenance.closest(".mb-1");
+  expect(spacing).not.toBeNull();
+  expect(spacing?.contains(unassign)).toBe(false);
 });
 
 it("shows the link origin before its non-user source", async () => {
@@ -522,7 +532,31 @@ it("shows the link origin before its non-user source", async () => {
   expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
 });
 
-it.each(["denied", "disconnected"])("blocks archived Retry when %s", async (state) => {
+it("allows archived Retry after operate permission is denied and keeps Unassign disabled", async () => {
+  shells = shells.filter((thread) => thread.id !== "t1");
+  boundary.archived.mockReturnValue({
+    snapshots: [],
+    error: "Archive lookup failed",
+    isLoading: false,
+    refresh: boundary.refreshArchived,
+  });
+  await mount();
+  await click("Actions for Stale title");
+  boundary.operate = false;
+  await mount();
+  const retry = getByRole<HTMLButtonElement>(document.body, "button", { name: "Retry" });
+  expect(retry.disabled).toBe(false);
+  await act(() => retry.click());
+  expect(boundary.refreshArchived).toHaveBeenCalledExactlyOnceWith();
+  const unassign = getByRole<HTMLButtonElement>(document.body, "button", {
+    name: "Unassign from project",
+  });
+  expect(unassign.disabled).toBe(true);
+  await act(() => unassign.click());
+  expect(boundary.unlink).not.toHaveBeenCalled();
+});
+
+it("blocks archived Retry when disconnected", async () => {
   shells = shells.filter((thread) => thread.id !== "t1");
   boundary.archived.mockReturnValue({
     snapshots: [],
@@ -533,13 +567,11 @@ it.each(["denied", "disconnected"])("blocks archived Retry when %s", async (stat
   await mount();
   await click("Actions for Stale title");
   const retry = getByRole<HTMLButtonElement>(document.body, "button", { name: "Retry" });
-  if (state === "denied") boundary.operate = false;
-  else boundary.connected = false;
+  boundary.connected = false;
   await mount();
   await act(() => retry.click());
   expect(boundary.refreshArchived).not.toHaveBeenCalled();
-  if (state === "denied") expect(retry.disabled).toBe(true);
-  else expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
+  expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
 });
 
 it("awaits assignment acknowledgement, excludes assigned and foreign shells, and cancels cleanly", async () => {

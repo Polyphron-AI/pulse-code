@@ -523,7 +523,7 @@
   background: var(--workspace-selected);
   color: var(--workspace-blue);
 }
-[data-workspace-resource-frame] button:focus-visible {
+[data-workspace-resource-frame] button:not([data-slot="agent-open-link"]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: -2px;
 }

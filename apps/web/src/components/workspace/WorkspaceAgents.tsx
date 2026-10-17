@@ -274,7 +274,12 @@ function ProjectAgents({
       }
       renderRowProvenance={(key) => {
         const assignment = assignmentsById.get(key);
-        return assignment ? <WorkspaceLinkProvenance {...assignment} /> : null;
+        if (!assignment) return null;
+        return assignment.origin ? (
+          <WorkspaceLinkProvenance origin={assignment.origin} source={assignment.source} />
+        ) : (
+          <WorkspaceLinkProvenance source={assignment.source} />
+        );
       }}
       renderRowActions={(key) => {
         const assignment = assignmentsById.get(key);
@@ -287,9 +292,9 @@ function ProjectAgents({
                 size="xs"
                 variant="ghost"
                 className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-                disabled={!canAssign || busy}
+                disabled={!connected || busy}
                 onClick={() => {
-                  if (mounted.current && permitted.current && !pending.current) archived.refresh();
+                  if (mounted.current && connected && !pending.current) archived.refresh();
                 }}
               >
                 Retry

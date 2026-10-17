@@ -579,7 +579,11 @@ function ResourceBrowserChrome({
                 }}
                 provenance={
                   <div className="mb-1 space-y-2">
-                    <WorkspaceLinkProvenance {...view} />
+                    {view.origin ? (
+                      <WorkspaceLinkProvenance origin={view.origin} source={view.source} />
+                    ) : (
+                      <WorkspaceLinkProvenance source={view.source} />
+                    )}
                     <Button
                       size="xs"
                       variant="ghost"

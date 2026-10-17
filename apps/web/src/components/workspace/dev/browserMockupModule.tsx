@@ -132,7 +132,11 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                     className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
                   >
                     <div className="mb-1 space-y-2">
-                      <WorkspaceLinkProvenance {...page} />
+                      {page.origin ? (
+                        <WorkspaceLinkProvenance origin={page.origin} source={page.source} />
+                      ) : (
+                        <WorkspaceLinkProvenance source={page.source} />
+                      )}
                       <Button
                         size="xs"
                         variant="ghost"
