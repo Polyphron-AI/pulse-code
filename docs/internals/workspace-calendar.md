@@ -121,7 +121,7 @@ Rendered Calendar/Meetings workflows and user guidance remain the W6-T4/T5/T9 in
 Week uses a shared wall-time axis, with a repeated-hour slot on fold weeks and a shaded missing
 interval on ordinary days. A spring gap leaves a shaded skipped interval. Splitting segments at
 these boundaries preserves actual duration while keeping every column aligned with the single
-gutter. Only transition-day cards show GMT offsets. The sticky day strip and untimed band share
+gutter. Only starts in a repeated local interval show GMT offsets. The sticky day strip and untimed band share
 one horizontal scroller and gutter with the timed columns. Coarse hit areas grow into free space,
 clamped at adjacent intervals and day boundaries, without changing event height or overlap packing.
 Week cards flatten the accepted Agenda white overlay against the background so grid lines cannot

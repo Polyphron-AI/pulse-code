@@ -40,11 +40,15 @@ it.each(workspaceCalendarMockupStates)(
         ),
       ).toBeDefined();
       if (state === "dst-fold") expect(node.textContent).toContain("01:30 GMT-5");
-      if (state === "dst-gap")
-        expect(document.body.textContent).toContain("Clocks go forward, 02:00 to 03:00 is skipped");
-      if (state === "week-allday") {
+      if (state === "dst-gap") expect(document.body.textContent).toContain("02:00 skipped");
+      if (state === "week-allday" || state === "week-overflow") {
         expect(document.body.textContent).toContain("Launch planning");
         expect(document.body.textContent).toContain("Prepare launch brief");
+      }
+      if (state === "week-overflow") {
+        const items = getByRole(node, "region", { name: "All-day items" });
+        expect(items.className).toContain("max-h-36");
+        expect(getByRole(items, "button", { name: "Launch follow-up 11" })).toBeDefined();
       }
       expect(fetch).not.toHaveBeenCalled();
     } finally {

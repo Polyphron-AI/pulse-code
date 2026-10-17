@@ -33,7 +33,7 @@ export function CalendarDatePicker({
         render={
           <button
             type="button"
-            className="relative cursor-pointer rounded-sm text-calendar-heading font-semibold focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3"
+            className="relative cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3"
           />
         }
       >

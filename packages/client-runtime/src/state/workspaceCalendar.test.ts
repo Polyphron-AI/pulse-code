@@ -1474,6 +1474,11 @@ it.effect("keeps loaded pages while page one is waiting and after it fails", () 
       yield* Deferred.succeed(release, undefined);
       const read = yield* Effect.promise(() => executeAtomQuery(registry, query));
       expect(read._tag).toBe("Failure");
+      expect(AsyncResult.isFailure(read) && Cause.squash(read.cause)).toMatchObject({
+        _tag: "CalendarError",
+        kind: "unavailable",
+        message: "First page failed",
+      });
       expect(
         Option.getOrThrow(AsyncResult.value(registry.get(query))).events.map((row) => row.title),
       ).toEqual(["Review", "Second"]);
@@ -1489,6 +1494,18 @@ it.effect.each(["not-found", "invalid-input", "authorization", "transport"] as c
     Effect.scoped(
       Effect.gen(function* () {
         let refresh = false;
+        const error =
+          kind === "transport"
+            ? new EnvironmentRpcUnavailableError({
+                environmentId: TARGET.environmentId,
+                message: "Transport failed",
+              })
+            : kind === "authorization"
+              ? new EnvironmentAuthorizationError({
+                  requiredScope: "orchestration:read",
+                  message: "Read denied",
+                })
+              : new CalendarError({ kind, message: "Read denied" });
         const client = {
           [WS_METHODS.calendarSubscribeChanges]: () => Stream.never,
           [WS_METHODS.calendarRefresh]: () =>
@@ -1498,19 +1515,7 @@ it.effect.each(["not-found", "invalid-input", "authorization", "transport"] as c
             }),
           [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
             input.cursor && refresh
-              ? Effect.fail(
-                  kind === "transport"
-                    ? new EnvironmentRpcUnavailableError({
-                        environmentId: TARGET.environmentId,
-                        message: "Transport failed",
-                      })
-                    : kind === "authorization"
-                      ? new EnvironmentAuthorizationError({
-                          requiredScope: "orchestration:read",
-                          message: "Read denied",
-                        })
-                      : new CalendarError({ kind, message: "Read denied" }),
-                )
+              ? Effect.fail(error)
               : Effect.succeed({ ...page(), ...(input.cursor ? {} : { nextCursor: "more" }) }),
         } as unknown as WsRpcProtocolClient;
         const { atoms, registry } = yield* makeTestRuntime(client);
@@ -1525,9 +1530,8 @@ it.effect.each(["not-found", "invalid-input", "authorization", "transport"] as c
           }),
         );
         yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
-        expect((yield* Effect.promise(() => executeAtomQuery(registry, query)))._tag).toBe(
-          "Failure",
-        );
+        const read = yield* Effect.promise(() => executeAtomQuery(registry, query));
+        expect(AsyncResult.isFailure(read) && Cause.squash(read.cause)).toEqual(error);
       }),
     ),
 );
@@ -1570,7 +1574,11 @@ it.effect.each([true, false])(
         yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
         yield* Effect.promise(() => executeAtomQuery(registry, query));
         yield* Deferred.succeed(release, undefined);
-        expect((yield* Effect.promise(() => more))._tag).toBe("Failure");
+        const result = yield* Effect.promise(() => more);
+        expect(AsyncResult.isFailure(result) && Cause.squash(result.cause)).toMatchObject({
+          _tag: "CalendarError",
+          kind: "conflict",
+        });
         expect(AsyncResult.getOrThrow(registry.get(query)).events.map((row) => row.title)).toEqual([
           changed ? "Fresh" : "Review",
         ]);

@@ -6,6 +6,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
   const state = session.calendarState;
   const fold = state === "dst-fold";
   const gap = state === "dst-gap";
+  const untimed = state === "week-allday" || state === "week-overflow";
   const timeZone = session.timeZone;
   let disposed = false;
   const pending = new Set<Promise<void>>();
@@ -107,27 +108,20 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
         view={session.recipe.view === "week" ? "week" : "agenda"}
         pickerDefaultOpen={state === "picker"}
         space={session.recipe.space === "meetings" ? "meetings" : "calendar"}
-        events={
-          fold
-            ? foldEvents
-            : gap
-              ? gapEvents
-              : state === "week-allday"
-                ? [...events, allDay]
-                : events
-        }
+        events={fold ? foldEvents : gap ? gapEvents : untimed ? [...events, allDay] : events}
         dueTasks={
-          state === "week-allday"
-            ? [
-                {
-                  ref: { type: "task", taskId: "fixture-due" },
-                  title: "Prepare launch brief",
-                  projectId: session.resourceProjectId,
-                  dueOn: "2026-10-15",
-                  done: false,
-                  revision: 1,
+          untimed
+            ? Array.from({ length: state === "week-overflow" ? 12 : 1 }, (_, index) => ({
+                ref: {
+                  type: "task" as const,
+                  taskId: index === 0 ? "fixture-due" : `fixture-due-${index}`,
                 },
-              ]
+                title: index === 0 ? "Prepare launch brief" : `Launch follow-up ${index}`,
+                projectId: session.resourceProjectId,
+                dueOn: "2026-10-15",
+                done: false,
+                revision: 1,
+              }))
             : []
         }
         status="ready"

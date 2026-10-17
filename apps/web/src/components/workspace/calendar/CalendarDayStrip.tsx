@@ -20,7 +20,7 @@ export function CalendarDayStrip({
           : "mb-[22px] grid h-[33px] grid-cols-7 gap-1"
       }
     >
-      {week ? <span aria-hidden="true" /> : null}
+      {week ? <span aria-hidden="true" className="sticky left-0 z-10 bg-background" /> : null}
       {weekDates(day).map((value, i) => (
         <button
           key={value}
@@ -47,7 +47,7 @@ export function CalendarDayStrip({
               buttons.current[next]?.focus();
             }
           }}
-          className="relative min-w-0 rounded-lg bg-white/[0.015] text-3xs text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-primary aria-pressed:text-primary-foreground pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-[6px]"
+          className={`${week ? "mx-0.5 " : ""}relative min-w-0 rounded-lg bg-white/[0.015] text-3xs text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-primary aria-pressed:text-primary-foreground pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-[6px]`}
         >
           <span className="sr-only">
             {formatDay(value, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}

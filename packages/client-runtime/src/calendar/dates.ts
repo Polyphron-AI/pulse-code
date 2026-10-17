@@ -32,13 +32,15 @@ export function displayDay(instant: string, timeZone: string) {
   const part = (type: string) => parts.find((p) => p.type === type)!.value;
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
-export const formatEventTime = (instant: string, timeZone: string) =>
+export const formatEventTime = (instant: string | number, timeZone: string) =>
   formatter({
     timeZone,
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).format(DateTime.toEpochMillis(DateTime.makeUnsafe(instant)));
+  }).format(
+    typeof instant === "number" ? instant : DateTime.toEpochMillis(DateTime.makeUnsafe(instant)),
+  );
 export const formatDay = (day: string, options: Intl.DateTimeFormatOptions) =>
   formatter({ ...options, timeZone: "UTC" }).format(date(day));
 export const formatDayHeading = (day: string) =>

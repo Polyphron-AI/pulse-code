@@ -112,7 +112,7 @@ it("keeps task URL state through capture resets and records light-theme smoke ho
   expect(resource.manifest.networkRequests).toBe(0);
 });
 
-it.each(["week", "picker", "dst-fold", "dst-gap", "week-allday", "week-390"])(
+it.each(["week", "picker", "dst-fold", "dst-gap", "week-allday", "week-overflow", "week-390"])(
   "captures the isolated Calendar %s route and matching display zone",
   async (state) => {
     const width = state === "week-390" ? 390 : 1280;
@@ -146,9 +146,8 @@ it.each(["week", "picker", "dst-fold", "dst-gap", "week-allday", "week-390"])(
         getByRole(document.body, "button", { name: "Week" }).getAttribute("aria-pressed"),
       ).toBe("true");
     }
-    if (state === "dst-gap")
-      expect(document.body.textContent).toContain("Clocks go forward, 02:00 to 03:00 is skipped");
-    if (state === "week-allday") {
+    if (state === "dst-gap") expect(document.body.textContent).toContain("02:00 skipped");
+    if (state === "week-allday" || state === "week-overflow") {
       expect(document.body.textContent).toContain("Launch planning");
       expect(document.body.textContent).toContain("Prepare launch brief");
     }

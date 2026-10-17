@@ -10,7 +10,7 @@ import { CalendarDatePicker } from "./CalendarDatePicker";
 import { sortCalendarEvents } from "./weekLayout";
 export interface CalendarAgendaProps {
   readonly day: string;
-  readonly today?: string;
+  readonly today: string;
   readonly timeZone: string;
   readonly space: "calendar" | "meetings";
   readonly view?: "agenda" | "week";
@@ -83,10 +83,10 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
     >
       <div className="mb-[17px] flex min-h-[41px] items-start justify-between gap-2">
         <div>
-          <h2>
+          <h2 className="text-calendar-heading font-semibold">
             <CalendarDatePicker
               day={day}
-              today={props.today ?? day}
+              today={props.today}
               onSelectDay={props.onSelectDay}
               defaultOpen={props.pickerDefaultOpen ?? false}
             />

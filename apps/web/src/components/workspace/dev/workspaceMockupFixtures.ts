@@ -42,6 +42,7 @@ export const workspaceCalendarMockupStates = [
   "dst-fold",
   "dst-gap",
   "week-allday",
+  "week-overflow",
   "week-390",
 ] as const;
 export type WorkspaceCalendarMockupState = (typeof workspaceCalendarMockupStates)[number];

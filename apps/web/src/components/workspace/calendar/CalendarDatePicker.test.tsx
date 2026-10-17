@@ -6,36 +6,42 @@ import { expect, it, vi } from "vite-plus/test";
 import { CalendarDatePicker } from "./CalendarDatePicker";
 import { CalendarDayStrip } from "./CalendarDayStrip";
 
-it("exposes complete chip text to assistive technology and moves focus within the week", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const node = document.createElement("div");
-  document.body.append(node);
-  const root = createRoot(node);
-  const select = vi.fn();
-  try {
-    await act(() => root.render(<CalendarDayStrip day="2026-10-13" onSelectDay={select} />));
-    const tuesday = getByRole(node, "button", { name: "Tuesday, 13 October 2026" });
-    expect(tuesday.getAttribute("aria-label")).toBeNull();
-    expect(tuesday.querySelector(".sr-only")?.textContent).toBe("Tuesday, 13 October 2026");
-    expect(tuesday.querySelector('[aria-hidden="true"]')?.textContent).toBe("T 13");
-    await act(() => {
-      tuesday.focus();
-      fireEvent.keyDown(tuesday, { key: "End" });
-    });
-    expect(document.activeElement).toBe(
-      getByRole(node, "button", { name: "Sunday, 18 October 2026" }),
-    );
-    expect(select).not.toHaveBeenCalled();
-    await act(() => fireEvent.keyDown(document.activeElement!, { key: "Home" }));
-    expect(document.activeElement).toBe(
-      getByRole(node, "button", { name: "Monday, 12 October 2026" }),
-    );
-  } finally {
-    await act(() => root.unmount());
-    node.remove();
-    vi.unstubAllGlobals();
-  }
-});
+it.each([false, true])(
+  "exposes complete chip text and moves focus within the week, Week=%s",
+  async (week) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const select = vi.fn();
+    try {
+      await act(() =>
+        root.render(<CalendarDayStrip day="2026-10-13" onSelectDay={select} week={week} />),
+      );
+      const tuesday = getByRole(node, "button", { name: "Tuesday, 13 October 2026" });
+      expect(tuesday.classList.contains("mx-0.5")).toBe(week);
+      expect(tuesday.getAttribute("aria-label")).toBeNull();
+      expect(tuesday.querySelector(".sr-only")?.textContent).toBe("Tuesday, 13 October 2026");
+      expect(tuesday.querySelector('[aria-hidden="true"]')?.textContent).toBe("T 13");
+      await act(() => {
+        tuesday.focus();
+        fireEvent.keyDown(tuesday, { key: "End" });
+      });
+      expect(document.activeElement).toBe(
+        getByRole(node, "button", { name: "Sunday, 18 October 2026" }),
+      );
+      expect(select).not.toHaveBeenCalled();
+      await act(() => fireEvent.keyDown(document.activeElement!, { key: "Home" }));
+      expect(document.activeElement).toBe(
+        getByRole(node, "button", { name: "Monday, 12 October 2026" }),
+      );
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);
 
 it("cancels by Escape or touch without changing the day and restores trigger focus", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -102,11 +108,16 @@ it("uses the supplied today and closes when the selected day is clicked again", 
   try {
     await act(() =>
       root.render(
-        <CalendarDatePicker day="2026-10-13" today="2026-10-13" onSelectDay={select} defaultOpen />,
+        <CalendarDatePicker day="2026-10-13" today="2026-10-15" onSelectDay={select} defaultOpen />,
       ),
     );
     const selected = getByRole(document.body, "button", { name: /Tuesday, 13 October 2026/ });
-    expect(selected.closest("[data-today]")).not.toBeNull();
+    expect(selected.closest("[data-today]")).toBeNull();
+    expect(
+      getByRole(document.body, "button", { name: /Thursday, 15 October 2026/ }).closest(
+        "[data-today]",
+      ),
+    ).not.toBeNull();
     await act(() => selected.click());
     expect(select).toHaveBeenCalledExactlyOnceWith("2026-10-13");
     expect(queryByRole(document.body, "grid")).toBeNull();

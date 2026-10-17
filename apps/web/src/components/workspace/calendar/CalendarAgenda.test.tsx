@@ -771,6 +771,10 @@ it("derives the default day again when the environment timezone arrives", async 
       }),
     );
     expect(getByRole(node, "heading", { name: "Monday, 12 October" })).toBeDefined();
+    const heading = getByRole(node, "heading", { name: "Monday, 12 October" });
+    expect(heading.tagName).toBe("H2");
+    expect(heading.classList.contains("text-calendar-heading")).toBe(true);
+    expect(heading.classList.contains("font-semibold")).toBe(true);
     rpc.timeZone = "Africa/Johannesburg";
     await notify();
     expect(getByRole(node, "heading", { name: "Tuesday, 13 October" })).toBeDefined();
@@ -818,6 +822,7 @@ it("places cross-midnight events on both days, keeps all-day and date-only due r
       root.render(
         <CalendarAgenda
           day={day}
+          today="2026-10-13"
           timeZone="Africa/Johannesburg"
           space="calendar"
           events={[overnight, allDay, midnight]}

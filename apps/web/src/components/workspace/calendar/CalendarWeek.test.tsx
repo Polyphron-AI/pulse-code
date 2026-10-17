@@ -96,7 +96,10 @@ it("names both fold offsets and keeps seven date columns inside a bounded scroll
         <CalendarWeek
           day="2026-11-01"
           timeZone="America/New_York"
-          events={[]}
+          events={[
+            timed("First fold", "2026-11-01T05:30:00Z", "2026-11-01T05:45:00Z"),
+            timed("Second fold", "2026-11-01T06:30:00Z", "2026-11-01T06:45:00Z"),
+          ]}
           dueTasks={[]}
           onSelectDay={() => {}}
           onSelect={() => {}}
@@ -104,7 +107,19 @@ it("names both fold offsets and keeps seven date columns inside a bounded scroll
       ),
     );
     expect(node.querySelectorAll("[data-calendar-week-day]")).toHaveLength(7);
-    expect(node.textContent).toContain("Clocks go back, 01:00 to 02:00 repeats");
+    expect(node.textContent).toContain("01:00 repeats");
+    expect(
+      node.querySelector('[aria-description="Clocks go back, 01:00 to 02:00 repeats"]'),
+    ).not.toBeNull();
+    for (const [name, offset] of [
+      ["First fold", "GMT-4"],
+      ["Second fold", "GMT-5"],
+    ]) {
+      const block = getByRole(node, "button", { name: new RegExp(`^${name},`) });
+      expect(block.textContent).toBe(`${name}01:30 ${offset}`);
+      expect(block.getAttribute("aria-label")).toContain(`01:30 ${offset}`);
+      expect(block.getAttribute("aria-label")).toContain(`01:45 ${offset}`);
+    }
     expect(node.textContent).not.toContain("24:00");
     const region = getByRole(node, "region", { name: "Week schedule" });
     expect(region.tabIndex).toBe(0);
@@ -126,7 +141,7 @@ const timed = (id: string, start: string, end: string): CalendarOccurrenceSummar
   hasDescription: false,
   time: { kind: "timed", start, end, sourceTimeZone: "UTC" },
 });
-it("renders true durations and the tested touching packing with time first", async () => {
+it("renders true durations and touching packing with the title before muted time", async () => {
   const node = document.createElement("div");
   const root = createRoot(node);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -153,7 +168,8 @@ it("renders true durations and the tested touching packing with time first", asy
     expect(next.style.height).toBe("24px");
     expect(first.style.left).toBe(next.style.left);
     expect(first.style.width).toBe(next.style.width);
-    expect(first.textContent).toBe("09:00First");
+    expect(first.textContent).toBe("First09:00");
+    expect(first.querySelector(".text-muted-foreground")?.textContent).toBe("09:00");
     expect(first.textContent).not.toContain("GMT");
     const late = getByRole(node, "button", { name: /^Late,/ });
     expect(Number.parseFloat(late.style.top) + Number.parseFloat(late.style.height)).toBe(1152);
@@ -200,10 +216,14 @@ it.each([
       const block = getByRole(node, "button", { name: /^Morning,/ });
       expect(gutter.style.top).toBe(`${top}px`);
       expect(block.style.top).toBe(gutter.style.top);
-      expect(node.textContent).toContain(note);
+      expect(node.querySelector(`[aria-description="${note}"]`)).not.toBeNull();
+      expect(block.textContent).toBe("Morning09:00");
       expect(node.textContent).not.toContain("24:00");
-      expect(getByRole(node, "group", { name: "All day and due tasks" }).className).toContain(
-        "sticky",
+      const band = getByRole(node, "group", { name: "All day and due tasks" });
+      expect(band.className).not.toContain("sticky");
+      expect(band.parentElement!.className).toContain("sticky top-0");
+      expect(band.parentElement!.contains(getByRole(node, "group", { name: "Choose day" }))).toBe(
+        true,
       );
     } finally {
       await act(() => root.unmount());
@@ -211,3 +231,117 @@ it.each([
     }
   },
 );
+
+it.each([
+  ["2026-10-15", 148],
+  ["2026-10-16", 228],
+  ["2026-10-17", 296],
+  ["2026-10-18", 296],
+] as const)(
+  "initially scrolls vertically and horizontally to narrow Week selection %s",
+  async (day, left) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    // Layout is the real 600px grid: a 40px gutter, seven 80px columns and a 304px viewport.
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(304);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.hasAttribute("data-calendar-week-day") ? 80 : 40;
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const date = this.getAttribute("data-calendar-week-day");
+      return date ? 40 + (Number(date.slice(-2)) - 12) * 80 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockReturnValue(180);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(180);
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    const events = [timed("Morning", "2026-10-13T09:00:00Z", "2026-10-13T09:30:00Z")];
+    const render = (selected: string, rows = events) =>
+      act(() =>
+        root.render(
+          <CalendarWeek
+            day={selected}
+            timeZone="UTC"
+            events={rows}
+            dueTasks={[]}
+            onSelectDay={() => {}}
+            onSelect={() => {}}
+          />,
+        ),
+      );
+    try {
+      await render(day, []);
+      const region = getByRole(node, "region", { name: "Week schedule" });
+      expect(region.scrollLeft).toBe(left);
+      await render(day);
+      const column = node.querySelector<HTMLElement>(`[data-calendar-week-day="${day}"]`)!;
+      expect(region.scrollTop).toBe(384);
+      expect(region.scrollLeft).toBe(left);
+      expect(column.offsetLeft).toBeGreaterThanOrEqual(region.scrollLeft + 40);
+      expect(column.offsetLeft + column.offsetWidth).toBeLessThanOrEqual(
+        region.scrollLeft + region.clientWidth,
+      );
+      const gutter = node.querySelector('[data-calendar-hour="09:00"]')!.parentElement!;
+      expect(gutter.className).toContain("sticky left-0");
+      expect(
+        getByRole(node, "group", { name: "Choose day" }).firstElementChild!.className,
+      ).toContain("sticky left-0");
+      region.scrollLeft = 10;
+      region.scrollTop = 20;
+      await render(day, [...events]);
+      expect([region.scrollTop, region.scrollLeft]).toEqual([20, 10]);
+      await render(day === "2026-10-16" ? "2026-10-15" : "2026-10-16");
+      expect([region.scrollTop, region.scrollLeft]).toEqual([
+        384,
+        day === "2026-10-16" ? 148 : 228,
+      ]);
+    } finally {
+      await act(() => root.unmount());
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it("caps overflowing untimed items below sticky day labels and keeps every item reachable", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const select = vi.fn();
+  const base = timed("base", "2026-10-13T09:00:00Z", "2026-10-13T09:30:00Z");
+  const events = Array.from({ length: 12 }, (_, index) => ({
+    ...base,
+    id: `all-${index}`,
+    title: `All day ${index}`,
+    time: { kind: "all-day" as const, startOn: "2026-10-13", endBefore: "2026-10-14" },
+  }));
+  try {
+    await act(() =>
+      root.render(
+        <CalendarWeek
+          day="2026-10-13"
+          timeZone="UTC"
+          events={events}
+          dueTasks={[]}
+          onSelectDay={() => {}}
+          onSelect={select}
+        />,
+      ),
+    );
+    const items = getByRole(node, "region", { name: "All-day items" });
+    expect(items.className).toContain("max-h-36");
+    expect(items.className).toContain("overflow-y-auto");
+    expect(items.tabIndex).toBe(0);
+    expect(items.textContent).not.toContain("Tue 13");
+    expect(getAllByRole(items, "button")).toHaveLength(12);
+    await act(() => getByRole(items, "button", { name: "All day 11" }).click());
+    expect(select).toHaveBeenCalledWith(events[11]);
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});

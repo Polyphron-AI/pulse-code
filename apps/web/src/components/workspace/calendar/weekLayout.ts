@@ -63,7 +63,7 @@ export const HOUR_PX = 60 * PX_PER_MINUTE;
 export const MIN_TOUCH_TARGET_PX = 44;
 export const DAY_MINUTES = 24 * 60;
 const clockLabel = (minute: number) =>
-  `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+  `${String(Math.floor((minute % DAY_MINUTES) / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 
 /** A single wall-time axis inserts a repeated interval for every column. Missing intervals stay empty. */
 export function weekTimeline(day: string, timeZone: string) {
@@ -94,13 +94,18 @@ export function weekTimeline(day: string, timeZone: string) {
     const first = runs[0]!;
     const second = runs[1];
     const before = first.wallStart + (first.end - first.start) / MINUTE_MS;
-    const transition = second ? { before, after: second.wallStart } : undefined;
+    const transition = second
+      ? { before, after: second.wallStart }
+      : first.wallStart > 0
+        ? { before: 0, after: first.wallStart }
+        : undefined;
     return { date, ...bounds, runs, transition };
   });
   const fold = days.find(
     (date) => date.transition && date.transition.after < date.transition.before,
   )?.transition;
   const repeated = fold ? fold.before - fold.after : 0;
+  const minutes = DAY_MINUTES + repeated;
   const axisMinute = (wall: number, second = false) =>
     wall + (fold && (second || wall >= fold.before) ? repeated : 0);
   const columns = days.map((date) => {
@@ -129,12 +134,18 @@ export function weekTimeline(day: string, timeZone: string) {
         missing.push({ startMinute: cursor, endMinute: span.startMinute });
       cursor = span.endMinute;
     }
+    if (cursor < minutes) missing.push({ startMinute: cursor, endMinute: minutes });
     const note = date.transition
+      ? date.transition.after < date.transition.before
+        ? `${clockLabel(date.transition.after)} repeats`
+        : `${clockLabel(date.transition.before)} skipped`
+      : undefined;
+    const description = date.transition
       ? date.transition.after < date.transition.before
         ? `Clocks go back, ${clockLabel(date.transition.after)} to ${clockLabel(date.transition.before)} repeats`
         : `Clocks go forward, ${clockLabel(date.transition.before)} to ${clockLabel(date.transition.after)} is skipped`
       : undefined;
-    return { ...date, spans, missing, note };
+    return { ...date, spans, missing, note, description };
   });
   const hours = Array.from({ length: 24 }, (_, hour) => ({
     label: clockLabel(hour * 60),
@@ -144,7 +155,7 @@ export function weekTimeline(day: string, timeZone: string) {
     for (let minute = fold.after; minute < fold.before; minute += 60)
       hours.push({ label: clockLabel(minute), minute: axisMinute(minute, true) });
   hours.sort((a, b) => a.minute - b.minute);
-  return { days: columns, hours, minutes: DAY_MINUTES + repeated };
+  return { days: columns, hours, minutes };
 }
 
 export function weekSegments(
@@ -153,7 +164,7 @@ export function weekSegments(
   timeZone: string,
   timeline = weekTimeline(day, timeZone),
 ) {
-  return timeline.days.flatMap(({ date, spans }) =>
+  return timeline.days.flatMap(({ date, spans, runs, transition }) =>
     packOverlaps(
       events.flatMap((event) => {
         if (event.time.kind !== "timed") return [];
@@ -170,6 +181,12 @@ export function weekSegments(
                   event,
                   day: date,
                   start,
+                  ambiguous: Boolean(
+                    transition &&
+                    transition.after < transition.before &&
+                    start >= runs[1]!.start - (transition.before - transition.after) * MINUTE_MS &&
+                    start < runs[1]!.start + (transition.before - transition.after) * MINUTE_MS,
+                  ),
                   startMinute: span.startMinute + (start - span.start) / MINUTE_MS,
                   endMinute: span.startMinute + (end - span.start) / MINUTE_MS,
                 },

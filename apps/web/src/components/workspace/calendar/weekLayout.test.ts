@@ -164,5 +164,67 @@ it("keeps a half-hour fold aligned in Australia/Lord_Howe", () => {
   const timeline = weekTimeline("2026-04-05", "Australia/Lord_Howe");
   expect(timeline.minutes).toBe(1470);
   expect(timeline.hours.find((row) => row.label === "09:00")?.minute).toBe(570);
-  expect(timeline.days[6]!.note).toBe("Clocks go back, 01:30 to 02:00 repeats");
+  expect(timeline.days[6]!.note).toBe("01:30 repeats");
+  expect(timeline.days[6]!.description).toBe("Clocks go back, 01:30 to 02:00 repeats");
+});
+
+it("marks only starts inside the two repeated-hour intervals as ambiguous", () => {
+  const times = ["04:59", "05:00", "06:00", "06:59", "07:00"];
+  const rows = weekSegments(
+    times.map((time) => event(time, `2026-11-01T${time}:00Z`, `2026-11-01T${time}:30Z`)),
+    "2026-11-01",
+    "America/New_York",
+  );
+  expect(rows.map((row) => row.ambiguous)).toEqual([false, true, true, true, false]);
+  expect(
+    weekSegments(
+      [
+        event("before", "2026-03-08T06:30:00Z", "2026-03-08T06:45:00Z"),
+        event("after", "2026-03-08T07:00:00Z", "2026-03-08T07:30:00Z"),
+      ],
+      "2026-03-08",
+      "America/New_York",
+    ).map((row) => row.ambiguous),
+  ).toEqual([false, false]);
+});
+
+it("shades the trailing repeated hour on ordinary Cairo days without a 24:00 note", () => {
+  const timeline = weekTimeline("2026-10-29", "Africa/Cairo");
+  const cairo = timeline.days[3]!;
+  expect(cairo.note).toBe("23:00 repeats");
+  expect(cairo.description).toBe("Clocks go back, 23:00 to 00:00 repeats");
+  expect(cairo.missing).toEqual([]);
+  expect(timeline.minutes).toBe(1500);
+  for (const date of timeline.days.filter((date) => date !== cairo)) {
+    expect(date.missing).toEqual([{ startMinute: 1440, endMinute: 1500 }]);
+  }
+  expect(
+    timeline.hours.filter((hour) => hour.label === "23:00").map((hour) => hour.minute),
+  ).toEqual([1380, 1440]);
+  expect(JSON.stringify(timeline)).not.toContain("24:00");
+  expect(
+    weekSegments(
+      [
+        event("first", "2026-10-29T20:30:00Z", "2026-10-29T20:45:00Z"),
+        event("second", "2026-10-29T21:30:00Z", "2026-10-29T21:45:00Z"),
+      ],
+      "2026-10-29",
+      "Africa/Cairo",
+    ).map((piece) => [piece.startMinute, piece.ambiguous]),
+  ).toEqual([
+    [1410, true],
+    [1470, true],
+  ]);
+});
+
+it("describes and shades Santiago's skipped midnight when the day starts at 01:00", () => {
+  const timeline = weekTimeline("2026-09-06", "America/Santiago");
+  const sunday = timeline.days[6]!;
+  expect(sunday.note).toBe("00:00 skipped");
+  expect(sunday.description).toBe("Clocks go forward, 00:00 to 01:00 is skipped");
+  expect(sunday.missing).toEqual([{ startMinute: 0, endMinute: 60 }]);
+  expect(sunday.spans[0]!.startMinute).toBe(60);
+  expect(sunday.minutes).toBe(1380);
+  expect(timeline.days.slice(0, 6).every((day) => day.missing.length === 0)).toBe(true);
+  expect(JSON.stringify(timeline)).not.toContain("24:00");
 });
