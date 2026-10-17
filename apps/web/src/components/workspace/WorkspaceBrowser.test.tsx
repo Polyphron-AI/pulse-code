@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { act, useLayoutEffect, type ComponentProps } from "react";
+import { act, StrictMode, useLayoutEffect, type ComponentProps } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { AsyncResult } from "effect/unstable/reactivity";
 import * as Cause from "effect/Cause";
@@ -52,6 +53,7 @@ const mocks = vi.hoisted(() => ({
   previewMounts: 0,
   focusUrlNonce: null as number | null,
   openInBrowser: vi.fn(),
+  realLocalApi: false,
 }));
 vi.mock("../../state/entities", () => ({
   useThreadShell: (ref: { environmentId: string; threadId: string } | null) =>
@@ -107,9 +109,14 @@ vi.mock("../../browser/browserDefaults", () => ({
   browserDefaultOpenViewport: () => ({ _tag: "fill" }),
   browserDefaultOpenProfileId: () => "work",
 }));
-vi.mock("../../localApi", () => ({
-  readLocalApi: () => ({ shell: { openExternal: mocks.external } }),
-}));
+vi.mock("../../localApi", async (original) => {
+  const actual = await original<typeof import("../../localApi")>();
+  return {
+    ...actual,
+    readLocalApi: () =>
+      mocks.realLocalApi ? actual.createLocalApi() : { shell: { openExternal: mocks.external } },
+  };
+});
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: mocks.link }) }));
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => mocks.operate }));
 vi.mock("./ProjectTasks", () => ({ workspaceToolsError: () => "Preview unavailable" }));
@@ -187,7 +194,11 @@ function ResourceApp({
   initialRequest?: ComponentProps<typeof WorkspaceBrowser>["request"];
   engagement?: boolean;
 }) {
-  const state = useWorkspaceResourceState(environmentId, { storage });
+  const wide = useMediaQuery("xl");
+  const state = useWorkspaceResourceState(environmentId, {
+    storage,
+    presentation: wide ? "dock" : "sheet",
+  });
   useLayoutEffect(() => {
     resourceState = state;
   }, [state]);
@@ -207,8 +218,10 @@ function ResourceApp({
             layout="full"
             header={{ title: "Project", environmentLabel: "Remote", spaceLabel: "Projects" }}
             resources={body}
+            linkedContext={{ item: selectedItem, render: () => <p>Selected message context</p> }}
           >
-            <p>Content</p>
+            <p>Selected message</p>
+            <textarea aria-label="Center draft" defaultValue="Unsent reply" />
           </WorkspaceEngagement>
         ) : state.open ? (
           body
@@ -229,6 +242,12 @@ beforeEach(() => {
   mocks.readError = null;
   mocks.previewMounts = 0;
   mocks.focusUrlNonce = null;
+  mocks.realLocalApi = false;
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+    }
+  ).happyDOM.setWindowSize({ width: 1280, height: 800 });
   mocks.open.mockResolvedValue(AsyncResult.success(snapshot));
 });
 afterEach(async () => {
@@ -239,6 +258,7 @@ afterEach(async () => {
   node?.remove();
   node = undefined;
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 const mount = async (overrides: Partial<ComponentProps<typeof WorkspaceBrowser>> = {}) => {
@@ -263,6 +283,339 @@ const setAddress = async (value: string) =>
 const submit = async () =>
   act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
 const text = () => JSON.stringify(renderer!.toJSON());
+const clickText = async (label: string) =>
+  act(() =>
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === label)!
+      .props.onClick(),
+  );
+
+it("keeps the pasted link target when external opening is blocked", async () => {
+  mocks.desktop = false;
+  mocks.external.mockResolvedValue(undefined);
+  await mount();
+  await setAddress("https://example.test/pasted?utm_source=test#section");
+  await clickText("Open in new tab");
+  expect(text()).toContain("Open this page in your browser");
+  expect(text()).toContain("Link target");
+  expect(text()).toContain("https://example.test/pasted");
+  expect(text()).toContain("If no tab opened, allow pop-ups and try again, or copy this address.");
+  expect(text()).not.toContain("Page opened successfully");
+  expect(renderer!.root.findAllByType("iframe")).toHaveLength(0);
+  expect(
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Open in new tab")!.props.disabled,
+  ).toBe(false);
+  expect(mocks.external).toHaveBeenCalledExactlyOnceWith("https://example.test/pasted");
+});
+
+it("prefills and acknowledges web requests without opening an external tab automatically", async () => {
+  mocks.desktop = false;
+  await mount({ request: { type: "url", url: "https://example.test/requested" } });
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/requested");
+  expect(resourceState.request).toBeNull();
+  expect(mocks.external).not.toHaveBeenCalled();
+  await act(() =>
+    resourceState.openResource({
+      tab: "browser",
+      projectId: props.projectId,
+      request: { type: "url", url: "https://example.test/newest" },
+    }),
+  );
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/newest");
+  expect(resourceState.request).toBeNull();
+  await act(() => resourceState.close());
+  await act(() => resourceState.reopen());
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/newest");
+});
+
+it("seeds the first requested page before the lazy chrome mounts", async () => {
+  const request = { type: "url" as const, url: snapshot.navStatus.url };
+  await mount({ request });
+  expect(renderer!.root.findByType("input").props.value).toBe(request.url);
+});
+
+it("prefills an unsupported desktop's external alternative and acknowledges it without navigating", async () => {
+  mocks.readError = "Preview is not supported on this server";
+  await mount({ request: { type: "url", url: "https://example.test/fallback" } });
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/fallback");
+  expect(text()).toContain("External-tab Browser");
+  expect(resourceState.request).toBeNull();
+  expect(mocks.open).not.toHaveBeenCalled();
+  expect(mocks.external).not.toHaveBeenCalled();
+  await clickText("Open in new tab");
+  expect(mocks.external).toHaveBeenCalledExactlyOnceWith("https://example.test/fallback");
+});
+
+it("resets the address for another project or environment with the same project id", async () => {
+  mocks.desktop = false;
+  const render = (environment = environmentId, project = props.projectId) => (
+    <AppAtomRegistryProvider>
+      <WorkspaceBrowser
+        key={`${environment}:${project}`}
+        {...props}
+        environmentId={environment}
+        projectId={project}
+      />
+    </AppAtomRegistryProvider>
+  );
+  await act(() => {
+    renderer = create(render());
+  });
+  await setAddress("https://example.test/private");
+  await act(() => renderer!.update(render(environmentId, ProjectId.make("q"))));
+  expect(renderer!.root.findByType("input").props.value).toBe("");
+  await setAddress("https://example.test/other-project");
+  await act(() => renderer!.update(render(EnvironmentId.make("other"), ProjectId.make("q"))));
+  expect(renderer!.root.findByType("input").props.value).toBe("");
+});
+
+it.each(["disconnected", "reader", "missing-thread"])(
+  "opens only the latest pending request after a desktop %s gate clears",
+  async (reason) => {
+    mocks.connected = reason !== "disconnected";
+    mocks.operate = reason !== "reader";
+    mocks.configured = reason !== "missing-thread";
+    await mount({ request: { type: "url", url: "https://example.test/first" } });
+    for (const path of ["second", "latest"])
+      await act(() =>
+        resourceState.openResource({
+          tab: "browser",
+          projectId: props.projectId,
+          request: { type: "url", url: `https://example.test/${path}` },
+        }),
+      );
+    expect(mocks.open).not.toHaveBeenCalled();
+    mocks.connected = true;
+    mocks.operate = true;
+    mocks.configured = true;
+    await act(() =>
+      renderer!.update(
+        <ResourceApp initialRequest={{ type: "url", url: "https://example.test/latest" }} />,
+      ),
+    );
+    expect(mocks.open).toHaveBeenCalledOnce();
+    expect(mocks.open).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({ url: "https://example.test/latest" }),
+      }),
+    );
+  },
+);
+
+it("opens an immediately admissible request exactly once under StrictMode", async () => {
+  await mount({ request: { type: "url", url: snapshot.navStatus.url } });
+  await act(() => renderer!.unmount());
+  mocks.open.mockClear();
+  const request = { type: "url" as const, url: "https://example.test/strict" };
+  await act(() => {
+    renderer = create(
+      <StrictMode>
+        <AppAtomRegistryProvider>
+          <WorkspaceResourcesProvider value={resourceState}>
+            <WorkspaceBrowser {...props} request={request} />
+          </WorkspaceResourcesProvider>
+        </AppAtomRegistryProvider>
+      </StrictMode>,
+    );
+  });
+  expect(mocks.open).toHaveBeenCalledOnce();
+  expect(renderer!.root.findByType("input").props.value).toBe(request.url);
+});
+
+it("retains a draft through linked-context hiding and preview-read error remounts", async () => {
+  const render = (hidden = false) => (
+    <AppAtomRegistryProvider>
+      <WorkspaceResourcesBodyContext value={{ hidden, restoreFocus() {} }}>
+        <WorkspaceBrowser {...props} />
+      </WorkspaceResourcesBodyContext>
+    </AppAtomRegistryProvider>
+  );
+  await act(() => {
+    renderer = create(render());
+  });
+  await setAddress("https://example.test/half-typed");
+  await act(() => renderer!.update(render(true)));
+  await act(() => renderer!.update(render()));
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/half-typed");
+  mocks.readError = "Preview unavailable";
+  await act(() => renderer!.update(render()));
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/half-typed");
+  mocks.readError = null;
+  await act(() => renderer!.update(render()));
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/half-typed");
+});
+
+it.each([
+  "javascript:alert(1)",
+  "file:///secret",
+  "",
+  `https://example.test/${"x".repeat(2048)}`,
+  "project design notes",
+])("rejects unsafe addresses: %s", async (address) => {
+  mocks.desktop = false;
+  await mount();
+  await setAddress(address);
+  await submit();
+  expect(mocks.external).not.toHaveBeenCalled();
+  expect(mocks.open).not.toHaveBeenCalled();
+  expect(text()).toContain("Enter an http or https address.");
+});
+
+it("pasting a new address replaces only the external link target", async () => {
+  mocks.desktop = false;
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  await mount();
+  await setAddress("https://example.test/first");
+  await clickText("Open in new tab");
+  await setAddress("https://example.test/next?utm_source=test#section");
+  await clickText("Link this page");
+  expect(mocks.external).toHaveBeenCalledExactlyOnceWith("https://example.test/first");
+  expect(mocks.link).toHaveBeenCalledExactlyOnceWith(selectedItem, {
+    ref: { type: "url", url: "https://example.test/next" },
+    title: "https://example.test/next",
+  });
+  expect(readThreadPreviewState(threadRef).snapshot).toEqual(snapshot);
+  expect(mocks.previewMounts).toBe(0);
+});
+
+it("keeps a rejected external address editable and retries it", async () => {
+  mocks.desktop = false;
+  mocks.external.mockRejectedValueOnce(new Error("Unable to open link."));
+  await mount();
+  await setAddress("https://example.test/retry");
+  await clickText("Open in new tab");
+  expect(text()).toContain("Unable to open link.");
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/retry");
+  await clickText("Open in new tab");
+  expect(mocks.external).toHaveBeenCalledTimes(2);
+  expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+});
+
+it("offers Copy address through the existing clipboard path and retains copy failures", async () => {
+  mocks.desktop = false;
+  const copy = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockRejectedValueOnce(new Error("denied"))
+    .mockResolvedValue(undefined);
+  await mount();
+  await setAddress("https://example.test/copy?utm_source=test#section");
+  await clickText("Copy address");
+  expect(text()).toContain("Failed to copy page address to the clipboard.");
+  await clickText("Copy address");
+  expect(copy).toHaveBeenLastCalledWith("https://example.test/copy");
+  expect(renderer!.root.findByType("input").props.value).toBe(
+    "https://example.test/copy?utm_source=test#section",
+  );
+  expect(mocks.external).not.toHaveBeenCalled();
+});
+
+it("keeps retry and focus usable when the real browser helper returns an unknown popup outcome", async () => {
+  mocks.desktop = false;
+  mocks.realLocalApi = true;
+  const open = vi.spyOn(window, "open").mockReturnValue(null);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <ResourceApp initialRequest={{ type: "url", url: "https://example.test/popup" }} />,
+    ),
+  );
+  const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
+  const card = getByRole(node, "region", { name: "External-tab Browser" });
+  await act(() => getByRole(card, "button", { name: "Open in new tab" }).click());
+  expect(open).toHaveBeenCalledExactlyOnceWith(
+    "https://example.test/popup",
+    "_blank",
+    "noopener,noreferrer",
+  );
+  expect(card.textContent).toContain(
+    "If no tab opened, allow pop-ups and try again, or copy this address.",
+  );
+  expect(input.value).toBe("https://example.test/popup");
+  await act(() => {
+    input.focus();
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(open).toHaveBeenCalledTimes(2);
+  expect(document.activeElement).toBe(input);
+  expect(node.querySelector("iframe")).toBeNull();
+});
+
+it.each([
+  [390, 844],
+  [1024, 800],
+])(
+  "retains the external address, center draft and focus through the %ix%i Resources journey",
+  async (width, height) => {
+    mocks.desktop = false;
+    const dom = (
+      window as unknown as {
+        happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+      }
+    ).happyDOM;
+    dom.setWindowSize({ width, height });
+    node = document.createElement("div");
+    document.body.append(node);
+    root = createRoot(node);
+    await act(() => root!.render(<ResourceApp engagement />));
+    const trigger = getByRole<HTMLButtonElement>(node, "button", { name: "Resources" });
+    await act(() => {
+      trigger.focus();
+      trigger.click();
+    });
+    const longUrl = `https://example.test/${"long-address/".repeat(30)}`;
+    await act(() =>
+      resourceState.openResource({
+        tab: "browser",
+        projectId: props.projectId,
+        request: { type: "url", url: longUrl },
+      }),
+    );
+    let dialog = getByRole(document.body, "dialog", { name: "Resources" });
+    expect(getByRole(dialog, "textbox", { name: "Browser page address" })).toHaveProperty(
+      "value",
+      longUrl,
+    );
+    expect(getByRole(dialog, "region", { name: "External-tab Browser" }).textContent).toContain(
+      longUrl,
+    );
+    const menu = getByRole(dialog, "button", { name: "Browser actions" });
+    await act(() => {
+      menu.focus();
+      menu.click();
+    });
+    await act(() =>
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+    expect(document.activeElement).toBe(menu);
+    await act(() => getByRole(dialog, "button", { name: "Close" }).click());
+    expect(document.activeElement).toBe(trigger);
+    expect(getByRole(node, "textbox", { name: "Center draft" })).toHaveProperty(
+      "value",
+      "Unsent reply",
+    );
+    expect(node.textContent).toContain("Selected message");
+    await act(() => trigger.click());
+    dialog = getByRole(document.body, "dialog", { name: "Resources" });
+    const input = getByRole(dialog, "textbox", { name: "Browser page address" });
+    expect(input).toHaveProperty("value", longUrl);
+    await act(() => dom.setWindowSize({ width: 1280, height: 800 }));
+    expect(queryByRole(document.body, "dialog", { name: "Resources" })).toBeNull();
+    expect(document.querySelectorAll('[aria-label="External-tab Browser"]')).toHaveLength(1);
+    expect(getByRole(node, "complementary", { name: "Resources" }).contains(input)).toBe(true);
+    await act(() => dom.setWindowSize({ width, height }));
+    expect(document.querySelectorAll('[aria-label="External-tab Browser"]')).toHaveLength(1);
+    expect(getByRole(document.body, "dialog", { name: "Resources" }).contains(input)).toBe(true);
+    expect(mocks.previewMounts).toBe(0);
+    expect(mocks.open).not.toHaveBeenCalled();
+  },
+);
 
 it("shows the configured desktop page in the resource body without opening a dialog", async () => {
   await mount();
@@ -421,7 +774,9 @@ it("shows external-open failures ahead of a preview-read error", async () => {
     ),
   );
   await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
-  await act(() => getByRole(document.body, "button", { name: "Open in new tab" }).click());
+  await act(() =>
+    getByRole(getByRole(document.body, "dialog"), "button", { name: "Open in new tab" }).click(),
+  );
   expect(getByRole(node, "alert").textContent).toBe("External opener unavailable");
 });
 

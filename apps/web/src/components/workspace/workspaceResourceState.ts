@@ -120,7 +120,6 @@ interface ResourceSession {
   readonly selectedTab: WorkspaceResourceTab;
   readonly tabs: Readonly<Record<string, WorkspaceResourceTab>>;
   readonly request: WorkspaceItemRef | null;
-  readonly queuedRequests: readonly WorkspaceItemRef[];
 }
 function readSession(
   environmentId: EnvironmentId | null,
@@ -157,7 +156,6 @@ function readSession(
     selectedTab: projectId === null ? "files" : projectTab(savedTabs, projectId),
     tabs: savedTabs,
     request: null,
-    queuedRequests: [],
   };
 }
 
@@ -220,7 +218,6 @@ export function useWorkspaceResourceState(
               projectId,
               selectedTab: projectTab(value.tabs, projectId),
               request: null,
-              queuedRequests: [],
             },
       );
     },
@@ -236,7 +233,6 @@ export function useWorkspaceResourceState(
               ...value,
               selectedTab: tab,
               request: null,
-              queuedRequests: [],
               tabs:
                 value.projectId === null ? value.tabs : { ...value.tabs, [value.projectId]: tab },
             },
@@ -245,20 +241,12 @@ export function useWorkspaceResourceState(
     [update],
   );
   const resetProject = useCallback(
-    () => update((value) => ({ ...value, projectId: null, request: null, queuedRequests: [] })),
+    () => update((value) => ({ ...value, projectId: null, request: null })),
     [update],
   );
   const clearRequest = useCallback(
     (request: WorkspaceItemRef) =>
-      update((value) =>
-        value.request === request
-          ? {
-              ...value,
-              request: value.queuedRequests[0] ?? null,
-              queuedRequests: value.queuedRequests.slice(1),
-            }
-          : value,
-      ),
+      update((value) => (value.request === request ? { ...value, request: null } : value)),
     [update],
   );
   const close = useCallback(
@@ -300,24 +288,15 @@ export function useWorkspaceResourceState(
         if (!matches) throw new Error("This item does not belong in the requested resource tab.");
       }
       if (environmentId === null) return;
-      update((value) => {
-        const queue =
-          input.tab === "browser" &&
-          request !== null &&
-          value.request !== null &&
-          value.projectId === input.projectId &&
-          value.selectedTab === input.tab;
-        return {
-          ...value,
-          projectId: input.projectId,
-          selectedTab: input.tab,
-          request: queue ? value.request : request,
-          queuedRequests: queue && request ? [...value.queuedRequests, request] : [],
-          tabs: { ...value.tabs, [input.projectId]: input.tab },
-          open: true,
-          wideOpen: value.presentation === "dock" ? true : value.wideOpen,
-        };
-      });
+      update((value) => ({
+        ...value,
+        projectId: input.projectId,
+        selectedTab: input.tab,
+        request,
+        tabs: { ...value.tabs, [input.projectId]: input.tab },
+        open: true,
+        wideOpen: value.presentation === "dock" ? true : value.wideOpen,
+      }));
     },
     [environmentId, update],
   );
@@ -367,6 +346,26 @@ const NoteSessionsContext = createContext<{
   setSessions: Dispatch<SetStateAction<NoteSessions>>;
 } | null>(null);
 
+function createBrowserDraft() {
+  let address = "";
+  return {
+    read: () => address,
+    write: (value: string) => {
+      address = value;
+    },
+  };
+}
+const BrowserDraftsContext = createContext<
+  ((key: string) => ReturnType<typeof createBrowserDraft>) | null
+>(null);
+
+/** Keeps each resource scope's address across chrome and sheet remounts without rendering preview on edits. */
+export function useWorkspaceBrowserDraft(environmentId: EnvironmentId, projectId: ProjectId) {
+  const getDraft = useContext(BrowserDraftsContext);
+  const key = JSON.stringify([environmentId, projectId]);
+  return useMemo(() => getDraft?.(key) ?? createBrowserDraft(), [getDraft, key]);
+}
+
 /** Drafts live only for this resource provider's lifetime, never in persisted navigation settings. */
 export function useWorkspaceNoteSession(environmentId: EnvironmentId, noteId: string | null) {
   const value = useContext(NoteSessionsContext);
@@ -391,10 +390,25 @@ export function WorkspaceResourcesProvider(props: {
 }): ReactNode {
   const [sessions, setSessions] = useState<NoteSessions>(() => new Map());
   const notes = useMemo(() => ({ sessions, setSessions }), [sessions]);
+  const [getBrowserDraft] = useState(() => {
+    const drafts = new Map<string, ReturnType<typeof createBrowserDraft>>();
+    return (key: string) => {
+      let draft = drafts.get(key);
+      if (!draft) {
+        draft = createBrowserDraft();
+        drafts.set(key, draft);
+      }
+      return draft;
+    };
+  });
   return createElement(
     WorkspaceResourcesContext,
     { value: props.value },
-    createElement(NoteSessionsContext, { value: notes }, props.children),
+    createElement(
+      NoteSessionsContext,
+      { value: notes },
+      createElement(BrowserDraftsContext, { value: getBrowserDraft }, props.children),
+    ),
   );
 }
 export function useWorkspaceResources(): WorkspaceResourcesState {

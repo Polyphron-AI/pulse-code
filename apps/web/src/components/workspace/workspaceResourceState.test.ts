@@ -98,7 +98,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("consumes Browser requests in order and ignores a stale acknowledgement", async () => {
+it("keeps only the newest Browser request and ignores a stale acknowledgement", async () => {
   await mount();
   const open = (url: string) =>
     state.openResource({ projectId: p, tab: "browser", request: { type: "url", url } });
@@ -106,21 +106,41 @@ it("consumes Browser requests in order and ignores a stale acknowledgement", asy
   const first = state.request!;
   await act(() => open("https://example.invalid/second"));
   await act(() => open("https://example.invalid/third"));
-  expect(state.request).toBe(first);
+  const latest = state.request!;
+  expect(latest).toEqual({ type: "url", url: "https://example.invalid/third" });
   await act(() => state.clearRequest(first));
-  const second = state.request!;
-  expect(second).toEqual({ type: "url", url: "https://example.invalid/second" });
-  await act(() => state.clearRequest(first));
-  expect(state.request).toBe(second);
-  await act(() => state.clearRequest(second));
-  expect(state.request).toEqual({ type: "url", url: "https://example.invalid/third" });
-  await act(() => state.clearRequest(state.request!));
+  expect(state.request).toBe(latest);
+  await act(() => state.clearRequest(latest));
   await act(() => state.close());
   await act(() => state.reopen());
   expect(state.request).toBeNull();
   await act(() => open("https://example.invalid/first"));
   expect(state.request).toEqual(first);
 });
+
+it.each(["tab", "project", "reset"])(
+  "clears pending Browser requests on %s change",
+  async (change) => {
+    await mount();
+    const open = (url: string) =>
+      state.openResource({ projectId: p, tab: "browser", request: { type: "url", url } });
+    await act(() => open("https://example.invalid/a"));
+    await act(() => open("https://example.invalid/b"));
+    const stale = state.request!;
+    await act(() => {
+      if (change === "tab") state.selectTab("files");
+      else if (change === "project") state.chooseProject(q);
+      else state.resetProject();
+    });
+    expect(state.request).toBeNull();
+    await act(() => open("https://example.invalid/c"));
+    const current = state.request!;
+    await act(() => state.clearRequest(stale));
+    expect(state.request).toBe(current);
+    await act(() => state.clearRequest(current));
+    expect(state.request).toBeNull();
+  },
+);
 
 it("resets explicit selection and requests for Auto while retaining the saved project tab", async () => {
   await mount();

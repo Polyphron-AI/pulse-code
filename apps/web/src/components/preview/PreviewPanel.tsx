@@ -45,7 +45,7 @@ export function PreviewPanel({
   }
 
   return (
-    <PreviewPanelShell mode={mode}>
+    <PreviewPanelShell mode={mode} transparent={Boolean(renderChrome)}>
       <PreviewView
         threadRef={threadRef}
         {...(tabId !== undefined ? { tabId } : {})}

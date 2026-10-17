@@ -28,7 +28,9 @@ const mocks = vi.hoisted(() => ({
   related: [] as { item: WorkspaceLinkEndpoint; via: WorkspaceLinkEndpoint }[],
   taskLoading: false,
   openPanel: vi.fn(),
+  desktop: true,
 }));
+vi.mock("../../previewStateStore", () => ({ isPreviewSupportedInRuntime: () => mocks.desktop }));
 vi.mock("../../rightPanelStore", () => ({
   useRightPanelStore: { getState: () => ({ open: mocks.openPanel }) },
 }));
@@ -152,6 +154,7 @@ afterEach(async () => {
   node?.remove();
   mocks.related = [];
   mocks.taskLoading = false;
+  mocks.desktop = true;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -247,6 +250,47 @@ it("opens Code's existing preview from thread details outside the Resources prov
     "preview",
   );
   expect(node.textContent).not.toContain("Browser body");
+});
+it("hides the unsupported Code preview action on web", async () => {
+  mocks.desktop = false;
+  await mount(
+    <LinkedSection
+      environmentId={environmentId}
+      item={{ type: "thread", threadId: ThreadId.make("t") }}
+      title="Thread"
+      onOpen={() => {}}
+    />,
+  );
+  expect(queryByRole(node, "button", { name: "Open Code preview" })).toBeNull();
+  expect(mocks.openPanel).not.toHaveBeenCalled();
+});
+
+it("does not substitute the current resource project while a thread's project is unavailable", async () => {
+  function App() {
+    const state = useWorkspaceResourceState(environmentId, {
+      storage: { getItem: () => JSON.stringify({ version: 1, projectId: p }), setItem() {} },
+    });
+    return (
+      <WorkspaceResourcesProvider value={state}>
+        <LinkedSection
+          environmentId={environmentId}
+          item={{ type: "thread", threadId: ThreadId.make("unloaded") }}
+          title="Thread"
+          onOpen={() => {}}
+        />
+        <p data-resource-tab="">
+          {state.selectedTab} {state.projectId}
+        </p>
+      </WorkspaceResourcesProvider>
+    );
+  }
+  await mount(<App />);
+  const action = getByRole<HTMLButtonElement>(node, "button", {
+    name: "Open Browser in Resources",
+  });
+  expect(action.disabled).toBe(true);
+  await act(() => action.click());
+  expect(node.querySelector("[data-resource-tab]")!.textContent).toBe("files p");
 });
 it.each(["Accept", "Dismiss"])(
   "runs only the explicit %s command and renders the returned relationship",

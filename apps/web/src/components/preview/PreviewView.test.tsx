@@ -399,8 +399,8 @@ describe("PreviewView navigation", () => {
         TEST_RUNTIME_TAB_ID,
         "https://example.test/resource",
       );
-      const slot = renderer!.root.findByProps({ tabId: TEST_RUNTIME_TAB_ID, cornerRadius: 9 });
-      expect(slot.props.cornerRadius).toBe(9);
+      const slot = renderer!.root.findByProps({ tabId: TEST_RUNTIME_TAB_ID, cornerRadius: 8 });
+      expect(slot.props.cornerRadius).toBe(8);
       expect(slot.props.tabId).toBe(TEST_RUNTIME_TAB_ID);
       const frame = slot.parent!;
       expect(frame.props.className).toContain("min-h-0 flex-1");

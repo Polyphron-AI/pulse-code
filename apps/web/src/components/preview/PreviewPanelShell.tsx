@@ -33,6 +33,7 @@ interface PreviewPanelShellProps {
   widthStorageKey?: string;
   /** Overrides the initial width (px) before the user has resized the panel. */
   defaultWidth?: number;
+  transparent?: boolean;
   children: ReactNode;
 }
 
@@ -109,7 +110,8 @@ function PreviewPanelShellFrame(
     <div
       ref={hostRef}
       className={cn(
-        "relative flex h-full min-h-0 min-w-0 max-w-full flex-col self-stretch bg-background",
+        "relative flex h-full min-h-0 min-w-0 max-w-full flex-col self-stretch",
+        !props.transparent && "bg-background",
         isInline
           ? maximized
             ? "flex-1 border-l border-border"

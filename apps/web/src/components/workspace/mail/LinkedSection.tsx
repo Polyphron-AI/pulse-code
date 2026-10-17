@@ -39,6 +39,7 @@ import { SuggestedSection } from "../SuggestedSection";
 import { WorkspaceResourcesContext } from "../workspaceResourceState";
 import { useRightPanelStore } from "../../../rightPanelStore";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { isPreviewSupportedInRuntime } from "../../../previewStateStore";
 
 interface LinkedSectionProps {
   readonly mode?: "context" | "legacy";
@@ -113,18 +114,28 @@ export function LinkedSection(props: LinkedSectionProps) {
 /** Opens the one project Browser in Resources, or Code's existing preview outside that host. */
 function BrowserResourceAction(props: LinkedSectionProps) {
   const resources = useContext(WorkspaceResourcesContext);
-  const thread = useThreadShell(
-    props.item.type === "thread" ? scopeThreadRef(props.environmentId, props.item.threadId) : null,
-  );
+  const threadRef =
+    props.item.type === "thread" ? scopeThreadRef(props.environmentId, props.item.threadId) : null;
+  const thread = useThreadShell(threadRef);
   const hasResources = resources?.environmentId === props.environmentId;
   const projectId =
     props.item.type === "project"
       ? props.item.projectId
-      : (thread?.projectId ?? (hasResources ? resources.projectId : null));
+      : threadRef
+        ? (thread?.projectId ?? null)
+        : hasResources
+          ? resources.projectId
+          : null;
   return hasResources ? (
     <Button
       size="xs"
       variant="ghost"
+      disabled={threadRef !== null && thread === null}
+      title={
+        threadRef !== null && thread === null
+          ? "The conversation's project is not available yet."
+          : undefined
+      }
       onClick={() => {
         if (projectId) resources.openResource({ tab: "browser", projectId });
         else {
@@ -135,15 +146,12 @@ function BrowserResourceAction(props: LinkedSectionProps) {
     >
       Open Browser in Resources
     </Button>
-  ) : props.item.type === "thread" ? (
+  ) : threadRef && isPreviewSupportedInRuntime() ? (
     <Button
       size="xs"
       variant="ghost"
       onClick={() => {
-        if (props.item.type === "thread")
-          useRightPanelStore
-            .getState()
-            .open(scopeThreadRef(props.environmentId, props.item.threadId), "preview");
+        useRightPanelStore.getState().open(threadRef, "preview");
       }}
     >
       Open Code preview

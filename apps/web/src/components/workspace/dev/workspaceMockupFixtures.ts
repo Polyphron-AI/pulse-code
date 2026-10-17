@@ -99,6 +99,7 @@ export interface WorkspaceMockupSession {
   readonly id: WorkspaceMockupId;
   readonly taskState: WorkspaceTasksMockupState | null;
   readonly calendarState: WorkspaceCalendarMockupState | null;
+  readonly browserState: "external" | null;
   readonly environmentId: EnvironmentId;
   readonly resourceProjectId: ProjectId;
   readonly recipe: WorkspaceMockupRecipe;
@@ -838,7 +839,8 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
       ((id === "03" || id === "08") &&
         workspaceTasksMockupStates.some((value) => value === state)) ||
       (id === "08" && workspaceCalendarMockupStates.some((value) => value === state)) ||
-      (id === "07" && workspaceCalendarHandoffMockupStates.some((value) => value === state))
+      (id === "07" && workspaceCalendarHandoffMockupStates.some((value) => value === state)) ||
+      (id === "05" && state === "external")
     )
   )
     throw new Error("Unknown fixture state.");
@@ -855,6 +857,7 @@ export function createWorkspaceMockupSession(
   id: WorkspaceMockupId,
   taskState: WorkspaceTasksMockupState | null = null,
   calendarState: WorkspaceCalendarMockupState | null = null,
+  browserState: "external" | null = null,
 ): WorkspaceMockupSession {
   if (!Object.hasOwn(workspaceMockupRecipes, id)) throw new Error("Unknown fixture.");
   const seed = createWorkspaceMockupSeed();
@@ -886,6 +889,7 @@ export function createWorkspaceMockupSession(
     id,
     taskState,
     calendarState,
+    browserState,
     environmentId: seed.environmentId,
     resourceProjectId: seed.resourceProjectId,
     recipe:

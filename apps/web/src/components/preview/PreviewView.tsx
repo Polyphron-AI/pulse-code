@@ -79,6 +79,7 @@ import {
 } from "~/browser/browserRecording";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { cn } from "~/lib/utils";
 
 export type PreviewChromeRenderer = (
   controls: ComponentProps<typeof PreviewChromeRow>,
@@ -774,13 +775,16 @@ export function PreviewView({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col bg-background"
+      className={cn("flex min-h-0 flex-1 flex-col", !renderChrome && "bg-background")}
       data-thread-key={scopedThreadKey(threadRef)}
     >
       {renderChrome ? renderChrome(chromeProps) : <PreviewChromeRow {...chromeProps} />}
 
       <div
-        className={`relative min-h-0 flex-1 overflow-hidden${surfaceCornerRadius ? " border border-border" : ""}`}
+        className={cn(
+          "relative min-h-0 flex-1 overflow-hidden",
+          surfaceCornerRadius && "border border-border",
+        )}
         style={surfaceCornerRadius ? { borderRadius: surfaceCornerRadius } : undefined}
       >
         {runtimeTabId && snapshot && !showEmptyState ? (
@@ -788,7 +792,7 @@ export function PreviewView({
             key={runtimeTabId}
             tabId={runtimeTabId}
             visible={visible && !isUnreachable}
-            cornerRadius={surfaceCornerRadius}
+            cornerRadius={Math.max(0, surfaceCornerRadius - 1)}
             className="absolute inset-0 h-full w-full"
           />
         ) : null}

@@ -335,6 +335,7 @@ export async function startWorkspaceMockup(): Promise<void> {
             nextId === "07" || nextId === "08"
               ? (workspaceCalendarMockupStates.find((value) => value === state) ?? null)
               : null,
+            nextId === "05" && state === "external" ? "external" : null,
           );
           const current = session;
           if (!current.recipe) throw new Error("Unknown fixture.");
@@ -463,7 +464,7 @@ export async function startWorkspaceMockup(): Promise<void> {
             version: 1,
             fixtureId: current.id,
             referencePng: current.recipe.png,
-            route: `${current.recipe.route}${current.taskState || current.calendarState ? `&state=${current.taskState ?? current.calendarState}` : ""}${light ? "&theme=light" : ""}`,
+            route: `${current.recipe.route}${current.taskState || current.calendarState ? `&state=${current.taskState ?? current.calendarState}` : current.browserState ? "&state=external" : ""}${light ? "&theme=light" : ""}`,
             viewport: { ...context.viewport },
             locale: current.locale,
             timeZone: current.timeZone,

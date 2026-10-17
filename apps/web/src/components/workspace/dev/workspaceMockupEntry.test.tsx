@@ -6,6 +6,18 @@ import { getByRole } from "@testing-library/dom";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 
+// Warm the dynamic fixture graph during collection, outside test and hook deadlines.
+import "./WorkspaceMockupApp";
+import "./mailMockupModule";
+import "./communicationsMockupModule";
+import "./tasksMockupModule";
+import "./projectsMockupModule";
+import "./driveMockupModule";
+import "./calendarMockupModule";
+import "./notesMockupModule";
+import "./browserMockupModule";
+import "./agentsMockupModule";
+
 const main = vi.hoisted(() => vi.fn());
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -123,6 +135,40 @@ it.each([
     await act(() => iframe.dispatchEvent(new Event("load")));
     const opened = await capture.ready();
     expect(opened.manifest).toMatchObject({ fixtureId: "05", networkRequests: 0 });
+  },
+);
+
+it.each([
+  [1280, 800],
+  [1024, 800],
+  [390, 844],
+])(
+  "settles the external Browser fixture at %ix%i without an iframe or live opening",
+  async (width, height) => {
+    const dom = (
+      window as unknown as {
+        happyDOM: {
+          setWindowSize: (size: { width: number; height: number }) => void;
+          setURL: (url: string) => void;
+        };
+      }
+    ).happyDOM;
+    dom.setWindowSize({ width, height });
+    dom.setURL("http://fixture.invalid/workspace?space=communications&fixture=05&state=external");
+    const capture = await boot();
+    capture.configureCapture({
+      ...host,
+      viewport: { width, height, deviceScaleFactor: 1, zoom: 1 },
+    });
+    expect((await capture.ready()).manifest).toMatchObject({ fixtureId: "05", networkRequests: 0 });
+    expect((await capture.ready()).manifest.route).toContain("state=external");
+    if (width < 1280)
+      await act(() => getByRole(document.body, "button", { name: "Resources" }).click());
+    expect(
+      getByRole(document.body, "region", { name: "External-tab Browser" }).textContent,
+    ).toContain("Paste an http or https address");
+    expect(document.querySelector("iframe")).toBeNull();
+    expect((await capture.ready()).manifest).toMatchObject({ fixtureId: "05", networkRequests: 0 });
   },
 );
 

@@ -13,6 +13,15 @@ const isLinkId = Schema.is(WorkspaceLinkId);
 const isEndpoint = Schema.is(WorkspaceLinkEndpoint);
 const isOrigin = Schema.is(WorkspaceLinkOrigin);
 
+it("admits the external Browser state only for the dev Browser recipe", () => {
+  const url = (id: string, state = "external") =>
+    new URL(`http://fixture.invalid/workspace?fixture=${id}&state=${state}`);
+  expect(parseWorkspaceMockupRequest(url("05"), true)).toBe("05");
+  expect(parseWorkspaceMockupRequest(url("05"), false)).toBeNull();
+  expect(() => parseWorkspaceMockupRequest(url("01"), true)).toThrow("Unknown task fixture state.");
+  expect(() => parseWorkspaceMockupRequest(url("05", "unknown"), true)).toThrow();
+});
+
 it("resets memory and keeps Tuesday fixed after host time advances", async () => {
   vi.useFakeTimers();
   try {
