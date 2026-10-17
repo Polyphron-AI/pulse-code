@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, StrictMode, useLayoutEffect, type ComponentProps } from "react";
+import { act, StrictMode, useLayoutEffect, type ComponentProps, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
@@ -11,8 +11,11 @@ import {
   EnvironmentId,
   ProjectId,
   ThreadId,
+  WorkspaceLinkList,
+  type WorkspaceLinkEndpoint,
   type PreviewSessionSnapshot,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import {
   applyPreviewServerEvent,
   applyPreviewServerSnapshot,
@@ -35,6 +38,10 @@ import {
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { createWorkspaceMockupModule } from "./dev/browserMockupModule";
 import { createWorkspaceMockupSession } from "./dev/workspaceMockupFixtures";
+import { LinkedSection } from "./mail/LinkedSection";
+import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
+
+const decodeLinkList = Schema.decodeUnknownSync(WorkspaceLinkList);
 
 const mocks = vi.hoisted(() => ({
   desktop: true,
@@ -56,23 +63,69 @@ const mocks = vi.hoisted(() => ({
   realLocalApi: false,
   linksSupported: true,
   capabilitiesReady: true,
+  projectLinks: null as WorkspaceLinkList | null,
+  linkQueries: vi.fn(),
+  linkEnvironment: vi.fn(),
+  unlink: vi.fn(),
+  actionItems: vi.fn(),
+}));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("../../state/workspaceLinks", () => ({
+  workspaceLinks: {
+    list: (input: unknown) => {
+      mocks.linkQueries(input);
+      return "links";
+    },
+  },
+}));
+vi.mock("./WorkspaceItemActions", () => ({
+  WorkspaceItemActions: ({
+    item,
+    environmentId,
+  }: {
+    item: WorkspaceLinkEndpoint;
+    environmentId: EnvironmentId;
+  }) => {
+    mocks.actionItems({ item, environmentId });
+    return <button>Start thread from {item.title}</button>;
+  },
+  WorkspaceItemMenu: ({
+    children,
+    provenance,
+    item,
+    environmentId,
+  }: {
+    children: ReactNode;
+    provenance?: ReactNode;
+    item: WorkspaceLinkEndpoint;
+    environmentId: EnvironmentId;
+  }) => (
+    <div data-page-menu={JSON.stringify({ item, environmentId })}>
+      {children}
+      {provenance}
+    </div>
+  ),
 }));
 vi.mock("../../state/entities", () => ({
+  useProjects: () => [],
+  useAllEnvironmentProjectSnapshotsReady: () => true,
   useThreadShell: (ref: { environmentId: string; threadId: string } | null) =>
     [
+      { id: "t", projectId: "p", environmentId: "other" },
       { id: "t-other-env", projectId: "p", environmentId: "other" },
       { id: "t-chat-project", projectId: "q", environmentId: "remote" },
       { id: "t", projectId: "p", environmentId: "remote" },
     ].find((thread) => thread.id === ref?.threadId && thread.environmentId === ref.environmentId) ??
     null,
   useThreadShells: () => [
-    { id: "t-other-env", projectId: "p", environmentId: "other" },
-    { id: "t-chat-project", projectId: "q", environmentId: "remote" },
-    { id: "t", projectId: "p", environmentId: "remote" },
+    { id: "t", projectId: "p", environmentId: "other", title: "Colliding Browser thread" },
+    { id: "t-other-env", projectId: "p", environmentId: "other", title: "Other thread" },
+    { id: "t-chat-project", projectId: "q", environmentId: "remote", title: "Chat thread" },
+    { id: "t", projectId: "p", environmentId: "remote", title: "Browser thread" },
   ],
 }));
 vi.mock("../../state/environments", () => ({
-  useConnectedEnvironmentIds: () => (mocks.connected ? ["remote"] : []),
+  useConnectedEnvironmentIds: () => (mocks.connected ? ["remote", "other"] : []),
 }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: {
@@ -96,7 +149,9 @@ vi.mock("../../state/query", () => ({
     data:
       input === "config"
         ? { browserThreadId: mocks.configured ? mocks.configuredThread : "missing" }
-        : null,
+        : input === "links"
+          ? mocks.projectLinks
+          : null,
     error: input === "preview" ? mocks.readError : input === "config" ? mocks.configError : null,
     refresh: mocks.refresh,
   }),
@@ -119,7 +174,15 @@ vi.mock("../../localApi", async (original) => {
       mocks.realLocalApi ? actual.createLocalApi() : { shell: { openExternal: mocks.external } },
   };
 });
-vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: mocks.link }) }));
+vi.mock("./mail/useMailLinks", () => ({
+  useMailLinks: (environmentId: EnvironmentId) => ({
+    linkItem: (a: WorkspaceLinkEndpoint, b: WorkspaceLinkEndpoint) => {
+      mocks.linkEnvironment(environmentId);
+      return mocks.link(a, b);
+    },
+    unlink: mocks.unlink,
+  }),
+}));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
     workspaceLinks: mocks.linksSupported,
@@ -198,10 +261,12 @@ const storage = { getItem: () => null, setItem() {} };
 function ResourceApp({
   initialRequest = null,
   engagement = false,
+  linked = false,
   onOpen = props.onOpen,
 }: {
   initialRequest?: ComponentProps<typeof WorkspaceBrowser>["request"];
   engagement?: boolean;
+  linked?: boolean;
   onOpen?: ComponentProps<typeof WorkspaceBrowser>["onOpen"];
 }) {
   const wide = useMediaQuery("xl");
@@ -213,6 +278,9 @@ function ResourceApp({
     resourceState = state;
   }, [state]);
   const { openResource } = state;
+  const openLinked = useWorkspaceItemOpener(environmentId, {
+    openPage: (ref) => openResource({ tab: "browser", projectId: props.projectId, request: ref }),
+  });
   useLayoutEffect(() => {
     if (initialRequest)
       openResource({ tab: "browser", projectId: props.projectId, request: initialRequest });
@@ -221,6 +289,15 @@ function ResourceApp({
   return (
     <AppAtomRegistryProvider>
       <WorkspaceResourcesProvider value={state}>
+        {linked ? (
+          <LinkedSection
+            environmentId={environmentId}
+            item={selectedItem.ref}
+            title={selectedItem.title}
+            mode="context"
+            onOpen={openLinked}
+          />
+        ) : null}
         {engagement ? (
           <WorkspaceEngagement
             environmentId={environmentId}
@@ -255,6 +332,13 @@ beforeEach(() => {
   mocks.realLocalApi = false;
   mocks.linksSupported = true;
   mocks.capabilitiesReady = true;
+  mocks.link.mockReset().mockResolvedValue(undefined);
+  mocks.unlink.mockReset().mockResolvedValue(undefined);
+  mocks.projectLinks = decodeLinkList({
+    linked: [],
+    suggested: [],
+    truncated: false,
+  });
   (
     window as unknown as {
       happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
@@ -303,6 +387,281 @@ const clickText = async (label: string) =>
       .find((button) => button.props.children === label)!
       .props.onClick(),
   );
+
+it("searches only this resource project's loaded direct linked pages", async () => {
+  mocks.desktop = false;
+  mocks.projectLinks = decodeLinkList({
+    linked: [
+      {
+        id: "wl_00000000-0000-0000-0000-000000000001",
+        item: {
+          ref: { type: "url", url: "https://example.test/handbook?utm_source=demo#intro" },
+          title: "Project handbook",
+        },
+        status: "confirmed",
+        source: { type: "user" },
+        updatedAt: "2026-10-13T09:00:00.000Z",
+      },
+    ],
+    suggested: [],
+    truncated: true,
+  });
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  const input = getByRole(node, "textbox", { name: "Browser page address" });
+  await act(() => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(input, "HANDBOOK");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(() =>
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  const results = getByRole(document.body, "dialog", { name: "Linked pages" });
+  expect(getByRole(results, "list").textContent).toContain("Project handbook");
+  expect(results.textContent).toContain("Only loaded linked pages are searched.");
+  expect(mocks.linkQueries).toHaveBeenLastCalledWith({
+    environmentId,
+    input: { item: { type: "project", projectId: props.projectId } },
+  });
+  expect(mocks.external).not.toHaveBeenCalled();
+  expect(mocks.open).not.toHaveBeenCalled();
+  await act(() => getByRole(results, "button", { name: "Open Project handbook" }).click());
+  expect(mocks.external).toHaveBeenCalledExactlyOnceWith(
+    "https://example.test/handbook?utm_source=demo#intro",
+  );
+  expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
+});
+
+it("links the captured page to the captured target after navigation", async () => {
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  mocks.link.mockImplementationOnce(() => pending);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  const render = (overrides: Partial<ComponentProps<typeof WorkspaceBrowser>> = {}) =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} {...overrides} />
+      </AppAtomRegistryProvider>,
+    );
+  await act(() => render());
+  await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+  await act(() => getByRole(document.body, "button", { name: "Link this page" }).click());
+  const original = structuredClone(mocks.link.mock.calls[0]);
+  expect(original).toEqual([
+    selectedItem,
+    { ref: { type: "url", url: "https://example.test/page" }, title: "Original page" },
+  ]);
+  const link = getByRole(document.body, "button", { name: "Link this page" });
+  expect(link.hasAttribute("disabled")).toBe(true);
+  expect(document.body.textContent).toContain("This page is already being linked.");
+  await act(() => {
+    applyPreviewServerSnapshot(threadRef, {
+      ...snapshot,
+      navStatus: { _tag: "Success", url: "https://changed.test/", title: "Changed page" },
+    });
+    render({ selectedItem: { ...selectedItem, title: "Another target" } });
+  });
+  await act(() =>
+    applyPreviewServerSnapshot(
+      { environmentId: EnvironmentId.make("other"), threadId: threadRef.threadId },
+      {
+        ...snapshot,
+        navStatus: {
+          _tag: "Success",
+          url: "https://other.test/",
+          title: "Same IDs in another environment",
+        },
+      },
+    ),
+  );
+  await act(() =>
+    render({
+      environmentId: EnvironmentId.make("other"),
+      selectedItem: { ...selectedItem, title: "Colliding target" },
+    }),
+  );
+  await act(() => finish());
+  expect(mocks.link.mock.calls[0]).toEqual(original);
+  expect(mocks.linkEnvironment.mock.calls).toEqual([[environmentId]]);
+  expect(mocks.link).toHaveBeenCalledOnce();
+});
+
+it.each(["Loading", "LoadFailed"] as const)("disables Link with a named %s reason", async (tag) => {
+  applyPreviewServerSnapshot(threadRef, {
+    ...snapshot,
+    navStatus: {
+      ...snapshot.navStatus,
+      _tag: tag,
+      description: "Failed",
+      code: -1,
+    },
+  });
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+  expect(
+    getByRole(document.body, "button", { name: "Link this page" }).hasAttribute("disabled"),
+  ).toBe(true);
+  expect(document.body.textContent).toContain(
+    tag === "Loading"
+      ? "Wait for this page to finish loading before linking."
+      : "This page failed to load. Reload it before linking.",
+  );
+});
+
+it("opens a real Linked row into the existing scoped Browser and exposes a gated address", async () => {
+  mocks.operate = false;
+  const raw = "https://example.test/handbook?id=7&utm_source=demo#intro";
+  mocks.projectLinks = decodeLinkList({
+    linked: [
+      {
+        id: "wl_00000000-0000-0000-0000-000000000001",
+        item: { ref: { type: "url", url: raw }, title: "Project handbook" },
+        status: "confirmed",
+        source: { type: "user" },
+        updatedAt: "2026-10-13T09:00:00.000Z",
+      },
+    ],
+    suggested: [],
+    truncated: false,
+  });
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() => root!.render(<ResourceApp linked />));
+  await act(() => getByRole(node!, "button", { name: "url: Project handbook" }).click());
+  expect(resourceState.request).toEqual({ type: "url", url: raw });
+  expect(
+    (getByRole(node!, "textbox", { name: "Browser page address" }) as HTMLInputElement).value,
+  ).toBe(raw);
+  expect(mocks.open).not.toHaveBeenCalled();
+  expect(mocks.external).not.toHaveBeenCalled();
+  await act(() => getByRole(node!, "button", { name: "Open in new tab" }).click());
+  expect(mocks.external).toHaveBeenCalledExactlyOnceWith(raw);
+  mocks.operate = true;
+  await act(() => root!.render(<ResourceApp linked onOpen={() => {}} />));
+  expect(resourceState.request).toBeNull();
+  expect(mocks.open).toHaveBeenCalledExactlyOnceWith({
+    environmentId,
+    input: { threadId: "t", url: raw, profileId: "work", viewport: { _tag: "fill" } },
+  });
+});
+
+it("freezes the page menu and target until close after navigation and selection change", async () => {
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  const render = (title: string) =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} selectedItem={{ ...selectedItem, title }} />
+      </AppAtomRegistryProvider>,
+    );
+  await act(() => render("Original target"));
+  await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+  await act(() => {
+    render("Later target");
+    applyPreviewServerSnapshot(threadRef, {
+      ...snapshot,
+      navStatus: { _tag: "Success", url: "https://later.test/", title: "Later page" },
+    });
+  });
+  expect(getByRole(document.body, "dialog", { name: "Browser actions" }).textContent).toContain(
+    "Link to Original target",
+  );
+  expect(mocks.actionItems).toHaveBeenLastCalledWith({
+    environmentId,
+    item: { ref: { type: "url", url: snapshot.navStatus.url }, title: "Original page" },
+  });
+  await act(() => getByRole(document.body, "button", { name: "Link this page" }).click());
+  expect(mocks.link).toHaveBeenLastCalledWith(
+    { ...selectedItem, title: "Original target" },
+    { ref: { type: "url", url: snapshot.navStatus.url }, title: "Original page" },
+  );
+  await act(() =>
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+  expect(getByRole(document.body, "dialog", { name: "Browser actions" }).textContent).toContain(
+    "Link to Later target",
+  );
+  expect(mocks.actionItems).toHaveBeenLastCalledWith({
+    environmentId,
+    item: { ref: { type: "url", url: "https://later.test/" }, title: "Later page" },
+  });
+});
+
+it("clears an empty search and reports no matches without opening a page", async () => {
+  mocks.desktop = false;
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  const input = getByRole(node, "textbox", { name: "Browser page address" });
+  const edit = (value: string) => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      value,
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  await act(() => edit("No matching pages"));
+  await act(() =>
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(getByRole(document.body, "dialog", { name: "Linked pages" }).textContent).toContain(
+    "No linked pages match. Paste an http or https address to open a page.",
+  );
+  await act(() => edit(""));
+  expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
+  expect(queryByRole(document.body, "alert")).toBeNull();
+  expect(mocks.external).not.toHaveBeenCalled();
+  expect(mocks.open).not.toHaveBeenCalled();
+});
+
+it("opens a directly entered native URL with its query and fragment intact", async () => {
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  await mount();
+  await setAddress(" https://example.test/page?id=7&utm_source=demo#intro ");
+  await submit();
+  expect(mocks.open.mock.calls[0]![0].input.url).toBe(
+    "https://example.test/page?id=7&utm_source=demo#intro",
+  );
+});
 
 it("keeps the pasted link target when external opening is blocked", async () => {
   mocks.desktop = false;
@@ -489,21 +848,18 @@ it("retains a draft through linked-context hiding and preview-read error remount
   expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/half-typed");
 });
 
-it.each([
-  "javascript:alert(1)",
-  "file:///secret",
-  "",
-  `https://example.test/${"x".repeat(2048)}`,
-  "project design notes",
-])("rejects unsafe addresses: %s", async (address) => {
-  mocks.desktop = false;
-  await mount();
-  await setAddress(address);
-  await submit();
-  expect(mocks.external).not.toHaveBeenCalled();
-  expect(mocks.open).not.toHaveBeenCalled();
-  expect(text()).toContain("Enter an http or https address.");
-});
+it.each(["javascript:alert(1)", "file:///secret", `https://example.test/${"x".repeat(2048)}`])(
+  "rejects unsafe addresses: %s",
+  async (address) => {
+    mocks.desktop = false;
+    await mount();
+    await setAddress(address);
+    await submit();
+    expect(mocks.external).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(text()).toContain("Enter an http or https address.");
+  },
+);
 
 it("pasting a new address replaces only the external link target", async () => {
   mocks.desktop = false;
@@ -1253,7 +1609,12 @@ it.each(["denied", "disconnected"])("does not open or link when %s", async (reas
   expect(mocks.previewMounts).toBe(0);
   expect(mocks.open).not.toHaveBeenCalled();
   expect(mocks.link).not.toHaveBeenCalled();
-  expect(renderer!.root.findAllByProps({ children: "Link this page" })).toHaveLength(0);
+  expect(
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Link this page")!.props.disabled,
+  ).toBe(true);
+  expect(renderer!.root.findByType("input").props.value).toBe(snapshot.navStatus.url);
 });
 
 it("opens a requested address in the resource project while the selected chat belongs elsewhere", async () => {

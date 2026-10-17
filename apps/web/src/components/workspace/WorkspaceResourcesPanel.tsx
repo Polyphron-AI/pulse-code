@@ -111,7 +111,6 @@ export function WorkspaceProjectResources({
       environmentId={state.environmentId}
       selectedItem={selectedItem}
       owningProjectId={owningProjectId}
-      onOpen={open}
     />
   );
 }
@@ -119,12 +118,10 @@ function ResolvedProjectResources({
   environmentId,
   selectedItem,
   owningProjectId,
-  onOpen,
 }: {
   readonly environmentId: EnvironmentId;
   readonly selectedItem: WorkspaceLinkEndpoint | null;
   readonly owningProjectId: ProjectId | undefined;
-  readonly onOpen: (ref: WorkspaceItemRef) => void;
 }): ReactNode {
   const state = useWorkspaceResources();
   const projects = useProjects();
@@ -163,6 +160,19 @@ function ResolvedProjectResources({
         ),
       })
     : null;
+  const open = useWorkspaceItemOpener(
+    environmentId,
+    project?.kind === "selected"
+      ? {
+          openPage: (ref) =>
+            state.openResource({
+              tab: "browser",
+              projectId: project.scope.projectId,
+              request: ref,
+            }),
+        }
+      : {},
+  );
   return (
     <>
       <WorkspaceResourcesPanel
@@ -170,7 +180,7 @@ function ResolvedProjectResources({
         project={project}
         projects={projects.filter((candidate) => candidate.environmentId === environmentId)}
         selectedItem={selectedItem}
-        onOpen={onOpen}
+        onOpen={open}
         footer={
           project?.kind === "selected" ? (
             <WorkspaceResourceFooter

@@ -15,6 +15,7 @@ import { getThreadSortTimestamp, sortThreads } from "../lib/threadSort";
 import { normalizeSearchText } from "../lib/utils";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { type Project, type SidebarThreadSummary, type Thread } from "../types";
+import { workspaceActionButton } from "./workspace/WorkspaceNativeActions.logic";
 
 export const RECENT_THREAD_LIMIT = 12;
 export const ITEM_ICON_CLASS = "size-4 text-icon-muted";
@@ -33,7 +34,7 @@ export function buildWorkspaceActionItems(icon: ReactNode): CommandPaletteAction
       ["linkedContext", "Linked context", "workspace.linkedContext"],
     ] as const
   ).flatMap(([action, title, command]) => {
-    const button = document.querySelector<HTMLButtonElement>(`[data-workspace-action="${action}"]`);
+    const button = workspaceActionButton(action);
     return button && !button.disabled
       ? [
           {

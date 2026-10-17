@@ -39,13 +39,25 @@ export function parseTaskLocation(raw: string | undefined) {
   }
 }
 
+type WorkspaceOpenOptions = {
+  openPage?: (ref: Extract<WorkspaceItemRef, { type: "url" }>) => void;
+};
+
 /** Open an item in its own environment, preserving the exact source-message reference. */
-export function useWorkspaceItemOpener(environmentId: EnvironmentId | null) {
+export function useWorkspaceItemOpener(
+  environmentId: EnvironmentId | null,
+  options: WorkspaceOpenOptions = {},
+) {
+  const { openPage } = options;
   const navigate = useNavigate();
   const { workspaceTasksV2 } = useMailCapabilities(environmentId ?? undefined);
   return useCallback(
     (ref: WorkspaceItemRef) => {
       if (environmentId === null) return;
+      if (ref.type === "url" && openPage) {
+        openPage(ref);
+        return;
+      }
       if (ref.type === "thread")
         void navigate({
           to: "/$environmentId/$threadId",
@@ -111,7 +123,7 @@ export function useWorkspaceItemOpener(environmentId: EnvironmentId | null) {
             : `https://drive.google.com/file/d/${encodeURIComponent(ref.fileId)}/view`,
         );
     },
-    [environmentId, navigate, workspaceTasksV2],
+    [environmentId, navigate, workspaceTasksV2, openPage],
   );
 }
 

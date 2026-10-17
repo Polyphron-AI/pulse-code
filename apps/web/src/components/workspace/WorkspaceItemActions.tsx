@@ -5,6 +5,7 @@ import {
   type EnvironmentId,
   type WorkspaceLinkEndpoint,
   type ScopedProjectRef,
+  type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useRouter } from "@tanstack/react-router";
@@ -44,10 +45,32 @@ import { MailDraftReply } from "./mail/MailDraftReply";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
+import { workspaceActionButton } from "./WorkspaceNativeActions.logic";
 
 const WorkspaceAutomationEditor = lazy(() => import("./WorkspaceAutomationEditor"));
 
 const EMPTY_CONFIRMED: ReadonlyArray<WorkspaceLinkEndpoint> = [];
+
+function dispatchWorkspaceShortcut(event: KeyboardEvent, keybindings: ResolvedKeybindingsConfig) {
+  if (event.defaultPrevented || event.repeat) return;
+  const command = resolveShortcutCommand(event, keybindings, {
+    context: { terminalFocus: isTerminalFocused(), editableFocus: isEditableFocused() },
+  });
+  const action =
+    command === "workspace.startThread"
+      ? "startThread"
+      : command === "workspace.addToProject"
+        ? "addToProject"
+        : command === "workspace.startAutomation"
+          ? "startAutomation"
+          : command === "workspace.startProject"
+            ? "startProject"
+            : null;
+  const button = action === null ? null : workspaceActionButton(action);
+  if (button === null || !button.isConnected || button.disabled) return;
+  event.preventDefault();
+  button.click();
+}
 
 /** Shared header, keyboard, touch and context-menu entrances into item actions. */
 type ItemActionProps = {
@@ -124,23 +147,7 @@ function AvailableWorkspaceItemActions({
   useEffect(() => {
     if (!shortcuts) return;
     const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat) return;
-      const command = resolveShortcutCommand(event, keybindings, {
-        context: { terminalFocus: isTerminalFocused(), editableFocus: isEditableFocused() },
-      });
-      const button =
-        command === "workspace.startThread"
-          ? threadButton.current
-          : command === "workspace.addToProject"
-            ? addButton.current
-            : command === "workspace.startAutomation"
-              ? automationButton.current
-              : command === "workspace.startProject"
-                ? projectButton.current
-                : null;
-      if (button === null || !button.isConnected || button.disabled) return;
-      event.preventDefault();
-      button.click();
+      dispatchWorkspaceShortcut(event, keybindings);
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
@@ -300,6 +307,16 @@ function AvailableWorkspaceItemActions({
   return (
     <div
       className="flex flex-wrap items-center gap-2"
+      data-workspace-action-host={shortcuts ? "selected" : "item"}
+      onFocusCapture={(event) => {
+        document
+          .querySelector("[data-workspace-action-focused]")
+          ?.removeAttribute("data-workspace-action-focused");
+        event.currentTarget.setAttribute("data-workspace-action-focused", "");
+      }}
+      onKeyDown={
+        shortcuts ? undefined : (event) => dispatchWorkspaceShortcut(event.nativeEvent, keybindings)
+      }
       onContextMenu={(event) => {
         event.preventDefault();
         const menu = readLocalApi()?.contextMenu;
@@ -361,7 +378,7 @@ function AvailableWorkspaceItemActions({
         <TooltipTrigger render={<span />}>
           <Button
             ref={threadButton}
-            data-workspace-action={shortcuts ? "startThread" : undefined}
+            data-workspace-action="startThread"
             size="sm"
             variant="outline"
             disabled={
@@ -383,7 +400,7 @@ function AvailableWorkspaceItemActions({
           <TooltipTrigger render={<span />}>
             <Button
               ref={addButton}
-              data-workspace-action={shortcuts ? "addToProject" : undefined}
+              data-workspace-action="addToProject"
               size="sm"
               variant="ghost"
               disabled={busy || !canOperate}
@@ -402,7 +419,7 @@ function AvailableWorkspaceItemActions({
           <TooltipTrigger render={<span />}>
             <Button
               ref={projectButton}
-              data-workspace-action={shortcuts ? "startProject" : undefined}
+              data-workspace-action="startProject"
               size="sm"
               variant="ghost"
               disabled={busy || !canOperate}
@@ -422,7 +439,7 @@ function AvailableWorkspaceItemActions({
       {!onlyStartThread ? (
         <Button
           ref={automationButton}
-          data-workspace-action={shortcuts ? "startAutomation" : undefined}
+          data-workspace-action="startAutomation"
           size="sm"
           variant="ghost"
           disabled={busy || !canOperate || !capability.workspaceTools || links.data === null}

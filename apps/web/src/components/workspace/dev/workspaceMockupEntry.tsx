@@ -6,6 +6,7 @@ import {
   parseWorkspaceMockupRequest,
   workspaceTasksMockupStates,
   workspaceCalendarMockupStates,
+  workspaceBrowserMockupStates,
 } from "./workspaceMockupFixtures";
 import type {
   CreateWorkspaceMockupModule,
@@ -335,7 +336,9 @@ export async function startWorkspaceMockup(): Promise<void> {
             nextId === "07" || nextId === "08"
               ? (workspaceCalendarMockupStates.find((value) => value === state) ?? null)
               : null,
-            nextId === "05" && state === "external" ? "external" : null,
+            nextId === "05"
+              ? (workspaceBrowserMockupStates.find((value) => value === state) ?? null)
+              : null,
           );
           const current = session;
           if (!current.recipe) throw new Error("Unknown fixture.");
@@ -464,7 +467,7 @@ export async function startWorkspaceMockup(): Promise<void> {
             version: 1,
             fixtureId: current.id,
             referencePng: current.recipe.png,
-            route: `${current.recipe.route}${current.taskState || current.calendarState ? `&state=${current.taskState ?? current.calendarState}` : current.browserState ? "&state=external" : ""}${light ? "&theme=light" : ""}`,
+            route: `${current.recipe.route}${current.taskState || current.calendarState || current.browserState ? `&state=${current.taskState ?? current.calendarState ?? current.browserState}` : ""}${light ? "&theme=light" : ""}`,
             viewport: { ...context.viewport },
             locale: current.locale,
             timeZone: current.timeZone,

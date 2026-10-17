@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { act, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
+import { act, useEffect, useLayoutEffect, useSyncExternalStore, type ComponentProps } from "react";
+import type { PreviewPanel } from "../preview/PreviewPanel";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { EnvironmentId, ProjectId, type WorkspaceLinkEndpoint } from "@t3tools/contracts";
@@ -38,7 +39,10 @@ vi.mock("../../state/entities", () => ({
   useProjects: () => boundary.projects,
   useThreadShells: () =>
     boundary.desktop ? [{ environmentId: "a", projectId: "same", id: "browser-thread" }] : [],
-  useThreadShell: () => null,
+  useThreadShell: (ref: { environmentId: string; threadId: string } | null) =>
+    boundary.desktop && ref?.threadId === "browser-thread"
+      ? { environmentId: ref.environmentId, projectId: "same", id: "browser-thread" }
+      : null,
   useAllEnvironmentProjectSnapshotsReady: () => boundary.ready,
 }));
 vi.mock("../../state/workspaceLinks", () => ({
@@ -109,7 +113,9 @@ vi.mock("./mail/useMailCapabilities", () => ({
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: boundary.link }) }));
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => boundary.command }));
 vi.mock("./useWorkspaceItemOpener", () => ({ useWorkspaceItemOpener: () => boundary.open }));
-vi.mock("../../state/preview", () => ({ previewEnvironment: { open: {} } }));
+vi.mock("../../state/preview", () => ({ previewEnvironment: { open: {}, list: () => "preview" } }));
+vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["a", "b"] }));
+vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => true }));
 vi.mock("../../previewStateStore", () => ({
   isPreviewSupportedInRuntime: () => boundary.desktop,
   useThreadPreviewState: () => ({ snapshot: null }),
@@ -140,14 +146,29 @@ vi.mock("./WorkspaceItemActions", () => ({
 }));
 vi.mock("../preview/openPreviewSession", () => ({ openPreviewSession: boundary.command }));
 vi.mock("../preview/PreviewPanel", () => ({
-  PreviewPanel: () => {
+  PreviewPanel: ({ renderChrome }: ComponentProps<typeof PreviewPanel>) => {
     useEffect(() => {
       boundary.acquire();
       return () => {
         boundary.release();
       };
     }, []);
-    return <p>Preview lease</p>;
+    return (
+      <>
+        {renderChrome?.({
+          url: "",
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          refreshDisabled: true,
+          onBack() {},
+          onForward() {},
+          onRefresh() {},
+          onSubmit: boundary.command,
+        })}
+        <p>Preview lease</p>
+      </>
+    );
   },
 }));
 vi.mock("../../localApi", () => ({
@@ -240,7 +261,7 @@ it("does not write links, start providers or change roots through actual picker 
   await act(async () => {
     await vi.dynamicImportSettled();
   });
-  expect(getByRole(node, "tabpanel").textContent).toContain("Select an item to link this page.");
+  expect(getByRole(node, "tabpanel").textContent).toContain("Select an item to link this page to.");
   expect(
     (getByRole(node, "button", { name: "Link this page" }) as HTMLButtonElement).disabled,
   ).toBe(true);
@@ -370,10 +391,6 @@ it("retains the Browser address while closing its preview across context and com
     );
     address.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(() => getByRole(node, "button", { name: "Open Browser" }).click());
-  await act(async () => {
-    await vi.dynamicImportSettled();
-  });
   expect(boundary.acquire).toHaveBeenCalledTimes(1);
   await act(() => getByRole(node, "button", { name: "Linked context", hidden: true }).click());
   expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
@@ -391,16 +408,13 @@ it("retains the Browser address while closing its preview across context and com
     expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
   }
   await act(() => getByRole(node, "button", { name: "Back to resources" }).click());
-  expect(getByRole(node, "textbox", { name: "Browser page address" })).toBe(address);
-  expect(address.value).toBe("https://example.invalid/keep");
+  expect(
+    (getByRole(node, "textbox", { name: "Browser page address" }) as HTMLInputElement).value,
+  ).toBe("https://example.invalid/keep");
   expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
-  expect(boundary.acquire).toHaveBeenCalledTimes(1);
-  expect(boundary.release).toHaveBeenCalledTimes(1);
-  expect(boundary.command).toHaveBeenCalledTimes(1);
-  await act(() => getByRole(node, "button", { name: "Open Browser" }).click());
-  expect(getByRole(document.body, "dialog", { name: "Project Browser" })).toBeDefined();
   expect(boundary.acquire).toHaveBeenCalledTimes(2);
-  expect(boundary.command).toHaveBeenCalledTimes(2);
+  expect(boundary.release).toHaveBeenCalledTimes(1);
+  expect(boundary.command).not.toHaveBeenCalled();
 });
 it("uses the same mounted shell for local, direct, opaque relay/tunnel, disconnected and old-server states", async () => {
   await mount();

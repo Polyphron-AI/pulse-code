@@ -6,12 +6,16 @@ import { createRoot } from "react-dom/client";
 import { fireEvent, getAllByRole, getByRole } from "@testing-library/dom";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import {
+  compileResolvedKeybindingsConfig,
+  DEFAULT_RESOLVED_KEYBINDINGS,
+} from "@t3tools/shared/keybindings";
 import {
   EnvironmentId,
   ProjectId,
   ThreadId,
   type ScopedProjectRef,
+  type ResolvedKeybindingsConfig,
   type WorkspaceLinkEndpoint,
 } from "@t3tools/contracts";
 import { useComposerDraftStore, type DraftId } from "../../composerDraftStore";
@@ -32,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   contextMenuShow: vi.fn(),
   operate: true,
   pending: false,
+  keybindings: null as ResolvedKeybindingsConfig | null,
   sessionListeners: new Set<() => void>(),
 }));
 vi.mock("../../localApi", () => ({
@@ -59,7 +64,9 @@ vi.mock("../../state/session", () => ({
 vi.mock("@tanstack/react-router", () => ({
   useRouter: () => ({ state: { location: { href: "/workspace" } } }),
 }));
-vi.mock("@effect/atom-react", () => ({ useAtomValue: () => DEFAULT_RESOLVED_KEYBINDINGS }));
+vi.mock("@effect/atom-react", () => ({
+  useAtomValue: () => mocks.keybindings ?? DEFAULT_RESOLVED_KEYBINDINGS,
+}));
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
 vi.mock("../../state/entities", () => ({
   useProjects: () => [
@@ -95,6 +102,7 @@ vi.mock("../ui/popover", () => ({
 beforeEach(() => {
   mocks.operate = true;
   mocks.pending = false;
+  mocks.keybindings = null;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
 afterEach(() => {
@@ -593,6 +601,88 @@ it.each<WorkspaceLinkEndpoint>([
     node.remove();
   }
 });
+
+it.each([true, false])(
+  "dispatches focused page shortcuts and captured palette actions with central host %s",
+  async (centralHost) => {
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const globalListener = vi.spyOn(window, "addEventListener");
+    mocks.keybindings = compileResolvedKeybindingsConfig([
+      { key: "ctrl+alt+q", command: "workspace.addToProject" },
+    ]);
+    mocks.contextMenuShow.mockResolvedValue(choiceId);
+    mocks.linkToProject.mockResolvedValue(undefined);
+    function App({ popup = true }: { popup?: boolean }) {
+      return (
+        <>
+          {centralHost ? (
+            <div data-testid="center">
+              <WorkspaceItemActions environmentId={environmentId} item={a} shortcuts />
+            </div>
+          ) : null}
+          {popup ? (
+            <div data-testid="captured-page">
+              <WorkspaceItemActions environmentId={environmentId} item={b} />
+            </div>
+          ) : null}
+          <input aria-label="Palette search" />
+        </>
+      );
+    }
+    try {
+      await act(() => root.render(<App />));
+      expect(globalListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(
+        centralHost ? 1 : 0,
+      );
+      const pageHost = node.querySelector<HTMLElement>('[data-testid="captured-page"]')!;
+      const pageAction = getByRole(pageHost, "button", { name: "Add to project" });
+      await act(() => pageAction.focus());
+      await act(async () => {
+        const event = new KeyboardEvent("keydown", {
+          key: "q",
+          code: "KeyQ",
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        (centralHost ? window : pageAction).dispatchEvent(event);
+      });
+      expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
+      expect(mocks.linkToProject).toHaveBeenCalledWith(b, expect.anything(), expect.anything());
+      mocks.linkToProject.mockClear();
+
+      await act(() => getByRole(node, "textbox", { name: "Palette search" }).focus());
+      const palette = buildWorkspaceActionItems(null).find(
+        (action) => action.shortcutCommand === "workspace.addToProject",
+      )!;
+      expect(palette).toBeDefined();
+      await act(async () => palette.run());
+      expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
+      expect(mocks.linkToProject).toHaveBeenCalledWith(b, expect.anything(), expect.anything());
+
+      await act(() => root.render(<App popup={false} />));
+      mocks.linkToProject.mockClear();
+      await act(async () => palette.run());
+      expect(mocks.linkToProject).not.toHaveBeenCalled();
+      const fallback = buildWorkspaceActionItems(null).find(
+        (action) => action.shortcutCommand === "workspace.addToProject",
+      );
+      if (centralHost) {
+        expect(fallback).toBeDefined();
+        await act(async () => fallback!.run());
+        expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
+        expect(mocks.linkToProject).toHaveBeenCalledWith(a, expect.anything(), expect.anything());
+      } else expect(fallback).toBeUndefined();
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      globalListener.mockRestore();
+    }
+  },
+);
 
 describe("workspace action entrances", () => {
   it("renders selected-item actions and shortcut labels without crashing the reader", () => {

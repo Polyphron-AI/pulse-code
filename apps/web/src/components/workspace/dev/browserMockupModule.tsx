@@ -1,11 +1,45 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { normalizeLinkUrl } from "@t3tools/contracts";
-import { WorkspaceBrowserExternalPage, WorkspaceBrowserView } from "../WorkspaceBrowserView";
+import { normalizeLinkUrl, WorkspaceLinkEndpoint, WorkspaceLinkList } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import {
+  WorkspaceBrowserExternalPage,
+  WorkspaceBrowserView,
+  WorkspaceBrowserSearchResults,
+} from "../WorkspaceBrowserView";
+import { captureWorkspacePage, findLinkedPages } from "../workspaceBrowser.logic";
 import { Button } from "../../ui/button";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 
+const decodeEndpoint = Schema.decodeUnknownSync(WorkspaceLinkEndpoint);
+const decodeLinkList = Schema.decodeUnknownSync(WorkspaceLinkList);
+const isEndpoint = Schema.is(WorkspaceLinkEndpoint);
+const isLinkList = Schema.is(WorkspaceLinkList);
+
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
   const external = session.browserState === "external";
+  const search =
+    session.browserState === "search-results" ||
+    session.browserState === "empty-results" ||
+    session.browserState === "truncated-results";
+  const target = decodeEndpoint({
+    ref: { type: "provider-resource", provider: "slack", resourceId: "slack-marketing" },
+    title: "Marketing channel",
+  });
+  const pages = decodeLinkList({
+    linked: ["handbook", "launch-checklist"].map((slug, index) => ({
+      id: `wl_00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
+      item: {
+        ref: { type: "url", url: `https://synkek.example.invalid/${slug}` },
+        title: index === 0 ? "Project handbook" : "Project launch checklist",
+      },
+      status: "confirmed",
+      source: { type: "user" },
+      updatedAt: "2026-10-13T09:00:00.000Z",
+    })),
+    suggested: [],
+    truncated: session.browserState === "truncated-results",
+  });
+  if (!isLinkList(pages) || !isEndpoint(target)) throw new Error("Invalid Browser fixture.");
   let disposed = false;
   const pending = new Set<Promise<void>>();
   const pageLoads = new Set<() => void>();
@@ -33,24 +67,98 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
       pageLoads.add(releasePage.current);
       return () => releasePage.current();
     }, []);
-    const [addressDraft, setAddressDraft] = useState("");
+    const [addressDraft, setAddressDraft] = useState(
+      search ? (session.browserState === "empty-results" ? "No matching page" : "Project") : "",
+    );
     const [menuOpen, setMenuOpen] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const url = normalizeLinkUrl(addressDraft) ?? "";
     const openAddress = () => {
+      if (!url && !/^[a-z][a-z0-9+.-]*:/iu.test(addressDraft.trim())) {
+        setError(null);
+        setSearchOpen(addressDraft.trim().length > 0);
+        return;
+      }
+      setSearchOpen(false);
       setError(url ? null : "Enter an http or https address.");
       if (url) run(external ? addressDraft.trim() : url);
     };
+    const captured = captureWorkspacePage({
+      environmentId: session.environmentId,
+      target,
+      desktop: true,
+      address: addressDraft,
+      navigation: {
+        _tag: "Success",
+        url: session.seed.browser.url,
+        title: session.seed.browser.title,
+      },
+    });
     return (
       <div className="flex h-full min-h-0 min-w-0 flex-col">
         <WorkspaceBrowserView
           addressDraft={addressDraft}
-          linkTarget={null}
+          linkTarget={external ? null : target}
           displayedUrl={external ? url : session.seed.browser.url}
           menuOpen={menuOpen}
+          searchOpen={searchOpen}
+          onSearchChange={setSearchOpen}
+          searchResults={
+            <WorkspaceBrowserSearchResults
+              pages={findLinkedPages(pages, addressDraft)}
+              truncated={pages.truncated}
+              onOpen={(endpoint) => {
+                if (endpoint.ref.type === "url") {
+                  setAddressDraft(endpoint.ref.url);
+                  setSearchOpen(false);
+                  run(endpoint.ref.url);
+                }
+              }}
+            />
+          }
+          menuActions={
+            captured && !external ? (
+              <>
+                <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
+                  Link to {captured.target.title}
+                </p>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    void session.record("link", captured.page.ref);
+                  }}
+                >
+                  Link this page
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    void session.record("open-thread", captured.page.ref);
+                  }}
+                >
+                  Start thread
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    void session.record("link", captured.page.ref);
+                  }}
+                >
+                  Add to project
+                </Button>
+              </>
+            ) : undefined
+          }
           unavailableReason={error}
           onAddressChange={setAddressDraft}
-          onMenuChange={setMenuOpen}
+          onMenuChange={(open) => {
+            setSearchOpen(false);
+            setMenuOpen(open);
+          }}
           onOpenExternal={external ? openAddress : () => run(session.seed.browser.url)}
           onSubmit={openAddress}
           renderPage={
@@ -76,7 +184,11 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                 title="Controlled website preview"
                 // Same-origin keeps the static page in-process so its paint lands with onLoad; scripts stay blocked.
                 sandbox="allow-same-origin"
-                onLoad={() => releasePage.current()}
+                onLoad={() => {
+                  setSearchOpen(search);
+                  setMenuOpen(session.browserState === "captured-page");
+                  releasePage.current();
+                }}
                 className="h-[311px] w-full shrink-0 border border-border bg-background"
                 style={{ borderRadius: 9 }}
                 srcDoc={`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="color-scheme" content="dark"><style>

@@ -11,7 +11,14 @@ import {
   parseMailLocation,
 } from "./useWorkspaceItemOpener";
 
-const boundary = vi.hoisted(() => ({ navigate: vi.fn(), v2: false as boolean | undefined }));
+const boundary = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  external: vi.fn(),
+  v2: false as boolean | undefined,
+}));
+vi.mock("../../localApi", () => ({
+  readLocalApi: () => ({ shell: { openExternal: boundary.external } }),
+}));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => boundary.navigate }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({ workspaceTasksV2: boundary.v2 }),
@@ -29,6 +36,43 @@ describe("workspace source-message locations", () => {
     ).toBeNull();
   });
 });
+
+it.each([true, false])(
+  "opens URL refs through the optional Browser handler and leaves Drive external: %s",
+  async (resource) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    boundary.external.mockClear();
+    const openPage = vi.fn();
+    const ref = { type: "url" as const, url: "https://example.test/page?utm_source=x#part" };
+    function Harness() {
+      const open = useWorkspaceItemOpener(
+        EnvironmentId.make("remote"),
+        resource ? { openPage } : undefined,
+      );
+      return createElement("button", {
+        onClick: () => {
+          open(ref);
+          open({ type: "file", provider: "google-drive", fileId: "file-a" });
+        },
+      });
+    }
+    let view!: ReactTestRenderer;
+    await act(() => {
+      view = create(createElement(Harness));
+    });
+    try {
+      await act(() => view.root.findByType("button").props.onClick());
+      expect(openPage.mock.calls).toEqual(resource ? [[ref]] : []);
+      expect(boundary.external.mock.calls).toEqual([
+        ...(!resource ? [[ref.url]] : []),
+        ["https://drive.google.com/file/d/file-a/view"],
+      ]);
+    } finally {
+      await act(() => view.unmount());
+      vi.unstubAllGlobals();
+    }
+  },
+);
 
 it.each([true, false, undefined])(
   "opens exact task refs in their captured environment with live capability %s",

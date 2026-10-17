@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode, type Ref } from "react";
-import type { WorkspaceLinkEndpoint } from "@t3tools/contracts";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import type { WorkspaceLinkEndpoint, WorkspaceLinkView } from "@t3tools/contracts";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -21,6 +21,9 @@ export function WorkspaceBrowserView({
   onOpenExternal,
   inputRef,
   loading = false,
+  searchOpen = false,
+  searchResults,
+  onSearchChange,
 }: {
   readonly addressDraft: string;
   readonly linkTarget: WorkspaceLinkEndpoint | null;
@@ -37,73 +40,167 @@ export function WorkspaceBrowserView({
   readonly onSubmit: () => void;
   readonly onMenuChange: (open: boolean) => void;
   readonly onOpenExternal: () => void;
+  readonly searchOpen?: boolean;
+  readonly searchResults?: ReactNode;
+  readonly onSearchChange?: (open: boolean) => void;
 }) {
+  const pill = useRef<HTMLFormElement>(null);
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-col", renderPage ? "flex-1" : "shrink-0")}>
-      <form
-        className="mb-[13px] flex h-[29px] shrink-0 items-center gap-2 rounded-full border border-border/20 bg-muted pl-2 pr-0.5 text-muted-foreground focus-within:ring-2 focus-within:ring-ring"
-        aria-busy={loading}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!disabled && !readOnly) onSubmit();
-        }}
-      >
-        <Search className="size-3 shrink-0" aria-hidden="true" />
-        <input
-          className="min-w-0 flex-1 bg-transparent text-3xs text-foreground outline-none placeholder:text-muted-foreground"
-          aria-label="Browser page address"
-          ref={inputRef}
-          placeholder="Search or enter a URL"
-          maxLength={2048}
-          value={addressDraft}
-          disabled={disabled}
-          readOnly={readOnly}
-          aria-disabled={readOnly || undefined}
-          onChange={(event) => onAddressChange(event.target.value)}
-        />
-        <Popover open={menuOpen} onOpenChange={onMenuChange}>
-          <PopoverTrigger
-            render={
-              <Button type="button" size="icon-xs" variant="ghost" aria-label="Browser actions" />
-            }
+      <Popover open={searchOpen} onOpenChange={onSearchChange}>
+        <form
+          ref={pill}
+          className="mb-[13px] flex h-[29px] shrink-0 items-center gap-2 rounded-full border border-border/20 bg-muted pl-2 pr-0.5 text-muted-foreground focus-within:ring-2 focus-within:ring-ring"
+          aria-busy={loading}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!disabled && !readOnly) onSubmit();
+          }}
+        >
+          <Search className="size-3 shrink-0" aria-hidden="true" />
+          <input
+            className="min-w-0 flex-1 bg-transparent text-3xs text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Browser page address"
+            ref={inputRef}
+            placeholder="Search or enter a URL"
+            maxLength={2048}
+            value={addressDraft}
+            disabled={disabled}
+            readOnly={readOnly}
+            aria-disabled={readOnly || undefined}
+            onChange={(event) => onAddressChange(event.target.value)}
+          />
+          <Popover open={menuOpen} onOpenChange={onMenuChange}>
+            <PopoverTrigger
+              render={
+                <Button type="button" size="icon-xs" variant="ghost" aria-label="Browser actions" />
+              }
+            >
+              <SlidersHorizontal className="size-3" aria-hidden="true" />
+            </PopoverTrigger>
+            <PopoverPopup align="end" padding="compact" aria-label="Browser actions">
+              <div className="flex max-w-64 flex-col items-start gap-1">
+                {displayedUrl ? (
+                  <p className="max-w-full break-all px-1.75 text-sm text-muted-foreground sm:text-xs">
+                    {displayedUrl}
+                  </p>
+                ) : null}
+                {menuActions}
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  disabled={!displayedUrl || disabled}
+                  aria-disabled={readOnly || undefined}
+                  onClick={() => {
+                    if (!readOnly) onOpenExternal();
+                  }}
+                >
+                  Open in new tab
+                </Button>
+                {linkTarget === null && !menuActions ? (
+                  <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
+                    Select an item to link this page to.
+                  </p>
+                ) : null}
+              </div>
+            </PopoverPopup>
+          </Popover>
+        </form>
+        {searchOpen ? (
+          <PopoverPopup
+            anchor={pill}
+            align="end"
+            padding="compact"
+            className="w-(--anchor-width)"
+            aria-label="Linked pages"
+            initialFocus={false}
           >
-            <SlidersHorizontal className="size-3" aria-hidden="true" />
-          </PopoverTrigger>
-          <PopoverPopup align="end" padding="compact">
-            <div className="flex max-w-64 flex-col items-start gap-1">
-              {displayedUrl ? (
-                <p className="max-w-full break-all px-1.75 text-sm text-muted-foreground sm:text-xs">
-                  {displayedUrl}
-                </p>
-              ) : null}
-              {menuActions}
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                disabled={!displayedUrl || disabled}
-                aria-disabled={readOnly || undefined}
-                onClick={() => {
-                  if (!readOnly) onOpenExternal();
-                }}
-              >
-                Open in new tab
-              </Button>
-              {linkTarget === null && !menuActions ? (
-                <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
-                  Select an item to link this page to.
-                </p>
-              ) : null}
-            </div>
+            {searchResults}
           </PopoverPopup>
-        </Popover>
-      </form>
+        ) : null}
+      </Popover>
       {unavailableReason ? (
         <p role="alert" className="mb-2 text-xs text-destructive">
           {unavailableReason}
         </p>
       ) : null}
       {renderPage}
+    </div>
+  );
+}
+
+/** Both the live Browser and isolated recipe use this bounded result presentation. */
+export function WorkspaceBrowserSearchResults({
+  pages,
+  truncated,
+  pending,
+  error,
+  onOpen,
+  renderRow,
+}: {
+  readonly pages: readonly WorkspaceLinkView[];
+  readonly truncated: boolean;
+  readonly pending?: boolean;
+  readonly error?: string | null;
+  readonly onOpen: (page: WorkspaceLinkEndpoint) => void;
+  readonly renderRow?: (page: WorkspaceLinkView, row: ReactNode) => ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-2 text-sm sm:text-xs">
+      <p className="px-1.75 font-medium">Linked pages</p>
+      {error ? (
+        <p role="alert" className="px-1.75 text-destructive">
+          {error}
+        </p>
+      ) : pending ? (
+        <p role="status" className="px-1.75 text-muted-foreground">
+          Loading this project's linked pages...
+        </p>
+      ) : pages.length === 0 ? (
+        <p className="px-1.75 text-muted-foreground">
+          No linked pages match. Paste an http or https address to open a page.
+        </p>
+      ) : (
+        <ul className="flex min-w-0 flex-col gap-2" aria-label="Project linked pages">
+          {pages.map((page) => {
+            const row = (
+              <>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 px-1.75 text-left hover:underline"
+                  onClick={() => onOpen(page.item)}
+                >
+                  <span className="block break-words">{page.item.title ?? "Linked page"}</span>
+                  <span className="block break-all text-muted-foreground">
+                    {page.item.ref.type === "url" ? page.item.ref.url : ""}
+                  </span>
+                </button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  aria-label={`Open ${page.item.title ?? "linked page"}`}
+                  onClick={() => onOpen(page.item)}
+                >
+                  Open
+                </Button>
+              </>
+            );
+            return (
+              <li key={page.id} className="min-w-0">
+                {renderRow ? (
+                  renderRow(page, row)
+                ) : (
+                  <div className="flex min-w-0 items-center">{row}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {truncated ? (
+        <p className="px-1.75 text-muted-foreground">Only loaded linked pages are searched.</p>
+      ) : null}
     </div>
   );
 }

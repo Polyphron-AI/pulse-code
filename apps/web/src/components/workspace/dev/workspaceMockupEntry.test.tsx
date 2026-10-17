@@ -191,6 +191,54 @@ it("keeps task URL state through capture resets and records light-theme smoke ho
   expect(resource.manifest.networkRequests).toBe(0);
 });
 
+it.each(
+  [1280, 1024, 390].flatMap((width) =>
+    (["search-results", "empty-results", "truncated-results", "captured-page"] as const).map(
+      (state) => ({ width, height: width === 390 ? 844 : 800, state }),
+    ),
+  ),
+)(
+  "settles recipe 05 $state at $width without application requests",
+  async ({ width, height, state }) => {
+    const dom = (
+      window as unknown as {
+        happyDOM: {
+          setWindowSize: (size: { width: number; height: number }) => void;
+          setURL: (url: string) => void;
+        };
+      }
+    ).happyDOM;
+    dom.setWindowSize({ width, height });
+    dom.setURL(`http://fixture.invalid/workspace?space=communications&fixture=05&state=${state}`);
+    const capture = await boot();
+    capture.configureCapture({
+      ...host,
+      viewport: { width, height, deviceScaleFactor: 1, zoom: 1 },
+    });
+    if (width < 1280) {
+      expect((await capture.ready()).manifest.networkRequests).toBe(0);
+      await act(() => getByRole(document.body, "button", { name: "Resources" }).click());
+    }
+    const frame = document.querySelector('iframe[title="Controlled website preview"]')!;
+    await act(() => frame.dispatchEvent(new Event("load")));
+    const popup = getByRole(document.body, "dialog", {
+      name: state === "captured-page" ? "Browser actions" : "Linked pages",
+    });
+    expect(popup.textContent).toContain(
+      state === "captured-page"
+        ? "Marketing channel"
+        : state === "empty-results"
+          ? "No linked pages match."
+          : "Project handbook",
+    );
+    expect((await capture.ready()).manifest).toMatchObject({
+      route: `/workspace?space=communications&fixture=05&state=${state}`,
+      networkRequests: 0,
+      pendingOperations: 0,
+    });
+  },
+);
+
 it.each(["week", "picker", "dst-fold", "dst-gap", "week-allday", "week-overflow", "week-390"])(
   "captures the isolated Calendar %s route and matching display zone",
   async (state) => {
