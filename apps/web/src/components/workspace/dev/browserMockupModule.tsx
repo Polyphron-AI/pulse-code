@@ -53,9 +53,10 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
           renderPage={
             <iframe
               title="Controlled website preview"
-              sandbox=""
+              // Same-origin keeps the static page in-process so its paint lands with onLoad; scripts stay blocked.
+              sandbox="allow-same-origin"
               onLoad={() => releasePage.current()}
-              className="min-h-0 w-full flex-1 border border-border bg-background"
+              className="h-[311px] w-full shrink-0 border border-border bg-background"
               style={{ borderRadius: 9 }}
               srcDoc={`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="color-scheme" content="dark"><style>
                 * { box-sizing: border-box; } body { margin: 0; background: #090909; color: #ececf1; font-family: 'Segoe UI', system-ui, sans-serif; padding: 16px; }
