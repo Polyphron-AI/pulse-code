@@ -229,7 +229,11 @@ it.effect(
                     ],
                     nextCursor: "expired",
                   }
-                : { ...page(title), nextCursor: "more" };
+                : {
+                    ...page(title),
+                    events: [{ ...event, title, revision: title === "Restarted" ? 2 : 1 }],
+                    nextCursor: "more",
+                  };
             }).pipe(
               Effect.flatMap((result) =>
                 input.cursor === "expired"
@@ -259,8 +263,8 @@ it.effect(
         const restarted = AsyncResult.getOrThrow(
           yield* Effect.promise(() => executeAtomQuery(registry, query)),
         );
-        expect(restarted.events.map((e) => e.title)).toEqual(["Restarted"]);
-        expect(reads).toBe(4);
+        expect(restarted.events.map((e) => e.title)).toEqual(["Restarted", "Review"]);
+        expect(reads).toBe(5);
       }),
     ),
 );
@@ -717,4 +721,192 @@ it.effect("mounts only the selected detail and releases its shared stream while 
       expect(starts).toBe(1);
     }),
   ),
+);
+it.effect("retains requested pages after an unrelated invalidation", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(0);
+      let reads = 0;
+      const due = {
+        ref: { type: "task" as const, taskId: "wskt_00000000-0000-0000-0000-000000000002" },
+        title: "Second due task",
+        projectId: "project",
+        dueOn: "2026-10-13",
+        done: false,
+        revision: 1,
+      };
+      const client = {
+        [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
+        [WS_METHODS.calendarListRange]: (input: { cursor?: string; dueCursor?: string }) =>
+          Effect.sync(() => {
+            reads++;
+            return input.cursor
+              ? {
+                  ...page("Second"),
+                  events: [
+                    { ...event, id: "wce_00000000-0000-0000-0000-000000000002", title: "Second" },
+                  ],
+                  nextCursor: "third",
+                }
+              : input.dueCursor
+                ? { ...page(), events: [], dueTasks: [due], nextDueCursor: "third-due" }
+                : { ...page(), nextCursor: "second", nextDueCursor: "second-due" };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.range(target);
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      for (const kind of ["events", "dueTasks"] as const)
+        yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.loadMore, {
+            environmentId: target.environmentId,
+            input: { range, kind },
+          }),
+        );
+      const updated = Latch.makeUnsafe();
+      const watch = registry.subscribe(query, (r) => {
+        if (AsyncResult.isSuccess(r) && !r.waiting && reads >= 4) updated.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(watch));
+      yield* SubscriptionRef.set(counter, 1);
+      yield* updated.await;
+      const result = AsyncResult.getOrThrow(registry.get(query));
+      expect(result.events.map((e) => e.title)).toEqual(["Review", "Second"]);
+      expect(result.dueTasks.map((t) => t.title)).toEqual(["Second due task"]);
+      expect(result.nextDueCursor).toBe("third-due");
+      expect(reads).toBe(4);
+    }),
+  ),
+);
+
+it.effect("replays changed source and task cursor chains only to the requested depth", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(0);
+      let revision = 1;
+      const calls: string[] = [];
+      const source = () => [
+        {
+          connectionId: "calendar",
+          calendarId: "work",
+          generation: revision,
+          state: "ready" as const,
+        },
+      ];
+      const client = {
+        [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
+        [WS_METHODS.calendarListRange]: (input: { cursor?: string; dueCursor?: string }) =>
+          Effect.sync(() => {
+            calls.push(
+              input.cursor
+                ? `events-${revision}`
+                : input.dueCursor
+                  ? `due-${revision}`
+                  : `first-${revision}`,
+            );
+            return {
+              ...page(),
+              sourceStates: source(),
+              events: input.dueCursor
+                ? []
+                : [
+                    {
+                      ...event,
+                      id: input.cursor ? "second" : event.id,
+                      revision,
+                      title: `${input.cursor ? "Second" : "First"} ${revision}`,
+                    },
+                  ],
+              dueTasks: input.dueCursor
+                ? [
+                    {
+                      ref: { type: "task", taskId: "second-task" },
+                      title: `Due ${revision}`,
+                      projectId: "project",
+                      dueOn: "2026-10-13",
+                      done: false,
+                      revision,
+                    },
+                  ]
+                : [],
+              nextCursor: input.cursor ? `third-${revision}` : `second-${revision}`,
+              nextDueCursor: input.dueCursor ? `third-due-${revision}` : `second-due-${revision}`,
+            };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.range(target);
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      for (const kind of ["events", "dueTasks"] as const)
+        yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.loadMore, {
+            environmentId: target.environmentId,
+            input: { range, kind },
+          }),
+        );
+      const settled = Latch.makeUnsafe();
+      const watch = registry.subscribe(query, (r) => {
+        if (AsyncResult.isSuccess(r) && !r.waiting && r.value.events[0]?.revision === 2)
+          settled.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(watch));
+      revision = 2;
+      yield* SubscriptionRef.set(counter, 1);
+      yield* settled.await;
+      const value = AsyncResult.getOrThrow(registry.get(query));
+      expect(value.events.map((e) => e.title)).toEqual(["First 2", "Second 2"]);
+      expect(value.dueTasks.map((t) => t.title)).toEqual(["Due 2"]);
+      expect(calls).toEqual(["first-1", "events-1", "due-1", "first-2", "events-2", "due-2"]);
+    }),
+  ),
+);
+it.effect(
+  "keeps saved due rows when a refreshed due read is incomplete without a continuation",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const counter = yield* SubscriptionRef.make(0);
+        let failed = false;
+        const client = {
+          [WS_METHODS.calendarSubscribeChanges]: () => SubscriptionRef.changes(counter),
+          [WS_METHODS.calendarListRange]: () =>
+            Effect.sync(() => ({
+              ...page(),
+              dueIncomplete: failed,
+              dueTasks: failed
+                ? []
+                : [
+                    {
+                      ref: { type: "task", taskId: "due" },
+                      title: "Saved due",
+                      projectId: "project",
+                      dueOn: "2026-10-13",
+                      done: false,
+                      revision: 1,
+                    },
+                  ],
+            })),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        const settled = Latch.makeUnsafe();
+        const watch = registry.subscribe(query, (r) => {
+          if (AsyncResult.isSuccess(r) && !r.waiting && r.value.dueIncomplete) settled.openUnsafe();
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(watch));
+        failed = true;
+        yield* SubscriptionRef.set(counter, 1);
+        yield* settled.await;
+        const value = AsyncResult.getOrThrow(registry.get(query));
+        expect(value.dueTasks.map((t) => t.title)).toEqual(["Saved due"]);
+        expect(value.nextDueCursor).toBeUndefined();
+      }),
+    ),
 );

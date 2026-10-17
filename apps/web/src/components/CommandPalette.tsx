@@ -1941,7 +1941,7 @@ function OpenCommandPaletteDialog(props: {
       run: async () => {
         await navigate({
           to: "/workspace",
-          search: workspaceDestinationSearch(id, workspaceEnvironmentId),
+          search: workspaceDestinationSearch(id, workspaceEnvironmentId, workspaceSearch),
         });
       },
     });

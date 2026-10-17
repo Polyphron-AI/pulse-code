@@ -1,3 +1,8 @@
+import {
+  CalendarSpace,
+  CalendarNotesProvider,
+} from "../components/workspace/calendar/CalendarSpace";
+import { MeetingsSpace } from "../components/workspace/meetings/MeetingsSpace";
 import { parseNoteLocation, openMeetingNote } from "../components/workspace/meetings/meetingNotes";
 import { useWorkspaceResources } from "../components/workspace/workspaceResourceState";
 import { ProjectId } from "@t3tools/contracts";
@@ -48,6 +53,13 @@ export const Route = createFileRoute("/_chat/workspace")({
 });
 
 function WorkspaceRouteView() {
+  return (
+    <CalendarNotesProvider>
+      <WorkspaceRouteContent />
+    </CalendarNotesProvider>
+  );
+}
+function WorkspaceRouteContent() {
   const search = Route.useSearch();
   switch (search.space) {
     case "projects":
@@ -61,7 +73,7 @@ function WorkspaceRouteView() {
     case "tasks":
       return <TasksSpace />;
     case "meetings":
-      return <NoteWorkspace />;
+      return search.item && parseNoteLocation(search.item) ? <NoteWorkspace /> : <MeetingsSpace />;
     case "calendar":
       return <CalendarWorkspace />;
     case undefined:
@@ -135,7 +147,7 @@ function CalendarWorkspace() {
       item={ref}
     />
   ) : (
-    <UnavailableWorkspace space="calendar" />
+    <CalendarSpace />
   );
 }
 

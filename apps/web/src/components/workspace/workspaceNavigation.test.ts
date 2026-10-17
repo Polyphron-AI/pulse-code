@@ -195,3 +195,26 @@ it("bounds page size in Tasks URLs and strips it outside Tasks", () => {
     "taskLimit",
   );
 });
+
+it("carries the selected day through menu and palette destination searches", () => {
+  const current = parseWorkspaceSearch({
+    space: "meetings",
+    view: "upcoming",
+    day: "2026-10-13",
+    environment: "calendar-day",
+  });
+  for (const destination of ["calendar", "projects", "meetings"] as const) {
+    const next = workspaceDestinationSearch(
+      destination,
+      EnvironmentId.make("calendar-day"),
+      current,
+    );
+    expect(parseWorkspaceSearch({ ...next })).toMatchObject({
+      space: destination,
+      day: "2026-10-13",
+    });
+  }
+  expect(
+    workspaceDestinationSearch("calendar", EnvironmentId.make("other-day"), current),
+  ).not.toHaveProperty("day");
+});

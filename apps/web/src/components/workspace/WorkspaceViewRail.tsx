@@ -53,8 +53,6 @@ export const workspaceRailItems: Readonly<
       id: "recordings",
       label: "Recordings",
       Icon: MicIcon,
-      unavailableReason:
-        "Workspace recordings are unavailable on this version. Local recording is available in Office tools on Windows.",
     },
   ],
   calendar: [

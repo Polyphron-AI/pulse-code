@@ -105,7 +105,8 @@ it("keeps task URL state through capture resets and records light-theme smoke ho
   await act(async () => capture.reset("08"));
   const resource = await capture.ready();
   expect(resource.incompleteRegions).not.toContain("08.tasks.resource");
-  expect(resource.incompleteRegions).toContain("08.calendar.center");
+  expect(resource.incompleteRegions).not.toContain("08.calendar.center");
+  expect(document.body.textContent).toContain("Marketing stand-up");
   expect(resource.manifest.networkRequests).toBe(0);
 });
 
@@ -162,7 +163,13 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
     expect(mount.firstElementChild).toHaveProperty("style.display", "flex");
     expect(mount.firstElementChild).toHaveProperty("style.flexDirection", "column");
     expect(document.body.textContent).toContain("Design preview · sample data");
-    expect(document.body.textContent).toContain(id === "03" ? "Project tasks" : `Recipe ${id}`);
+    expect(document.body.textContent).toContain(
+      id === "03"
+        ? "Project tasks"
+        : id === "07" || id === "08"
+          ? "Marketing stand-up"
+          : `Recipe ${id}`,
+    );
     expect(result.incompleteRegions).not.toContain("shell.engagement");
     expect(result.incompleteRegions).not.toContain("shell.resources");
     if (id === "08") expect(result.incompleteRegions).not.toContain("08.tasks.resource");

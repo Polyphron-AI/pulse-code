@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./calendar/dates": {
+      "types": "./src/calendar/dates.ts",
+      "default": "./src/calendar/dates.ts"
+    },
     "./state/workspaceCalendar": {
       "types": "./src/state/workspaceCalendar.ts",
       "default": "./src/state/workspaceCalendar.ts"

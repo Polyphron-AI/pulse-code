@@ -70,6 +70,52 @@ export function createWorkspaceCalendarAtoms<R, E>(
   });
   const refreshTrigger = ({ environmentId }: { environmentId: EnvironmentId }) =>
     changes({ environmentId, input: {} });
+  type Depth = {
+    first: RangeState;
+    events: CalendarPage[];
+    due: CalendarPage[];
+    value: RangeState;
+    eventDepth: number;
+    dueDepth: number;
+    forceReplay: boolean;
+  };
+  // Revalidation follows only the depth explicitly loaded in this mounted range.
+  const depths = new Map<string, Depth>();
+  const depthKey = (environmentId: EnvironmentId, input: CalendarRangeInput) =>
+    JSON.stringify([environmentId, normalizeRange(input)]);
+  const signature = (page: CalendarPage, kind: "events" | "due") =>
+    JSON.stringify(
+      kind === "events"
+        ? [page.sourceStates, page.nextCursor, page.events.map((e) => [e.id, e.revision, e])]
+        : [page.nextDueCursor, page.dueTasks.map((t) => [t.ref.taskId, t.revision, t])],
+    );
+  const combine = (
+    first: RangeState,
+    events: readonly CalendarPage[],
+    due: readonly CalendarPage[],
+  ): RangeState => {
+    const { nextCursor: _, nextDueCursor: __, ...base } = first;
+    const lastEvents = events.at(-1) ?? first;
+    const lastDue = due.at(-1) ?? first;
+    const eventRows = new Map<string, CalendarPage["events"][number]>();
+    for (const event of [first, ...events].flatMap((page) => page.events)) {
+      const saved = eventRows.get(event.id);
+      if (!saved || event.revision >= saved.revision) eventRows.set(event.id, event);
+    }
+    const dueRows = new Map<string, CalendarPage["dueTasks"][number]>();
+    for (const task of [first, ...due].flatMap((page) => page.dueTasks)) {
+      const saved = dueRows.get(task.ref.taskId);
+      if (!saved || task.revision >= saved.revision) dueRows.set(task.ref.taskId, task);
+    }
+    return {
+      ...base,
+      events: [...eventRows.values()],
+      dueTasks: [...dueRows.values()],
+      dueIncomplete: lastDue.dueIncomplete,
+      ...(lastEvents.nextCursor ? { nextCursor: lastEvents.nextCursor } : {}),
+      ...(lastDue.nextDueCursor ? { nextDueCursor: lastDue.nextDueCursor } : {}),
+    };
+  };
   const queries = createEnvironmentQueryAtomFamily(runtime, {
     label: "workspace-calendar:range",
     refreshTrigger,
@@ -85,8 +131,72 @@ export function createWorkspaceCalendarAtoms<R, E>(
           dueTasks: [],
           dueIncomplete: true,
         } as RangeState;
+      const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+      const key = depthKey(supervisor.target.environmentId, input);
+      const previous = depths.get(key);
       const page: RangeState = yield* request(WS_METHODS.calendarListRange, input);
-      return page;
+      const replay = Effect.fnUntraced(function* (kind: "events" | "due") {
+        const old = previous?.[kind] ?? [];
+        if (
+          previous &&
+          !previous.forceReplay &&
+          signature(previous.first, kind) === signature(page, kind)
+        )
+          return old;
+        const pages: CalendarPage[] = [];
+        const requested = previous
+          ? kind === "events"
+            ? previous.eventDepth
+            : previous.dueDepth
+          : 0;
+        for (let i = 0; i < requested; i++) {
+          const last = pages.at(-1) ?? page;
+          const cursor = kind === "events" ? last.nextCursor : last.nextDueCursor;
+          if (!cursor) break;
+          pages.push(
+            yield* request(WS_METHODS.calendarListRange, {
+              ...input,
+              ...(kind === "events" ? { cursor } : { dueCursor: cursor }),
+            }),
+          );
+        }
+        return pages;
+      });
+      const events = yield* replay("events");
+      const due = yield* replay("due");
+      const fresh = combine(page, events, due);
+      const dueFailed = page.dueIncomplete && !page.nextDueCursor && page.dueTasks.length === 0;
+      const combined = {
+        ...fresh,
+        ...(previous && page.incomplete
+          ? {
+              events: [
+                ...new Map(
+                  [...previous.value.events, ...fresh.events].map((event) => [event.id, event]),
+                ).values(),
+              ].slice(0, ((previous.eventDepth ?? 0) + 1) * (input.limit ?? 50)),
+            }
+          : {}),
+        ...(previous && dueFailed ? { dueTasks: previous.value.dueTasks } : {}),
+      };
+      const value =
+        previous &&
+        signature(previous.value, "events") === signature(combined, "events") &&
+        signature(previous.value, "due") === signature(combined, "due") &&
+        previous.value.incomplete === combined.incomplete &&
+        previous.value.dueIncomplete === combined.dueIncomplete
+          ? previous.value
+          : combined;
+      depths.set(key, {
+        first: page,
+        events,
+        due,
+        value,
+        eventDepth: previous?.eventDepth ?? 0,
+        dueDepth: previous?.dueDepth ?? 0,
+        forceReplay: false,
+      });
+      return value;
     }),
   });
   const invalidRange = Atom.make(() =>
@@ -106,8 +216,15 @@ export function createWorkspaceCalendarAtoms<R, E>(
   const loaded = Atom.family((_query: Query) =>
     Atom.make<Loaded | undefined>(undefined).pipe(Atom.setIdleTTL(0)),
   );
-  const lifetimes = Atom.family((_query: Query) =>
-    Atom.make(() => ({ active: false })).pipe(Atom.setIdleTTL(0)),
+  const queryKeys = new WeakMap<Query, string>();
+  const lifetimes = Atom.family((query: Query) =>
+    Atom.make((get) => {
+      get.addFinalizer(() => {
+        const key = queryKeys.get(query);
+        if (key) depths.delete(key);
+      });
+      return { active: false };
+    }).pipe(Atom.setIdleTTL(0)),
   );
   const views = Atom.family((query: Query) =>
     Atom.make((get) => {
@@ -120,29 +237,7 @@ export function createWorkspaceCalendarAtoms<R, E>(
       const pages = get(loaded(query));
       if (!AsyncResult.isSuccess(result) || result.waiting || pages?.first !== result.value)
         return result;
-      const lastEvents = pages.events.at(-1) ?? result.value;
-      const lastDue = pages.due.at(-1) ?? result.value;
-      const { nextCursor: _, nextDueCursor: __, ...first } = result.value;
-      return AsyncResult.success({
-        ...first,
-        events: [
-          ...new Map(
-            [result.value, ...pages.events]
-              .flatMap((page) => page.events)
-              .map((event) => [event.id, event]),
-          ).values(),
-        ],
-        dueTasks: [
-          ...new Map(
-            [result.value, ...pages.due]
-              .flatMap((page) => page.dueTasks)
-              .map((task) => [task.ref.taskId, task]),
-          ).values(),
-        ],
-        dueIncomplete: lastDue.dueIncomplete,
-        ...(lastEvents.nextCursor ? { nextCursor: lastEvents.nextCursor } : {}),
-        ...(lastDue.nextDueCursor ? { nextDueCursor: lastDue.nextDueCursor } : {}),
-      });
+      return AsyncResult.success(combine(result.value, pages.events, pages.due));
     }).pipe(Atom.setIdleTTL(0)),
   );
   const range = ({
@@ -153,7 +248,10 @@ export function createWorkspaceCalendarAtoms<R, E>(
     input: CalendarRangeInput;
   }) => {
     const normalized = normalizeRange(input);
-    return normalized ? views(queries({ environmentId, input: normalized })) : invalidRange;
+    if (!normalized) return invalidRange;
+    const query = queries({ environmentId, input: normalized });
+    queryKeys.set(query, depthKey(environmentId, normalized));
+    return views(query);
   };
   const scheduler = createAtomCommandScheduler();
   return {
@@ -207,8 +305,12 @@ export function createWorkspaceCalendarAtoms<R, E>(
           ...(input.kind === "events" ? { cursor } : { dueCursor: cursor }),
         }).pipe(
           Effect.catch((error) => {
-            if (lifetime.active && isCalendarError(error) && error.kind === "conflict")
+            if (lifetime.active && isCalendarError(error) && error.kind === "conflict") {
+              const key = depthKey(environmentId, normalized);
+              const previous = depths.get(key);
+              if (previous) depths.set(key, { ...previous, forceReplay: true });
               registry.refresh(query);
+            }
             return Effect.fail(error);
           }),
         );
@@ -217,6 +319,24 @@ export function createWorkspaceCalendarAtoms<R, E>(
         if (AsyncResult.isSuccess(current) && !current.waiting && current.value === first.value) {
           const latest = registry.get(loaded(query));
           const keep = latest?.first === first.value ? latest : pages;
+          const depth = depths.get(depthKey(environmentId, normalized));
+          if (depth)
+            depths.set(
+              depthKey(environmentId, normalized),
+              input.kind === "events"
+                ? {
+                    ...depth,
+                    events: [...depth.events, next],
+                    eventDepth: depth.eventDepth + 1,
+                    value: combine(depth.first, [...depth.events, next], depth.due),
+                  }
+                : {
+                    ...depth,
+                    due: [...depth.due, next],
+                    dueDepth: depth.dueDepth + 1,
+                    value: combine(depth.first, depth.events, [...depth.due, next]),
+                  },
+            );
           registry.set(
             loaded(query),
             input.kind === "events"

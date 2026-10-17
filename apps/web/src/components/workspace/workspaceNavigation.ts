@@ -1,3 +1,4 @@
+import { parseNoteLocation } from "./meetings/meetingNotes";
 import { parseCalendarLocation } from "./calendar/calendarItemRef";
 import { WorkspaceTaskDueOn } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
@@ -67,10 +68,13 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
   const account = carriesIdentity ? text(raw.account) : undefined;
   const folder = !telegram && carriesIdentity ? text(raw.folder) : undefined;
   const project = text(raw.project);
-  const calendar = destination === "calendar";
-  const day = calendar && isTaskDate(raw.day) ? raw.day : undefined;
+  const calendar = destination === "calendar" || destination === "meetings";
+  const day = isTaskDate(raw.day) ? raw.day : undefined;
   const item = calendar
-    ? typeof raw.item === "string" && raw.item.length <= 8192 && parseCalendarLocation(raw.item)
+    ? typeof raw.item === "string" &&
+      raw.item.length <= 8192 &&
+      (parseCalendarLocation(raw.item) ||
+        (destination === "meetings" && parseNoteLocation(raw.item)))
       ? raw.item
       : undefined
     : telegram
@@ -129,11 +133,19 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
 export function workspaceDestinationSearch(
   destination: WorkspaceDestination,
   environmentId?: EnvironmentId | null,
+  current?: WorkspaceSearch,
 ): WorkspaceSearch {
+  const context =
+    current && (!current.environment || current.environment === environmentId)
+      ? current
+      : environmentId
+        ? workspaceLocations.get(environmentId)
+        : undefined;
   return {
     space: destination,
     view: workspaceViews[destination][0],
     ...(environmentId ? { environment: environmentId } : {}),
+    ...(context?.day ? { day: context.day } : {}),
   };
 }
 

@@ -1,0 +1,151 @@
+import type { CalendarDueTask, CalendarOccurrenceSummary } from "@t3tools/contracts";
+import type { ReactNode } from "react";
+import { PlusIcon } from "lucide-react";
+import {
+  formatDayHeading,
+  formatEventTime,
+  formatWeek,
+  displayDay,
+} from "@t3tools/client-runtime/calendar/dates";
+import { Button } from "../../ui/button";
+import { CalendarEventCard, type CalendarEventCardProps } from "./CalendarEventCard";
+import { CalendarDayStrip } from "./CalendarDayStrip";
+export interface CalendarAgendaProps {
+  readonly day: string;
+  readonly timeZone: string;
+  readonly space: "calendar" | "meetings";
+  readonly events: readonly CalendarOccurrenceSummary[];
+  readonly dueTasks: readonly CalendarDueTask[];
+  readonly status: "ready" | "loading" | "unavailable" | "disconnected";
+  readonly error?: string | null;
+  readonly incomplete?: boolean;
+  readonly dueIncomplete?: boolean;
+  readonly fetchedAt?: number;
+  readonly nextEvents?: boolean;
+  readonly nextDue?: boolean;
+  readonly onSelectDay: (day: string) => void;
+  readonly onToday?: () => void;
+  readonly onSelect: CalendarEventCardProps["onSelect"];
+  readonly onNotes: CalendarEventCardProps["onNotes"];
+  readonly onJoin?: CalendarEventCardProps["onJoin"];
+  readonly validateJoin?: CalendarEventCardProps["validateJoin"];
+  readonly onSchedule?: () => void;
+  readonly onRetry?: () => void;
+  readonly onLoadMore?: (kind: "events" | "dueTasks") => void;
+  readonly onOpenTask?: (task: CalendarDueTask) => void;
+  readonly renderMenu?: (event: CalendarOccurrenceSummary) => ReactNode;
+}
+export function CalendarAgenda(props: CalendarAgendaProps) {
+  const { day, timeZone } = props;
+  const events = props.events.filter((e) =>
+    e.time.kind === "all-day"
+      ? e.time.startOn <= day && day < e.time.endBefore
+      : displayDay(e.time.start, timeZone) <= day &&
+        displayDay(new Date(Date.parse(e.time.end) - 1).toISOString(), timeZone) >= day,
+  );
+  const due = props.dueTasks.filter((t) => t.dueOn === day);
+  const row = (event: CalendarOccurrenceSummary) => (
+    <div key={event.id} className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] items-start gap-x-3">
+      <time
+        dateTime={event.time.kind === "timed" ? event.time.start : undefined}
+        className="pt-2 text-3xs text-muted-foreground"
+      >
+        {event.time.kind === "timed" ? formatEventTime(event.time.start, timeZone) : "All day"}
+      </time>
+      <CalendarEventCard
+        event={event}
+        onSelect={props.onSelect}
+        onNotes={props.onNotes}
+        {...(props.onJoin ? { onJoin: props.onJoin } : {})}
+        {...(props.validateJoin ? { validateJoin: props.validateJoin } : {})}
+        menu={props.renderMenu?.(event)}
+      />
+    </div>
+  );
+  return (
+    <section
+      aria-label={props.space === "calendar" ? "Calendar agenda" : "Upcoming meetings"}
+      className="min-w-0 p-4"
+    >
+      <div className="mb-[17px] flex min-h-[41px] items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm leading-5 font-semibold">{formatDayHeading(day)}</h2>
+          <p className="mt-1 text-3xs leading-4 text-muted-foreground">
+            {props.space === "meetings"
+              ? "Prepare, meet and follow through."
+              : `Your week · ${formatWeek(day)}`}
+          </p>
+        </div>
+        <div className="pt-2">
+          <Button size="xs" onClick={props.onSchedule}>
+            <PlusIcon />
+            Schedule
+          </Button>
+        </div>
+      </div>
+      <CalendarDayStrip day={day} onSelectDay={props.onSelectDay} />
+      {props.status === "loading" ? <p role="status">Loading calendar...</p> : null}
+      {props.status === "unavailable" ? (
+        <p role="status">Calendar is unavailable on this server.</p>
+      ) : null}
+      {props.status === "disconnected" ? (
+        <p role="status">
+          Calendar is disconnected.
+          {props.events.length || props.dueTasks.length ? " Showing the last saved results." : ""}
+        </p>
+      ) : null}
+      {props.error ? (
+        <div role="alert">
+          <p>{props.error}</p>
+          <Button variant="ghost" size="xs" onClick={props.onRetry}>
+            Retry calendar
+          </Button>
+        </div>
+      ) : null}
+      {props.incomplete || props.dueIncomplete ? (
+        <p role="status" className="mb-3 text-xs text-muted-foreground">
+          Some calendars could not be refreshed. Showing the last saved results.
+          {props.fetchedAt
+            ? ` Fetched ${new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit" }).format(new Date(props.fetchedAt))}.`
+            : ""}
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-4">
+        {due.length || events.some((e) => e.time.kind === "all-day") ? (
+          <div aria-label="All day and due tasks" className="flex flex-col gap-4">
+            {events.filter((e) => e.time.kind === "all-day").map(row)}
+            {due.map((task) => (
+              <div key={task.ref.taskId} className="grid grid-cols-[40px_minmax(0,1fr)] gap-3">
+                <span className="text-3xs text-muted-foreground">Due</span>
+                <button
+                  type="button"
+                  onClick={() => props.onOpenTask?.(task)}
+                  className="text-left text-xs underline"
+                >
+                  {task.title}
+                  {task.done ? " · Completed" : ""}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {events.filter((e) => e.time.kind === "timed").map(row)}
+      </div>
+      {props.status === "ready" && !props.error && !events.length && !due.length ? (
+        <p>No meetings on this day.</p>
+      ) : null}
+      <div className="mt-4 flex gap-2">
+        {props.nextEvents ? (
+          <Button variant="outline" size="xs" onClick={() => props.onLoadMore?.("events")}>
+            Load more events
+          </Button>
+        ) : null}
+        {props.nextDue ? (
+          <Button variant="outline" size="xs" onClick={() => props.onLoadMore?.("dueTasks")}>
+            Load more due tasks
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}

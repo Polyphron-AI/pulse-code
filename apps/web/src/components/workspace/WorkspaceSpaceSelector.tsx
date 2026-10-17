@@ -50,7 +50,7 @@ export function useWorkspaceNavigation() {
       leave();
       void navigate({
         to: "/workspace",
-        search: workspaceDestinationSearch(destination, environmentId),
+        search: workspaceDestinationSearch(destination, environmentId, search),
       });
     },
     onSettings: () => {

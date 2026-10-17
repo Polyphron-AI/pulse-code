@@ -28,7 +28,7 @@ function ResourceProvider({ children }: { children?: ReactNode }) {
   return createElement(WorkspaceResourcesContext, { value: resources }, children);
 }
 
-// The unavailable containers never mount a data-backed destination.
+// Destination dispatch is isolated here; Calendar integration owns its real bindings.
 vi.mock("../components/workspace/CommunicationsWorkspace", () => ({
   CommunicationsWorkspace: () => null,
 }));
@@ -40,6 +40,15 @@ vi.mock("../components/workspace/TasksSpace", () => ({
     createElement("main", null, createElement("h1", null, "Tasks"), "Live Tasks list"),
 }));
 
+vi.mock("../components/workspace/calendar/CalendarSpace", () => ({
+  CalendarNotesProvider: ({ children }: { children: ReactNode }) => children,
+  CalendarSpace: () =>
+    createElement("section", null, createElement("h1", null, "Calendar"), "Live Calendar agenda"),
+}));
+vi.mock("../components/workspace/meetings/MeetingsSpace", () => ({
+  MeetingsSpace: () =>
+    createElement("section", null, createElement("h1", null, "Meetings"), "Live Meetings upcoming"),
+}));
 describe("parseWorkspaceSearch", () => {
   it("preserves the environment and exact Telegram source when opening a remote linked message", () => {
     const search = {
@@ -186,8 +195,8 @@ describe("parseWorkspaceSearch", () => {
 
 it.each([
   ["tasks", "Tasks", false],
-  ["meetings", "Meetings", true],
-  ["calendar", "Calendar", true],
+  ["meetings", "Meetings", false],
+  ["calendar", "Calendar", false],
 ] as const)(
   "renders the %s destination",
   async (space, heading, localTools) => {
@@ -220,7 +229,11 @@ it.each([
       expect(
         getByText(
           node,
-          space === "tasks" ? "Live Tasks list" : "This view is not available on this server yet.",
+          space === "tasks"
+            ? "Live Tasks list"
+            : space === "calendar"
+              ? "Live Calendar agenda"
+              : "Live Meetings upcoming",
         ),
       ).toBeDefined();
       const link = queryByRole(node, "link", { name: "Open local Office tools" });
@@ -279,7 +292,10 @@ it("retains exact calendar deep links and validates the independent selected day
     item,
   });
   expect(parseWorkspaceSearch({ space: "calendar", item: "{" })).toEqual({ space: "calendar" });
-  expect(parseWorkspaceSearch({ space: "mail", day: "2026-10-13" })).not.toHaveProperty("day");
+  expect(parseWorkspaceSearch({ space: "mail", day: "2026-10-13" })).toHaveProperty(
+    "day",
+    "2026-10-13",
+  );
 });
 
 vi.mock("../components/workspace/mail/useMailCapabilities", () => ({

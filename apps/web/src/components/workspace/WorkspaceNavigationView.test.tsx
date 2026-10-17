@@ -334,3 +334,18 @@ it("blocks modified and auxiliary clicks on unavailable destinations", async () 
   }
   expect(navigate).not.toHaveBeenCalled();
 });
+
+it("enables implemented Agenda, Upcoming and honest Recordings while Week stays unavailable", () => {
+  expect(
+    workspaceRailItems.calendar.find((i) => i.id === "agenda")?.unavailableReason,
+  ).toBeUndefined();
+  expect(
+    workspaceRailItems.meetings.find((i) => i.id === "upcoming")?.unavailableReason,
+  ).toBeUndefined();
+  expect(
+    workspaceRailItems.meetings.find((i) => i.id === "recordings")?.unavailableReason,
+  ).toBeUndefined();
+  expect(workspaceRailItems.calendar.find((i) => i.id === "week")?.unavailableReason).toContain(
+    "unavailable",
+  );
+});
