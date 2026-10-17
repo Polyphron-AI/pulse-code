@@ -21,11 +21,10 @@ vi.mock("../../state/entities", () => ({
   useThreadShell: () => null,
   useThreadShells: () => [],
 }));
-vi.mock("../../state/session", () => ({
-  useEnvironmentSessionState: () => ({
-    isPending: false,
-    data: { authenticated: true, scopes: mocks.operate ? ["orchestration:operate"] : [] },
-  }),
+vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => mocks.operate }));
+vi.mock("../../hooks/useSettings", () => ({ useEnvironmentSettings: () => null }));
+vi.mock("../../state/environments", () => ({
+  useConnectedEnvironmentIds: () => [mocks.environmentId],
 }));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (query: { projectId: string } | null) => {
