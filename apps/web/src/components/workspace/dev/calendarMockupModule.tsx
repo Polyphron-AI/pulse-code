@@ -117,21 +117,22 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
     return (
       <WorkspaceItemMenuView
+        available={Boolean(url)}
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(value) => setOpen(value && Boolean(url))}
         onContextMenu={(event) => {
           event.preventDefault();
-          setOpen(true);
+          setOpen(Boolean(url));
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+            event.preventDefault();
+            setOpen(Boolean(url));
+          }
         }}
         actions={
           open && url ? (
-            <div
-              className="flex flex-wrap items-center gap-3"
-              onClickCapture={(event) => {
-                if ((event.target as HTMLElement).closest('a[target="_blank"]'))
-                  event.preventDefault();
-              }}
-            >
+            <div className="flex flex-wrap items-center gap-3">
               <CalendarHandoffLink
                 target={{ kind: "meeting", raw: url }}
                 client={handoffClient}

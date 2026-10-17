@@ -75,9 +75,12 @@ export function CalendarSchedule({
                 autoFocus
                 {...(client ? { client } : {})}
                 {...(onOpen ? { onOpen } : {})}
-              />
-            ) : null}
-            <PopoverClose render={<Button size="xs" variant="ghost" />}>Cancel</PopoverClose>
+              >
+                <PopoverClose render={<Button size="xs" variant="ghost" />}>Cancel</PopoverClose>
+              </CalendarHandoffLink>
+            ) : (
+              <PopoverClose render={<Button size="xs" variant="ghost" />}>Cancel</PopoverClose>
+            )}
           </div>
         </div>
       </PopoverPopup>

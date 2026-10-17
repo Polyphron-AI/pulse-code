@@ -42,3 +42,39 @@ it.each(["Cancel", "Escape"])(
     }
   },
 );
+
+it("returns focus to Open calendar after dismissing a rejected Schedule handoff", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  const openExternal = vi.fn().mockRejectedValue(new Error("Desktop rejected opening"));
+  try {
+    await act(() => root.render(<CalendarSchedule day="2026-10-13" client={{ openExternal }} />));
+    await act(() => fireEvent.click(getByRole(node, "button", { name: "Schedule" })));
+    await act(() =>
+      fireEvent.click(getByRole(document.body, "button", { name: "Google Calendar" })),
+    );
+    const destination = getByRole(document.body, "link", { name: "Open calendar" });
+    await act(() => fireEvent.click(destination));
+    expect(getByRole(document.body, "dialog").textContent).toContain(
+      "Unable to open Google Calendar.",
+    );
+    const dismiss = getByRole(document.body, "button", { name: "Dismiss" });
+    await act(() => {
+      dismiss.focus();
+      fireEvent.click(dismiss);
+    });
+    expect(document.activeElement).toBe(destination);
+    expect(queryByRole(document.body, "button", { name: "Dismiss" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Copy calendar link" })).toBeNull();
+    expect(getByRole(document.body, "dialog")).toBeDefined();
+    expect(openExternal).toHaveBeenCalledExactlyOnceWith(
+      "https://calendar.google.com/calendar/r/day/2026/10/13",
+    );
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    vi.unstubAllGlobals();
+  }
+});

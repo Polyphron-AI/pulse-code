@@ -11,7 +11,7 @@ export function validatedConferenceUrl(raw: string): string | undefined {
   } catch {
     return;
   }
-  if (url.protocol !== "https:" || url.username || url.password || url.port) return;
+  if (url.username || url.password) return;
   const host = url.hostname.toLowerCase();
   const meet =
     host === "meet.google.com" && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:\/|$)/.test(url.pathname);

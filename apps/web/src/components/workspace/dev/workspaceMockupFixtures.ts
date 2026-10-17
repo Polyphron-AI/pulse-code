@@ -559,9 +559,10 @@ export function createWorkspaceMockupSeed(): WorkspaceMockupSeed {
       title: "SynKEK · Launch review",
       start: "2026-10-13T14:00:00+02:00",
       durationMinutes: 45,
-      source: "Google Calendar",
+      source: "Google Meet",
       attendeeIds: ["maya", "leo", "nina"],
       description: "Campaign readiness, homepage feedback and remaining launch tasks.",
+      // Source labels are fixture display data, independent of the validated Join destination.
       joinUrl: "https://tenant.zoom.us/j/123456789?pwd=AbC%2B123&tk=exact",
       noteId: "note-launch-review",
     },

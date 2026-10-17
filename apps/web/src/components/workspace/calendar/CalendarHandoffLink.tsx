@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { writeTextToClipboard } from "../../../hooks/useCopyToClipboard";
 import { Button } from "../../ui/button";
 import {
@@ -13,7 +13,7 @@ import {
 const actionClassName =
   "relative inline-flex h-[23px] cursor-pointer shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-0 text-2xs font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11";
 const copyClassName =
-  "relative inline-flex h-[23px] cursor-pointer items-center justify-center whitespace-nowrap rounded-md border border-input bg-popover px-2 text-2xs font-semibold hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 dark:bg-input/32";
+  "relative inline-flex min-h-6 cursor-pointer items-center justify-center whitespace-nowrap rounded-md border border-input bg-popover px-2 text-2xs font-semibold hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 dark:bg-input/32";
 
 export function CalendarHandoffLink({
   target,
@@ -22,6 +22,7 @@ export function CalendarHandoffLink({
   primary = false,
   autoFocus = false,
   menu = false,
+  children,
 }: {
   readonly target: CalendarHandoffTarget;
   readonly client?: CalendarHandoffClient;
@@ -29,6 +30,7 @@ export function CalendarHandoffLink({
   readonly primary?: boolean;
   readonly autoFocus?: boolean;
   readonly menu?: boolean;
+  readonly children?: ReactNode;
 }) {
   const requestingClient = useMemo(() => requestingCalendarClient(), []);
   const client = injectedClient ?? requestingClient;
@@ -104,6 +106,7 @@ export function CalendarHandoffLink({
     </a>
   );
   const label = meeting ? "Join meeting" : "Open calendar";
+  const joinClassName = menu ? copyClassName : actionClassName;
   return (
     <>
       {primary ? (
@@ -115,7 +118,7 @@ export function CalendarHandoffLink({
           {label}
         </Button>
       ) : client.openExternal ? (
-        <button ref={actionRef} type="button" className={actionClassName} onClick={open}>
+        <button ref={actionRef} type="button" className={joinClassName} onClick={open}>
           {label}
         </button>
       ) : (
@@ -124,19 +127,32 @@ export function CalendarHandoffLink({
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className={actionClassName}
+          className={joinClassName}
           onClick={open}
         >
           {label}
         </a>
       )}
+      {children}
       {menu && !recovery ? copy : null}
-      <p
-        role="status"
-        className={recovery ? "basis-full text-2xs text-muted-foreground" : "sr-only"}
-      >
-        {message}
-      </p>
+      <div className={recovery ? "flex basis-full items-start gap-2 text-2xs" : "sr-only"}>
+        <p role="status" className="min-w-0 flex-1 text-muted-foreground">
+          {message}
+        </p>
+        {recovery ? (
+          <button
+            type="button"
+            className={`${actionClassName} min-h-6 text-muted-foreground`}
+            onClick={() => {
+              setOutcome(null);
+              setCopyStatus("");
+              action.current?.focus();
+            }}
+          >
+            Dismiss
+          </button>
+        ) : null}
+      </div>
       {recovery ? (
         <div className="basis-full min-w-0 space-y-2 text-2xs">
           <div className="flex flex-wrap items-center gap-3">
@@ -151,19 +167,10 @@ export function CalendarHandoffLink({
                 {copy}
               </>
             )}
-            <button
-              type="button"
-              className={`${actionClassName} text-muted-foreground`}
-              onClick={() => {
-                setOutcome(null);
-                setCopyStatus("");
-                action.current?.focus();
-              }}
-            >
-              Dismiss
-            </button>
           </div>
-          <p className="select-text break-all text-3xs text-muted-foreground">{url}</p>
+          <p className="select-text text-3xs text-muted-foreground [overflow-wrap:anywhere]">
+            {url}
+          </p>
         </div>
       ) : null}
       <p

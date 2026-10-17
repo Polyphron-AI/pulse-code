@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { fireEvent, getByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, getAllByRole, getByText, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { CalendarNotesProvider, CalendarSpace } from "./CalendarSpace";
 import { MeetingsSpace } from "../meetings/MeetingsSpace";
@@ -16,6 +16,8 @@ const boundaries = vi.hoisted(() => ({
   agentTool: vi.fn(),
   microphone: vi.fn(),
   navigate: vi.fn(),
+  workspaceLinks: false,
+  joinUrl: "https://meet.google.com/abc-defg-hij?authuser=2&hs=122#keep" as string | undefined,
   search: { space: "calendar", day: "2026-10-13", environment: "remote-server" },
 }));
 vi.mock("../../../rpc/requestLatencyState", async (original) => ({
@@ -40,7 +42,7 @@ vi.mock("../../../state/query", () => ({
           attendees: [],
           attendeesTruncated: false,
           hasDescription: false,
-          joinUrl: "https://meet.google.com/abc-defg-hij?authuser=2&hs=122#keep",
+          joinUrl: boundaries.joinUrl,
         },
       ],
       dueTasks: [],
@@ -60,7 +62,10 @@ vi.mock("../../../hooks/useSettings", () => ({
 }));
 vi.mock("../../../state/environments", () => ({ useConnectedEnvironmentIds: () => [] }));
 vi.mock("../mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ environmentId: "remote-server" }),
+  useMailCapabilities: () => ({
+    environmentId: "remote-server",
+    workspaceLinks: boundaries.workspaceLinks,
+  }),
 }));
 vi.mock("../useWorkspaceHeaderModel", () => ({
   useWorkspaceHeaderModel: () => ({ title: "Calendar" }),
@@ -211,7 +216,8 @@ it.each([
       expect(document.activeElement).toBe(schedule);
       expect(openExternal).toHaveBeenCalledTimes(opens);
       openExternal.mockClear();
-      await act(() => fireEvent.click(getByRole(node, "button", { name: "Item actions" })));
+      const itemActions = getByRole(node, "button", { name: "Item actions" });
+      await act(() => fireEvent.click(itemActions));
       const menu = getByRole(document.body, "dialog");
       const menuJoin = getByRole(menu, desktop ? "button" : "link", { name: "Join meeting" });
       await act(() => fireEvent.click(getByRole(menu, "button", { name: "Copy meeting link" })));
@@ -228,6 +234,9 @@ it.each([
       else expect(menuJoin.getAttribute("href")).toBe(url);
       expect(boundaries.rpcRequests).not.toHaveBeenCalled();
       expect(boundaries.mutation).not.toHaveBeenCalled();
+      await act(() => fireEvent.keyDown(menuJoin, { key: "Escape" }));
+      expect(queryByRole(document.body, "dialog")).toBeNull();
+      expect(document.activeElement).toBe(itemActions);
     } finally {
       if (observer) document.body.removeEventListener("click", observer);
       await act(() => root.unmount());
@@ -235,6 +244,62 @@ it.each([
       if (original) Object.defineProperty(window, "desktopBridge", original);
       else Reflect.deleteProperty(window, "desktopBridge");
       vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it.each([false, true])(
+  "hides a read-only no-link menu with workspaceLinks %s and exposes only local handoffs with a link",
+  async (workspaceLinks) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const url = boundaries.joinUrl;
+    boundaries.workspaceLinks = workspaceLinks;
+    boundaries.joinUrl = undefined;
+    try {
+      await act(() =>
+        root.render(
+          <CalendarNotesProvider>
+            <CalendarSpace />
+          </CalendarNotesProvider>,
+        ),
+      );
+      expect(queryByRole(node, "button", { name: "Item actions" })).toBeNull();
+      const card = node.querySelector("article")!;
+      const menuHost = getByText(card, "Event actions").parentElement!;
+      await act(() => fireEvent.contextMenu(menuHost));
+      await act(() => fireEvent.keyDown(menuHost, { key: "F10", shiftKey: true }));
+      expect(queryByRole(document.body, "dialog")).toBeNull();
+      expect(queryByRole(document.body, "link", { name: "Join meeting" })).toBeNull();
+      expect(queryByRole(document.body, "button", { name: "Copy meeting link" })).toBeNull();
+      boundaries.joinUrl = url;
+      await act(() =>
+        root.render(
+          <CalendarNotesProvider key="with-link">
+            <CalendarSpace />
+          </CalendarNotesProvider>,
+        ),
+      );
+      const trigger = getByRole(node, "button", { name: "Item actions" });
+      await act(() => fireEvent.click(trigger));
+      const menu = getByRole(document.body, "dialog");
+      expect(getByRole(menu, "link", { name: "Join meeting" }).getAttribute("href")).toBe(url);
+      expect(getAllByRole(menu, "button").map((button) => button.textContent)).toEqual([
+        "Copy meeting link",
+      ]);
+      expect(getAllByRole(menu, "link")).toHaveLength(1);
+      expect(menu.querySelector("input, select, textarea")).toBeNull();
+      await act(() => fireEvent.keyDown(trigger, { key: "Escape" }));
+      expect(queryByRole(document.body, "dialog")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      boundaries.workspaceLinks = false;
+      boundaries.joinUrl = url;
+      await act(() => root.unmount());
+      node.remove();
       vi.unstubAllGlobals();
     }
   },

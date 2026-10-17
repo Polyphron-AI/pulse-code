@@ -121,6 +121,7 @@ it.each(["web", "desktop-open", "desktop-reject"])(
     });
     const url = "https://tenant.zoom.us/j/123456789?pwd=AbC%2B123&tk=exact&pwd=two+words#keep";
     const node = document.createElement("div");
+    document.body.append(node);
     const root = createRoot(node);
     try {
       await act(() =>
@@ -193,15 +194,21 @@ it.each(["web", "desktop-open", "desktop-reject"])(
       expect(rpc.requests).not.toHaveBeenCalled();
       if (mode !== "web") expect(openExternal).toHaveBeenCalledTimes(1);
       if (mode !== "desktop-open") {
-        await act(() => fireEvent.click(getByRole(node, "button", { name: "Dismiss" })));
+        await act(() => {
+          const dismiss = getByRole(node, "button", { name: "Dismiss" });
+          dismiss.focus();
+          fireEvent.click(dismiss);
+        });
         expect(queryByRole(node, "button", { name: "Copy meeting link" })).toBeNull();
         expect(node.textContent).not.toContain("If nothing opened");
         expect(node.querySelectorAll('[role="status"]')[0]).toBe(statuses[0]);
+        expect(document.activeElement).toBe(join);
       }
       expect(webOpen).not.toHaveBeenCalled();
       for (const fake of Object.values(forbidden)) expect(fake).not.toHaveBeenCalled();
     } finally {
       await act(() => root.unmount());
+      node.remove();
       if (original) Object.defineProperty(window, "desktopBridge", original);
       else Reflect.deleteProperty(window, "desktopBridge");
       vi.restoreAllMocks();

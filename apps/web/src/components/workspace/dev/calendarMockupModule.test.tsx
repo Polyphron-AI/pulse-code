@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, getAllByRole, getByText, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { createWorkspaceMockupModule } from "./calendarMockupModule";
 import {
@@ -85,6 +85,9 @@ it.each(["07", "08"] as const)(
     try {
       expect(module.readyRegions).toEqual(["center"]);
       await act(() => root.render(module.center));
+      expect(node.querySelectorAll("article")[1]!.textContent).toContain(
+        "45 minutes · Google Meet",
+      );
       expect(
         getByRole(node, "button", { name: "Tuesday, 13 October 2026" }).getAttribute(
           "aria-pressed",
@@ -146,6 +149,7 @@ it.each(["07", "08"] as const)(
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
     const node = document.createElement("div");
+    document.body.append(node);
     const root = createRoot(node);
     try {
       for (const state of ["no-url", "desktop-reject"] as const) {
@@ -167,6 +171,17 @@ it.each(["07", "08"] as const)(
           ).toBeNull();
           expect(cards[2]!.textContent).toContain("No meeting link is available.");
           expect(cards[2]!.querySelector("svg.lucide-video")).toBeNull();
+          expect(
+            queryByRole(cards[2]! as HTMLElement, "button", { name: "Join meeting" }),
+          ).toBeNull();
+          expect(
+            queryByRole(cards[2]! as HTMLElement, "button", { name: "Item actions" }),
+          ).toBeNull();
+          const menuHost = getByText(cards[2]! as HTMLElement, "Event actions").parentElement!;
+          await act(() => fireEvent.contextMenu(menuHost));
+          await act(() => fireEvent.keyDown(menuHost, { key: "F10", shiftKey: true }));
+          expect(queryByRole(document.body, "dialog")).toBeNull();
+          expect(queryByRole(document.body, "button", { name: "Copy meeting link" })).toBeNull();
           expect(getAllByRole(node, "link", { name: "Join meeting" })).toHaveLength(2);
         } else {
           await act(async () => {
@@ -183,6 +198,7 @@ it.each(["07", "08"] as const)(
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       await act(() => root.unmount());
+      node.remove();
       vi.restoreAllMocks();
       vi.unstubAllGlobals();
     }

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { act, useSyncExternalStore, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { createRoot } from "react-dom/client";
-import { getByRole } from "@testing-library/dom";
+import { fireEvent, getAllByRole, getByRole } from "@testing-library/dom";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
@@ -110,6 +110,40 @@ const choiceId = projectMenuItems(
   new Set(),
 )[0]!.id;
 const target = document.createElement("button");
+it("offers only local handoffs in a read-only item menu with workspace links enabled", async () => {
+  mocks.operate = false;
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    await act(() =>
+      root.render(
+        <WorkspaceItemMenu
+          environmentId={environmentId}
+          item={a}
+          actions={
+            <>
+              <a href="https://meet.google.com/abc-defg-hij">Join meeting</a>
+              <button type="button">Copy meeting link</button>
+            </>
+          }
+        >
+          <span>A row</span>
+        </WorkspaceItemMenu>,
+      ),
+    );
+    await act(() => fireEvent.contextMenu(node.querySelector('[draggable="true"]')!));
+    expect(getByRole(node, "link", { name: "Join meeting" })).toBeDefined();
+    expect(getAllByRole(node, "button").map((button) => button.textContent)).toEqual([
+      "",
+      "Copy meeting link",
+    ]);
+    expect(node.querySelector("input, select, textarea")).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+  }
+});
 function add(view: ReactTestRenderer) {
   return view.root
     .findAllByType("button")

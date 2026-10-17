@@ -20,6 +20,7 @@ it.each([
   "file:///j/123",
   "data:text/plain,join",
   "https://user:secret@zoom.us/j/123",
+  "https://user@zoom.us/j/1",
   "https://zoom.us:444/j/123",
   "https:zoom.us:444/j/123",
   "https:zoom.us/j/123",

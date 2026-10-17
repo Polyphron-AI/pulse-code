@@ -34,20 +34,25 @@ export function CalendarEventCard({
     return { ...person, key: `${identity}:${copy}` };
   });
   return (
-    <article className="min-w-0 rounded-xl border border-border/60 bg-white/[0.015] px-3 py-3">
+    <article className="group/event relative min-w-0 rounded-xl border border-border/60 bg-white/[0.015] px-3 py-3">
       <div className="flex items-start gap-2">
+        {/* Keep the menu's coarse-pointer hit area clear of the title. */}
         <button
           type="button"
           onClick={() => onSelect(event)}
-          className="min-w-0 flex-1 text-left text-xs leading-5 font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+          className={`min-w-0 flex-1 text-left text-xs leading-5 font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-ring${menu ? " mr-8" : ""}`}
         >
           {event.title}
         </button>
         {url ? (
           <VideoIcon aria-hidden="true" className="mt-1 size-3 shrink-0 text-primary" />
         ) : null}
-        {menu}
       </div>
+      {menu ? (
+        <div className="absolute top-2 right-7 opacity-0 group-hover/event:opacity-100 group-focus-within/event:opacity-100 pointer-coarse:opacity-100">
+          {menu}
+        </div>
+      ) : null}
       <p className="mt-1 text-3xs leading-4 text-muted-foreground">
         {event.time.kind === "timed"
           ? `${Math.round((Date.parse(event.time.end) - Date.parse(event.time.start)) / 60000)} minutes · `

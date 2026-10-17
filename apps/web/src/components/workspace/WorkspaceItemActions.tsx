@@ -570,11 +570,7 @@ export function WorkspaceItemMenu({
   const canOperate = useWorkspaceCanOperate(props.environmentId);
   const capability = useMailCapabilities(props.environmentId);
   const available = (capability.workspaceLinks && canOperate) || Boolean(actions);
-  if (
-    captured &&
-    ((!capability.workspaceLinks && !actions) || captured.environmentId !== props.environmentId)
-  )
-    setCaptured(null);
+  if (captured && (!available || captured.environmentId !== props.environmentId)) setCaptured(null);
   const open = captured !== null && captured.environmentId === props.environmentId;
   const setOpen = (value: boolean) =>
     setCaptured(value && available ? { ...props, shortcuts: false, provenance, actions } : null);
@@ -596,6 +592,7 @@ export function WorkspaceItemMenu({
   );
   return (
     <WorkspaceItemMenuView
+      available={available}
       open={open}
       onOpenChange={setOpen}
       actions={
@@ -607,7 +604,7 @@ export function WorkspaceItemMenu({
               {dropError}
             </p>
           ) : null}
-          {open && captured && capability.workspaceLinks ? (
+          {open && captured && capability.workspaceLinks && canOperate ? (
             <WorkspaceItemActions {...captured} shortcuts={false} />
           ) : null}
         </>
