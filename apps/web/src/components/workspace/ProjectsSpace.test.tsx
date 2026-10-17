@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   item: undefined as string | undefined,
   hub: vi.fn(),
   tasksV2: false,
+  configState: "ready" as "ready" | "pending" | "error",
   task: null as WorkspaceTask | null,
   listeners: new Set<() => void>(),
 }));
@@ -70,7 +71,7 @@ vi.mock("../../state/query", () => ({
     data:
       query === "hub"
         ? { related: [], truncated: false }
-        : query === "config"
+        : query === "config" && mocks.configState === "ready"
           ? {
               projectId: "project",
               taskColumns: ["To do", "Done"],
@@ -82,8 +83,13 @@ vi.mock("../../state/query", () => ({
             : query === "task"
               ? mocks.task
               : null,
-    error: query === "task" && !mocks.task ? "This task was deleted." : null,
-    isPending: false,
+    error:
+      query === "task" && !mocks.task
+        ? "This task was deleted."
+        : query === "config" && mocks.configState === "error"
+          ? "Config unavailable"
+          : null,
+    isPending: query === "config" && mocks.configState === "pending",
     refresh() {},
   }),
 }));
@@ -195,38 +201,44 @@ it("removes the upgrade notice throughout the Projects project-task path after a
   }
 });
 
-it("shows the selected task actions once in its shared editor", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  mocks.task = {
-    id: "wskt_00000000-0000-0000-0000-000000000001",
-    projectId: ProjectId.make("project"),
-    title: "Selected task",
-    column: "To do",
-  };
-  mocks.item = JSON.stringify({ type: "task", taskId: mocks.task.id });
-  function App() {
-    const state = useWorkspaceResourceState(EnvironmentId.make("remote"), {
-      storage: { getItem: () => null, setItem() {} },
-    });
-    return (
-      <WorkspaceResourcesProvider value={state}>
-        <ProjectsSpace />
-      </WorkspaceResourcesProvider>
-    );
-  }
-  const node = document.createElement("div");
-  document.body.append(node);
-  const root = createRoot(node);
-  try {
-    await act(() => root.render(<App />));
-    expect(getByRole(node, "textbox", { name: "Task title" })).toBeDefined();
-    expect(getAllByRole(node, "button", { name: "task actions" })).toHaveLength(1);
-  } finally {
-    await act(() => root.unmount());
-    node.remove();
-    mocks.task = null;
-    mocks.item = undefined;
-    vi.clearAllMocks();
-    vi.unstubAllGlobals();
-  }
-});
+it.each(["ready", "pending", "error"] as const)(
+  "shows the selected task actions once with config %s",
+  async (state) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mocks.task = {
+      id: "wskt_00000000-0000-0000-0000-000000000001",
+      projectId: ProjectId.make("project"),
+      title: "Selected task",
+      column: "To do",
+    };
+    mocks.item = JSON.stringify({ type: "task", taskId: mocks.task.id });
+    mocks.configState = state;
+    function App() {
+      const state = useWorkspaceResourceState(EnvironmentId.make("remote"), {
+        storage: { getItem: () => null, setItem() {} },
+      });
+      return (
+        <WorkspaceResourcesProvider value={state}>
+          <ProjectsSpace />
+        </WorkspaceResourcesProvider>
+      );
+    }
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(() => root.render(<App />));
+      if (state === "ready")
+        expect(getByRole(node, "textbox", { name: "Task title" })).toBeDefined();
+      expect(getAllByRole(node, "button", { name: "task actions" })).toHaveLength(1);
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      mocks.task = null;
+      mocks.item = undefined;
+      mocks.configState = "ready";
+      vi.clearAllMocks();
+      vi.unstubAllGlobals();
+    }
+  },
+);

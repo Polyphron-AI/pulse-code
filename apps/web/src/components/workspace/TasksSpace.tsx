@@ -379,6 +379,7 @@ function ConnectedTasksSpace({
         return;
       }
       captureReturn(ref.taskId);
+      setCreating(false);
       void navigate({ to: "/workspace", search: { ...search, item: JSON.stringify(ref) } });
     },
     [navigate, search, openOther, captureReturn],

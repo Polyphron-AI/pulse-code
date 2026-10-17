@@ -348,3 +348,18 @@ it("dismisses an observed conflict until a newer revision and keeps the original
     "This task changed on another client.",
   );
 });
+it("keeps the conflict notice beside an unrelated validation error", async () => {
+  await act(() => {
+    renderer = create(view());
+  });
+  await change("Task title", "");
+  await act(() => renderer.update(view({ ...task, title: "Other client", revision: 4 })));
+  await act(submit);
+  expect(renderer.root.findByProps({ role: "alert" }).children.join("")).toContain("Enter a title");
+  expect(
+    renderer.root
+      .findByProps({ "aria-label": "Task conflict" })
+      .findByProps({ role: "status" })
+      .children.join(""),
+  ).toBe("This task changed on another client.");
+});

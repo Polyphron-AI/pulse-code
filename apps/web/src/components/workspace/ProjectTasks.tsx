@@ -30,7 +30,7 @@ import { randomUUID } from "../../lib/utils";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
-import { WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 const isWorkspaceToolsError = Schema.is(WorkspaceToolsError);
@@ -425,6 +425,14 @@ export function ProjectTasks({
       ) : null}
       {list.data?.incomplete ? (
         <p className="text-xs text-muted-foreground">Showing up to 200 tasks.</p>
+      ) : null}
+      {selected && !config.data ? (
+        <WorkspaceItemActions
+          shortcuts
+          environmentId={environmentId}
+          item={{ ref: { type: "task", taskId: selected.id }, title: selected.title }}
+          confirmed={[{ ref: { type: "project", projectId: selected.projectId } }]}
+        />
       ) : null}
       {selected && config.data ? (
         <WorkspaceTaskEditor

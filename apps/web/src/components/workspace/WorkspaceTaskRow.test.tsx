@@ -235,3 +235,35 @@ it("keeps the checkbox confirmed and blocks duplicate writes while the captured 
   expect(command.mock.calls[0]?.[0].environmentId).toBe("remote");
   expect(checkbox().props.disabled).toBe(true);
 });
+it("retains the acknowledgement when the list was already in error before the write", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const command = vi.fn<TaskTransitionHandler>(async () =>
+    AsyncResult.success({ ...task, done: true, revision: 4, column: "Done" }),
+  );
+  const view = (refreshFailed: boolean) => (
+    <WorkspaceTaskRow
+      environmentId={EnvironmentId.make("remote")}
+      task={task}
+      density="list"
+      onOpen={() => {}}
+      ownerProfile={null}
+      timeZone="UTC"
+      now={now}
+      canOperate
+      completedColumn="Done"
+      workspaceTasksV2
+      pending={false}
+      refreshFailed={refreshFailed}
+      onTransition={command}
+    />
+  );
+  await act(() => {
+    renderer = create(view(true));
+  });
+  await act(() => renderer.root.findByType("input").props.onChange({ target: { checked: true } }));
+  expect(renderer.root.findByType("input").props.disabled).toBe(true);
+  await act(() => renderer.update(view(false)));
+  expect(renderer.root.findByType("input").props.disabled).toBe(true);
+  await act(() => renderer.update(view(true)));
+  expect(renderer.root.findByType("input").props.disabled).toBe(false);
+});

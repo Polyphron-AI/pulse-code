@@ -91,7 +91,11 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
     id: string;
     revision: number;
   } | null>(null);
-  if (acknowledged && refreshFailed) setAcknowledged(null);
+  const [wasRefreshFailed, setWasRefreshFailed] = useState(refreshFailed);
+  if (wasRefreshFailed !== refreshFailed) {
+    setWasRefreshFailed(refreshFailed);
+    if (refreshFailed) setAcknowledged(null);
+  }
   const explanation = useId();
   const due =
     settingsReady === false ? null : formatWorkspaceTaskDueOn(task.dueOn, now, timeZone, locale);

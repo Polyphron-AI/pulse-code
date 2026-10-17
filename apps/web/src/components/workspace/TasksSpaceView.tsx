@@ -196,7 +196,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
                 aria-label="Task actions"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen && !hidden}
-                className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+                className="my-[7px] flex size-6 cursor-pointer list-none items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring max-md:my-0 max-md:size-11 [@media(pointer:coarse)]:my-0 [@media(pointer:coarse)]:size-11"
                 onClick={(event) => {
                   event.preventDefault();
                   setMenuOpen(!menuOpen);
@@ -210,7 +210,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
               >
                 <MoreHorizontal className="size-3" />
               </summary>
-              <div role="menu" aria-label="Task actions">
+              <div role="menu" aria-label="Task creation">
                 <button
                   role="menuitem"
                   type="button"

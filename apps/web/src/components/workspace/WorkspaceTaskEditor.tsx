@@ -235,6 +235,7 @@ function TaskEditorForm({
     };
   }, []);
   const [error, setError] = useState<string | null>(null);
+  const [saveConflictError, setSaveConflictError] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [missing, setMissing] = useState(false);
   const latestQuery = useEnvironmentQuery(
@@ -306,6 +307,7 @@ function TaskEditorForm({
   };
   const handleFailure = (result: Parameters<typeof workspaceToolsError>[0]) => {
     const cause = squashAtomCommandFailure(result);
+    setSaveConflictError(isToolsError(cause) && cause.kind === "conflict");
     setError(workspaceToolsError(result));
     if (isToolsError(cause)) {
       if (cause.kind === "conflict") {
@@ -400,6 +402,7 @@ function TaskEditorForm({
             !config.taskColumns.includes(draft.column) ||
             !draft.title.trim()
           ) {
+            setSaveConflictError(false);
             setError(
               "Enter a title of 1 to 240 characters, a configured column, a valid due date and an area of at most 120 characters.",
             );
@@ -578,7 +581,9 @@ function TaskEditorForm({
       ) : null}
       {showConflict ? (
         <div className="space-y-2 text-xs" aria-label="Task conflict">
-          {!error ? <p role="status">This task changed on another client.</p> : null}
+          {!error || !saveConflictError ? (
+            <p role="status">This task changed on another client.</p>
+          ) : null}
           {latest ? (
             <div aria-label="Current server values">
               <p>{latest.title}</p>
@@ -672,10 +677,12 @@ function TaskEditorForm({
                   setError(null);
                 }
               } catch (cause) {
-                if (active.current)
+                if (active.current) {
+                  setSaveConflictError(false);
                   setError(
                     cause instanceof Error ? cause.message : "The draft could not be copied.",
                   );
+                }
               }
             }}
           >

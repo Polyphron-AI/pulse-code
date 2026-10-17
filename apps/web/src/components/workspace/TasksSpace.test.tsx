@@ -930,6 +930,7 @@ it("closes Task actions on outside click, focus leave, Escape and selection with
     await act(() => root.render(view()));
     const trigger = getByRole(node, "button", { name: "Task actions" });
     await act(() => trigger.click());
+    expect(getByRole(node, "menu", { name: "Task creation" })).toBeDefined();
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(getByRole(node, "menuitem", { name: "New task" }));
     await act(() => outside.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
@@ -972,6 +973,20 @@ it("closes Task actions on outside click, focus leave, Escape and selection with
     remove.mockRestore();
     node.remove();
     outside.remove();
+  }
+});
+
+it("fits Task actions in the desktop header and reserves larger compact targets", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(() => root.render(<TasksSpaceView {...defaults} onCreate={() => {}} />));
+    const trigger = getByRole(node, "button", { name: "Task actions" });
+    expect(trigger.classList.contains("min-h-11")).toBe(false);
+    expect(trigger.classList.contains("max-md:size-11")).toBe(true);
+  } finally {
+    await act(() => root.unmount());
   }
 });
 
@@ -1503,3 +1518,33 @@ it("replaces search history, pushes applied filters and clears user filters with
     fixture.dispose();
   }
 });
+it.each(["create", "save"])(
+  "clears create mode when selecting a row from an empty draft before %s",
+  async (action) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const fixture = serviceFixture();
+    const { node, router, dispose } = await mountTasksDom(
+      fixture,
+      "/workspace?space=tasks&environment=remote&project=p",
+    );
+    try {
+      await createFromMenu(node);
+      await act(() => getByRole(node, "button", { name: "Open First task" }).click());
+      if (action === "save") {
+        const navigate = vi.spyOn(router, "navigate");
+        await act(() =>
+          enterValue(getByRole(node, "textbox", { name: "Task title" }), "Edited task"),
+        );
+        await act(() => getByRole(node, "button", { name: "Save task" }).click());
+        expect(navigate).not.toHaveBeenCalled();
+        navigate.mockRestore();
+      }
+      await createFromMenu(node);
+      expect(getByRole(node, "textbox", { name: "New task title" })).toBeDefined();
+      expect(queryByRole(node, "textbox", { name: "Task title" })).toBeNull();
+      expect(router.state.location.search.item).toBeUndefined();
+    } finally {
+      await dispose();
+    }
+  },
+);
