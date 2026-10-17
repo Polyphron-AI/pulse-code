@@ -86,3 +86,11 @@ it("reuses warmed display formatters across event rows", () => {
     construct.mockRestore();
   }
 });
+
+it("formats inclusive all-day dates in en-GB", async () => {
+  const { formatAllDayRange } = await import("./dates.ts");
+  expect(formatAllDayRange("2026-10-13", "2026-10-14")).toBe("13 October 2026, all day");
+  expect(formatAllDayRange("2026-10-31", "2026-11-03")).toBe(
+    "31 October 2026 to 2 November 2026, all day",
+  );
+});

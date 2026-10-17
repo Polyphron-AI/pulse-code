@@ -10,6 +10,7 @@ import { CalendarDatePicker } from "./CalendarDatePicker";
 import { sortCalendarEvents } from "./weekLayout";
 export interface CalendarAgendaProps {
   readonly day: string;
+  readonly today?: string;
   readonly timeZone: string;
   readonly space: "calendar" | "meetings";
   readonly view?: "agenda" | "week";
@@ -82,9 +83,10 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
     >
       <div className="mb-[17px] flex min-h-[41px] items-start justify-between gap-2">
         <div>
-          <h2 className="text-calendar-heading font-semibold">
+          <h2>
             <CalendarDatePicker
               day={day}
+              today={props.today ?? day}
               onSelectDay={props.onSelectDay}
               defaultOpen={props.pickerDefaultOpen ?? false}
             />
@@ -102,7 +104,9 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
           </Button>
         </div>
       </div>
-      <CalendarDayStrip day={day} onSelectDay={props.onSelectDay} />
+      {props.view !== "week" ? (
+        <CalendarDayStrip day={day} onSelectDay={props.onSelectDay} />
+      ) : null}
       {props.status === "loading" ? <p role="status">Loading calendar...</p> : null}
       {props.status === "unavailable" ? (
         <p role="status">Calendar is unavailable on this server.</p>
@@ -159,7 +163,7 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
       (props.view === "week"
         ? !props.events.length && !props.dueTasks.length
         : !events.length && !due.length) ? (
-        <p>No meetings on this day.</p>
+        <p>{props.view === "week" ? "No meetings this week." : "No meetings on this day."}</p>
       ) : null}
       <div className="mt-4 flex gap-2">
         {props.nextEvents ? (

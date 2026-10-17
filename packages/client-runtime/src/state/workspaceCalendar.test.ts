@@ -1,4 +1,9 @@
-import { EnvironmentId, WS_METHODS, CalendarError } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  WS_METHODS,
+  CalendarError,
+  EnvironmentAuthorizationError,
+} from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -24,6 +29,7 @@ import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
+import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
 import { executeAtomQuery, runAtomCommand } from "./runtime.ts";
 import { createWorkspaceCalendarAtoms } from "./workspaceCalendar.ts";
 
@@ -1339,6 +1345,235 @@ it.effect(
         const value = AsyncResult.getOrThrow(registry.get(query));
         expect(value.dueTasks.map((t) => t.title)).toEqual(["Saved due"]);
         expect(value.nextDueCursor).toBeUndefined();
+      }),
+    ),
+);
+
+it.effect.each(["events", "dueTasks"] as const)(
+  "does not resurrect deleted %s before a failed unread tail",
+  (kind) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let refresh = false;
+        const source = { connectionId: "known", calendarId: "calendar" };
+        const events = ["A", "B", "C", "D"].map((title, index) => ({
+          ...event,
+          id: `row-${index}`,
+          title,
+          source,
+        }));
+        const tasks = events.map((row) => ({
+          ref: { type: "task" as const, taskId: row.id },
+          title: row.title,
+          dueOn: "2026-10-13",
+          done: false,
+          revision: 1,
+          projectId: "fixture",
+        }));
+        const client = {
+          [WS_METHODS.calendarSubscribeChanges]: () => Stream.never,
+          [WS_METHODS.calendarRefresh]: () =>
+            Effect.sync(() => {
+              refresh = true;
+              return page();
+            }),
+          [WS_METHODS.calendarListRange]: (input: { cursor?: string; dueCursor?: string }) => {
+            const continuation = Boolean(input.cursor || input.dueCursor);
+            if (refresh && continuation)
+              return Effect.fail(new CalendarError({ kind: "rate-limited", message: "Try later" }));
+            const indices = continuation ? [2, 3] : refresh ? [0, 2] : [0, 1];
+            return Effect.succeed({
+              ...page(),
+              events: kind === "events" ? indices.map((i) => events[i]!) : [],
+              dueTasks: kind === "dueTasks" ? indices.map((i) => tasks[i]!) : [],
+              sourceStates: [{ ...source, generation: 1, state: "ready" }],
+              ...(!continuation
+                ? kind === "events"
+                  ? { nextCursor: "more" }
+                  : { nextDueCursor: "more" }
+                : {}),
+            });
+          },
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.loadMore, {
+            environmentId: target.environmentId,
+            input: { range, kind },
+          }),
+        );
+        yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        const value = AsyncResult.getOrThrow(registry.get(query));
+        expect((kind === "events" ? value.events : value.dueTasks).map((row) => row.title)).toEqual(
+          ["A", "C", "D"],
+        );
+      }),
+    ),
+);
+
+it.effect("keeps loaded pages while page one is waiting and after it fails", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      let refresh = false;
+      const client = {
+        [WS_METHODS.calendarSubscribeChanges]: () => Stream.never,
+        [WS_METHODS.calendarRefresh]: () =>
+          Effect.sync(() => {
+            refresh = true;
+            return page();
+          }),
+        [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
+          Effect.gen(function* () {
+            if (refresh) {
+              yield* Deferred.succeed(started, undefined);
+              yield* Deferred.await(release);
+              return yield* new CalendarError({
+                kind: "unavailable",
+                message: "First page failed",
+              });
+            }
+            return input.cursor
+              ? {
+                  ...page(),
+                  events: [
+                    { ...event, id: "wce_00000000-0000-0000-0000-000000000002", title: "Second" },
+                  ],
+                }
+              : { ...page(), nextCursor: "more" };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.range(target);
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      yield* Effect.promise(() =>
+        runAtomCommand(registry, atoms.loadMore, {
+          environmentId: target.environmentId,
+          input: { range, kind: "events" },
+        }),
+      );
+      const observed: string[][] = [];
+      const unsubscribe = registry.subscribe(query, (value) => {
+        const rows = AsyncResult.value(value);
+        if (Option.isSome(rows)) observed.push(rows.value.events.map((row) => row.title));
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
+      yield* Deferred.await(started);
+      expect(
+        Option.getOrThrow(AsyncResult.value(registry.get(query))).events.map((row) => row.title),
+      ).toEqual(["Review", "Second"]);
+      yield* Deferred.succeed(release, undefined);
+      const read = yield* Effect.promise(() => executeAtomQuery(registry, query));
+      expect(read._tag).toBe("Failure");
+      expect(
+        Option.getOrThrow(AsyncResult.value(registry.get(query))).events.map((row) => row.title),
+      ).toEqual(["Review", "Second"]);
+      expect(observed.length).toBeGreaterThan(0);
+      expect(observed.every((rows) => rows.join() === "Review,Second")).toBe(true);
+    }),
+  ),
+);
+
+it.effect.each(["not-found", "invalid-input", "authorization", "transport"] as const)(
+  "fails refresh on non-recoverable %s continuation errors",
+  (kind) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let refresh = false;
+        const client = {
+          [WS_METHODS.calendarSubscribeChanges]: () => Stream.never,
+          [WS_METHODS.calendarRefresh]: () =>
+            Effect.sync(() => {
+              refresh = true;
+              return page();
+            }),
+          [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
+            input.cursor && refresh
+              ? Effect.fail(
+                  kind === "transport"
+                    ? new EnvironmentRpcUnavailableError({
+                        environmentId: TARGET.environmentId,
+                        message: "Transport failed",
+                      })
+                    : kind === "authorization"
+                      ? new EnvironmentAuthorizationError({
+                          requiredScope: "orchestration:read",
+                          message: "Read denied",
+                        })
+                      : new CalendarError({ kind, message: "Read denied" }),
+                )
+              : Effect.succeed({ ...page(), ...(input.cursor ? {} : { nextCursor: "more" }) }),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.loadMore, {
+            environmentId: target.environmentId,
+            input: { range, kind: "events" },
+          }),
+        );
+        yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
+        expect((yield* Effect.promise(() => executeAtomQuery(registry, query)))._tag).toBe(
+          "Failure",
+        );
+      }),
+    ),
+);
+
+it.effect.each([true, false])(
+  "reports conflict when Load more resolves after a refresh publishes changed=%s",
+  (changed) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        let refresh = false;
+        const client = {
+          [WS_METHODS.calendarSubscribeChanges]: () => Stream.never,
+          [WS_METHODS.calendarRefresh]: () =>
+            Effect.sync(() => {
+              refresh = true;
+              return page();
+            }),
+          [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
+            Effect.gen(function* () {
+              if (input.cursor) {
+                yield* Deferred.succeed(started, undefined);
+                yield* Deferred.await(release);
+                return { ...page(), events: [{ ...event, id: "second", title: "Second" }] };
+              }
+              return { ...page(refresh && changed ? "Fresh" : "Review"), nextCursor: "more" };
+            }),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        const more = runAtomCommand(registry, atoms.loadMore, {
+          environmentId: target.environmentId,
+          input: { range, kind: "events" },
+        });
+        yield* Deferred.await(started);
+        yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        yield* Deferred.succeed(release, undefined);
+        expect((yield* Effect.promise(() => more))._tag).toBe("Failure");
+        expect(AsyncResult.getOrThrow(registry.get(query)).events.map((row) => row.title)).toEqual([
+          changed ? "Fresh" : "Review",
+        ]);
       }),
     ),
 );

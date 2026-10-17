@@ -11,7 +11,7 @@ import { useEffect, useRef, useMemo } from "react";
 import { useEnvironmentQuery } from "../state/query";
 import { workspaceCalendar } from "../state/workspaceCalendar";
 import { useEnvironmentSettings } from "../hooks/useSettings";
-import { formatEventRange } from "@t3tools/client-runtime/calendar/dates";
+import { formatEventRange, formatAllDayRange } from "@t3tools/client-runtime/calendar/dates";
 import {
   calendarOccurrenceDay,
   parseCalendarLocation,
@@ -246,7 +246,7 @@ function LinkedCalendarEvent({
             <p className="text-sm text-muted-foreground">
               {event.time.kind === "timed"
                 ? formatEventRange(event.time.start, event.time.end, timeZone)
-                : `${event.time.startOn} to ${event.time.endBefore} (exclusive), all day`}{" "}
+                : formatAllDayRange(event.time.startOn, event.time.endBefore)}{" "}
               · {event.sourceLabel}
             </p>
             {event.description ? (

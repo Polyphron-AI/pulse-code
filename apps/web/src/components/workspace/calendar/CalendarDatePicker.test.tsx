@@ -44,7 +44,9 @@ it("cancels by Escape or touch without changing the day and restores trigger foc
   const root = createRoot(node);
   const select = vi.fn();
   try {
-    await act(() => root.render(<CalendarDatePicker day="2026-10-13" onSelectDay={select} />));
+    await act(() =>
+      root.render(<CalendarDatePicker day="2026-10-13" today="2026-10-13" onSelectDay={select} />),
+    );
     const trigger = getByRole(node, "button", { name: "Choose date" });
     for (const mode of ["escape", "touch"]) {
       await act(() => trigger.click());
@@ -72,7 +74,9 @@ it("chooses a date in another month as local calendar fields", async () => {
   const root = createRoot(node);
   const select = vi.fn();
   try {
-    await act(() => root.render(<CalendarDatePicker day="2026-10-13" onSelectDay={select} />));
+    await act(() =>
+      root.render(<CalendarDatePicker day="2026-10-13" today="2026-10-13" onSelectDay={select} />),
+    );
     await act(() => getByRole(node, "button", { name: "Choose date" }).click());
     await act(() => vi.dynamicImportSettled());
     await act(() => getByRole(document.body, "button", { name: /next month/i }).click());
@@ -80,6 +84,31 @@ it("chooses a date in another month as local calendar fields", async () => {
       getByRole(document.body, "button", { name: "Monday, 2 November 2026" }).click(),
     );
     expect(select).toHaveBeenCalledExactlyOnceWith("2026-11-02");
+    expect(document.activeElement).toBe(getByRole(node, "button", { name: "Choose date" }));
+    expect(queryByRole(document.body, "grid")).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("uses the supplied today and closes when the selected day is clicked again", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  const select = vi.fn();
+  try {
+    await act(() =>
+      root.render(
+        <CalendarDatePicker day="2026-10-13" today="2026-10-13" onSelectDay={select} defaultOpen />,
+      ),
+    );
+    const selected = getByRole(document.body, "button", { name: /Tuesday, 13 October 2026/ });
+    expect(selected.closest("[data-today]")).not.toBeNull();
+    await act(() => selected.click());
+    expect(select).toHaveBeenCalledExactlyOnceWith("2026-10-13");
     expect(queryByRole(document.body, "grid")).toBeNull();
   } finally {
     await act(() => root.unmount());

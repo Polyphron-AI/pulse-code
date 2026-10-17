@@ -1,13 +1,12 @@
 import { useState } from "react";
 import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
 import { CalendarAgenda } from "../calendar/CalendarAgenda";
-import { preloadCalendarPicker } from "../calendar/CalendarDatePicker";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
   const state = session.calendarState;
-  const pickerReady = state === "picker" ? preloadCalendarPicker() : undefined;
   const fold = state === "dst-fold";
-  const timeZone = fold ? "America/New_York" : session.timeZone;
+  const gap = state === "dst-gap";
+  const timeZone = session.timeZone;
   let disposed = false;
   const pending = new Set<Promise<void>>();
   const record = (
@@ -67,18 +66,70 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
       },
     },
   ];
-  const initial = fold ? "2026-11-01" : session.clock.today();
+  const gapEvents: readonly CalendarOccurrenceSummary[] = [
+    {
+      ...events[0]!,
+      id: "fixture-gap-before",
+      title: "Before the gap",
+      time: {
+        kind: "timed",
+        start: "2026-03-08T06:30:00Z",
+        end: "2026-03-08T06:55:00Z",
+        sourceTimeZone: timeZone,
+      },
+    },
+    {
+      ...events[0]!,
+      id: "fixture-gap-after",
+      title: "After the gap",
+      time: {
+        kind: "timed",
+        start: "2026-03-08T07:00:00Z",
+        end: "2026-03-08T07:30:00Z",
+        sourceTimeZone: timeZone,
+      },
+    },
+  ];
+  const allDay: CalendarOccurrenceSummary = {
+    ...events[0]!,
+    id: "fixture-all-day",
+    title: "Launch planning",
+    time: { kind: "all-day", startOn: "2026-10-14", endBefore: "2026-10-16" },
+  };
+  const initial = fold ? "2026-11-01" : gap ? "2026-03-08" : session.clock.today();
   function Center() {
     const [day, setDay] = useState<string>(initial);
     return (
       <CalendarAgenda
         day={day}
+        today={session.clock.today()}
         timeZone={timeZone}
-        view={state && state !== "picker" ? "week" : "agenda"}
+        view={session.recipe.view === "week" ? "week" : "agenda"}
         pickerDefaultOpen={state === "picker"}
         space={session.recipe.space === "meetings" ? "meetings" : "calendar"}
-        events={fold ? foldEvents : events}
-        dueTasks={[]}
+        events={
+          fold
+            ? foldEvents
+            : gap
+              ? gapEvents
+              : state === "week-allday"
+                ? [...events, allDay]
+                : events
+        }
+        dueTasks={
+          state === "week-allday"
+            ? [
+                {
+                  ref: { type: "task", taskId: "fixture-due" },
+                  title: "Prepare launch brief",
+                  projectId: session.resourceProjectId,
+                  dueOn: "2026-10-15",
+                  done: false,
+                  revision: 1,
+                },
+              ]
+            : []
+        }
         status="ready"
         onSelectDay={(value) => {
           if (disposed) return;
@@ -119,7 +170,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     readyRegions: ["center"],
     center: <Center />,
     settled: async () => {
-      await Promise.all([...pending, pickerReady]);
+      await Promise.all(pending);
       await session.settled();
     },
     dispose: () => {

@@ -131,6 +131,7 @@ function CalendarBinding({
     >
       <CalendarAgenda
         day={day}
+        today={today}
         timeZone={timeZone}
         space={space}
         view={space === "calendar" && search.view === "week" ? "week" : "agenda"}

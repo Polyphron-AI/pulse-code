@@ -36,7 +36,14 @@ export const workspaceTasksMockupStates = [
   "board-disconnected",
 ] as const;
 export type WorkspaceTasksMockupState = (typeof workspaceTasksMockupStates)[number];
-export const workspaceCalendarMockupStates = ["week", "picker", "dst-fold", "week-390"] as const;
+export const workspaceCalendarMockupStates = [
+  "week",
+  "picker",
+  "dst-fold",
+  "dst-gap",
+  "week-allday",
+  "week-390",
+] as const;
 export type WorkspaceCalendarMockupState = (typeof workspaceCalendarMockupStates)[number];
 export type WorkspaceMockupArea =
   | "mail"
@@ -830,7 +837,7 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
       (id === "08" && workspaceCalendarMockupStates.some((value) => value === state))
     )
   )
-    throw new Error("Unknown task fixture state.");
+    throw new Error("Unknown fixture state.");
   const theme = url.searchParams.get("theme");
   if (theme !== null && theme !== "light" && theme !== "dark")
     throw new Error("Unknown fixture theme.");
@@ -884,7 +891,10 @@ export function createWorkspaceMockupSession(
     seed,
     clock: { now: () => new Date(fixedInstant), today: () => "2026-10-13" },
     locale: "en-GB",
-    timeZone: calendarState === "dst-fold" ? "America/New_York" : "Africa/Johannesburg",
+    timeZone:
+      calendarState === "dst-fold" || calendarState === "dst-gap"
+        ? "America/New_York"
+        : "Africa/Johannesburg",
     storage: {
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => {

@@ -3,13 +3,24 @@ import { weekDates, formatDay } from "@t3tools/client-runtime/calendar/dates";
 export function CalendarDayStrip({
   day,
   onSelectDay,
+  week = false,
 }: {
   readonly day: string;
+  readonly week?: boolean;
   readonly onSelectDay: (day: string) => void;
 }) {
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   return (
-    <div role="group" aria-label="Choose day" className="mb-[22px] grid h-[33px] grid-cols-7 gap-1">
+    <div
+      role="group"
+      aria-label="Choose day"
+      className={
+        week
+          ? "mb-[22px] grid h-[33px] grid-cols-[40px_repeat(7,minmax(0,1fr))]"
+          : "mb-[22px] grid h-[33px] grid-cols-7 gap-1"
+      }
+    >
+      {week ? <span aria-hidden="true" /> : null}
       {weekDates(day).map((value, i) => (
         <button
           key={value}

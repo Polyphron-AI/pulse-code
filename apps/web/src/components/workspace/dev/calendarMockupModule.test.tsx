@@ -39,7 +39,13 @@ it.each(workspaceCalendarMockupStates)(
           state === "picker" ? {} : { name: "Week schedule" },
         ),
       ).toBeDefined();
-      if (state === "dst-fold") expect(node.textContent).toContain("01:00 GMT-5");
+      if (state === "dst-fold") expect(node.textContent).toContain("01:30 GMT-5");
+      if (state === "dst-gap")
+        expect(document.body.textContent).toContain("Clocks go forward, 02:00 to 03:00 is skipped");
+      if (state === "week-allday") {
+        expect(document.body.textContent).toContain("Launch planning");
+        expect(document.body.textContent).toContain("Prepare launch brief");
+      }
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       await act(() => root.unmount());

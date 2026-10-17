@@ -35,6 +35,12 @@ const supported = Effect.gen(function* () {
   return config.pulseCapabilities?.workspaceCalendar === true;
 });
 const isCalendarError = Schema.is(CalendarError);
+const recoverableContinuations = new Set([
+  "unavailable",
+  "disconnected",
+  "rate-limited",
+  "conflict",
+]);
 const unavailableReason = "Calendar is unavailable on this server.";
 const unavailable = { unavailableReason };
 type LoadMoreInput = { readonly range: CalendarRangeInput; readonly kind: "events" | "dueTasks" };
@@ -92,28 +98,49 @@ export function createWorkspaceCalendarAtoms<R, E>(
     JSON.stringify([environmentId, normalizeRange(input)]);
   const eventStart = (event: CalendarPage["events"][number]) =>
     Date.parse(event.time.kind === "timed" ? event.time.start : `${event.time.startOn}T00:00:00Z`);
-  const sortEvents = (events: CalendarPage["events"][number][]) =>
-    events.sort((a, b) => eventStart(a) - eventStart(b) || a.id.localeCompare(b.id));
+  const compareKey = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const compareEvents = (a: CalendarPage["events"][number], b: CalendarPage["events"][number]) =>
+    eventStart(a) - eventStart(b) || compareKey(a.id, b.id);
+  const compareDue = (a: CalendarPage["dueTasks"][number], b: CalendarPage["dueTasks"][number]) =>
+    compareKey(a.dueOn, b.dueOn) ||
+    compareKey(a.projectId, b.projectId) ||
+    compareKey(a.ref.taskId, b.ref.taskId);
+  const sortEvents = (events: CalendarPage["events"][number][]) => events.sort(compareEvents);
+  const retainRows = <T>(
+    fresh: readonly T[],
+    saved: readonly T[],
+    id: (row: T) => string,
+    keep: (row: T) => boolean,
+    cap: number,
+  ) => {
+    const ids = new Set(fresh.map(id));
+    return [...fresh, ...saved.filter((row) => !ids.has(id(row)) && keep(row))].slice(0, cap);
+  };
+  const sourceState = (fresh: RangeState, event: CalendarPage["events"][number]) =>
+    fresh.sourceStates.find(
+      (source) =>
+        source.connectionId === event.source?.connectionId &&
+        source.calendarId === event.source.calendarId,
+    );
   const retainFailedSources = (
     fresh: RangeState,
     saved: RangeState | undefined,
     cap: number,
-  ): RangeState => {
-    const freshIds = new Set(fresh.events.map((event) => event.id));
-    const retained =
-      saved?.events.filter(
-        (event) =>
-          !freshIds.has(event.id) &&
-          event.source &&
-          fresh.sourceStates.some(
-            (source) =>
-              source.connectionId === event.source?.connectionId &&
-              source.calendarId === event.source.calendarId &&
-              (source.state === "unavailable" || source.state === "disconnected"),
-          ),
-      ) ?? [];
-    return { ...fresh, events: sortEvents([...fresh.events, ...retained].slice(0, cap)) };
-  };
+  ): RangeState => ({
+    ...fresh,
+    events: sortEvents(
+      retainRows(
+        fresh.events,
+        saved?.events ?? [],
+        (event) => event.id,
+        (event) => {
+          const source = sourceState(fresh, event);
+          return source?.state === "unavailable" || source?.state === "disconnected";
+        },
+        cap,
+      ),
+    ),
+  });
   const combine = (
     first: RangeState,
     events: readonly CalendarPage[],
@@ -177,9 +204,7 @@ export function createWorkspaceCalendarAtoms<R, E>(
             ...(kind === "events" ? { cursor } : { dueCursor: cursor }),
           }).pipe(
             Effect.catchIf(
-              (error) =>
-                isCalendarError(error) &&
-                ["unavailable", "disconnected", "rate-limited", "conflict"].includes(error.kind),
+              (error) => isCalendarError(error) && recoverableContinuations.has(error.kind),
               () => Effect.void,
             ),
           );
@@ -201,8 +226,9 @@ export function createWorkspaceCalendarAtoms<R, E>(
         // Load more can finish during either side's read. Admit its latest depth before publishing.
       } while (needsReplay("events", events) || needsReplay("due", due));
       const previous = depths.get(key);
+      const read = combine(page, events, due);
       const fresh = retainFailedSources(
-        combine(page, events, due),
+        read,
         previous?.value,
         ((previous?.eventDepth ?? 0) + 1) * input.limit,
       );
@@ -212,30 +238,34 @@ export function createWorkspaceCalendarAtoms<R, E>(
         ...(previous && dueFailed ? { dueTasks: previous.value.dueTasks } : {}),
       };
       if (failed.events) {
-        const rows = new Map(combined.events.map((event) => [event.id, event]));
-        for (const event of previous?.value.events ?? []) {
-          const source = event.source;
-          const state = source
-            ? page.sourceStates.find(
-                (state) =>
-                  state.connectionId === source.connectionId &&
-                  state.calendarId === source.calendarId,
-              )
-            : undefined;
-          if (source && (!state || state.state === "unselected")) continue;
-          if (!rows.has(event.id)) rows.set(event.id, event);
-        }
+        const last = read.events.at(-1);
         combined.events = sortEvents(
-          [...rows.values()].slice(0, (requested("events") + 1) * input.limit),
+          retainRows(
+            combined.events,
+            previous?.value.events ?? [],
+            (event) => event.id,
+            (event) => {
+              const source = sourceState(page, event);
+              return (
+                (!event.source || Boolean(source && source.state !== "unselected")) &&
+                (!last || compareEvents(event, last) > 0)
+              );
+            },
+            (requested("events") + 1) * input.limit,
+          ),
         );
         combined.incomplete = true;
         delete combined.nextCursor;
       }
       if (failed.due) {
-        const rows = new Map(combined.dueTasks.map((task) => [task.ref.taskId, task]));
-        for (const task of previous?.value.dueTasks ?? [])
-          if (!rows.has(task.ref.taskId)) rows.set(task.ref.taskId, task);
-        combined.dueTasks = [...rows.values()].slice(0, (requested("due") + 1) * input.limit);
+        const last = read.dueTasks.at(-1);
+        combined.dueTasks = retainRows(
+          combined.dueTasks,
+          previous?.value.dueTasks ?? [],
+          (task) => task.ref.taskId,
+          (task) => !last || compareDue(task, last) > 0,
+          (requested("due") + 1) * input.limit,
+        );
         combined.dueIncomplete = true;
         delete combined.nextDueCursor;
       }
@@ -284,9 +314,9 @@ export function createWorkspaceCalendarAtoms<R, E>(
       get(loaded(query));
       const key = queryKeys.get(query);
       const pages = key ? depths.get(key) : undefined;
-      if (!AsyncResult.isSuccess(result) || result.waiting || pages?.queryValue !== result.value)
-        return result;
-      return AsyncResult.success(pages.value);
+      return AsyncResult.map(result, (value) =>
+        pages?.queryValue === value ? pages.value : value,
+      );
     }).pipe(Atom.setIdleTTL(0)),
   );
   const range = ({
@@ -362,27 +392,35 @@ export function createWorkspaceCalendarAtoms<R, E>(
         );
         if (!lifetime.active) return;
         const current = registry.get(query);
-        if (AsyncResult.isSuccess(current) && current.value === first.value) {
-          const depth = depths.get(key);
-          if (!depth || depth.first !== pages.first || depth.queryValue !== first.value) return;
-          const events = input.kind === "events" ? [...depth.events, next] : depth.events;
-          const due = input.kind === "dueTasks" ? [...depth.due, next] : depth.due;
-          const eventDepth = depth.eventDepth + (input.kind === "events" ? 1 : 0);
-          const dueDepth = depth.dueDepth + (input.kind === "dueTasks" ? 1 : 0);
-          depths.set(key, {
-            ...depth,
-            events,
-            due,
-            eventDepth,
-            dueDepth,
-            value: retainFailedSources(
-              combine(depth.first, events, due),
-              depth.value,
-              (eventDepth + 1) * normalized.limit,
-            ),
+        const depth = depths.get(key);
+        if (
+          !AsyncResult.isSuccess(current) ||
+          current.value !== first.value ||
+          !depth ||
+          depth.first !== pages.first ||
+          depth.queryValue !== first.value
+        )
+          return yield* new CalendarError({
+            kind: "conflict",
+            message: "Calendar changed while loading more. Try again.",
           });
-          registry.update(loaded(query), (version) => version + 1);
-        }
+        const events = input.kind === "events" ? [...depth.events, next] : depth.events;
+        const due = input.kind === "dueTasks" ? [...depth.due, next] : depth.due;
+        const eventDepth = depth.eventDepth + (input.kind === "events" ? 1 : 0);
+        const dueDepth = depth.dueDepth + (input.kind === "dueTasks" ? 1 : 0);
+        depths.set(key, {
+          ...depth,
+          events,
+          due,
+          eventDepth,
+          dueDepth,
+          value: retainFailedSources(
+            combine(depth.first, events, due),
+            depth.value,
+            (eventDepth + 1) * normalized.limit,
+          ),
+        });
+        registry.update(loaded(query), (version) => version + 1);
       }),
     }),
     detail: createEnvironmentQueryAtomFamily(runtime, {

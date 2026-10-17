@@ -79,9 +79,13 @@ does not permit continuation reuse. A cursor conflict restarts the same bounded 
 invalid input remains an error. In-flight commands with the same environment and normalized range
 share work. A late continuation cannot reopen hidden listeners or overwrite a newer first page.
 If Load more succeeds during a refresh, the refresh replays the latest admitted depth before
-publishing. A recoverable continuation failure keeps the bounded saved rows for that side and
+publishing. A continuation arriving after a newer first page reports a retryable conflict.
+A recoverable continuation failure keeps only the bounded unread tail after the last freshly read
+sort key for that side and
 marks it incomplete, without an unusable continuation cursor. Known unselected or removed source
-tuples are still excluded. Authorization and invalid-input failures remain errors.
+tuples are still excluded. Rows omitted inside the freshly read healthy prefix stay deleted. Authorization,
+not-found, invalid-input and transport failures remain errors. Waiting and failed first-page reads
+keep every loaded page visible through the previous-success value without hiding the failure.
 Queries and streams use zero idle TTL so their last unmount releases subscriptions immediately.
 Partial refreshes replace healthy sources. Only rows with an explicit source tuple whose new state
 is unavailable or disconnected can be retained, after fresh rows within the loaded cap. Unselected,
@@ -113,3 +117,13 @@ All provider adapters consume that common pre-adapter path; MCP availability sti
 provider's advertised capability.
 
 Rendered Calendar/Meetings workflows and user guidance remain the W6-T4/T5/T9 integration gate.
+
+Week uses a shared wall-time axis, with a repeated-hour slot on fold weeks and a shaded missing
+interval on ordinary days. A spring gap leaves a shaded skipped interval. Splitting segments at
+these boundaries preserves actual duration while keeping every column aligned with the single
+gutter. Only transition-day cards show GMT offsets. The sticky day strip and untimed band share
+one horizontal scroller and gutter with the timed columns. Coarse hit areas grow into free space,
+clamped at adjacent intervals and day boundaries, without changing event height or overlap packing.
+Week cards flatten the accepted Agenda white overlay against the background so grid lines cannot
+show through. The picker imports only en-GB by subpath, treats Date as local field storage and uses
+the display-zone clock for today. It creates no refresh timer.

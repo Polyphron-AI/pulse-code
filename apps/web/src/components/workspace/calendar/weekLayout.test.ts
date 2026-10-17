@@ -1,6 +1,12 @@
 import { expect, it } from "vite-plus/test";
 import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
-import { packOverlaps, weekSegments, sortCalendarEvents } from "./weekLayout";
+import {
+  packOverlaps,
+  weekSegments,
+  sortCalendarEvents,
+  segmentHitInsets,
+  weekTimeline,
+} from "./weekLayout";
 
 const event = (id: string, start: string, end: string, title = id): CalendarOccurrenceSummary => ({
   id,
@@ -64,7 +70,10 @@ it("separates the fold and skips the gap on actual 25 and 23 hour axes", () => {
       "2026-03-08",
       "America/New_York",
     ).map((s) => [s.startMinute, s.endMinute]),
-  ).toEqual([[90, 150]]);
+  ).toEqual([
+    [90, 120],
+    [180, 210],
+  ]);
 });
 it("orders all-day rows first then start, end, title and stable ID", () => {
   const timed = event("timed", "2026-10-13T00:00:00Z", "2026-10-13T01:00:00Z");
@@ -117,4 +126,43 @@ it("keeps title before ID when equally timed Week events share a column group", 
     ["z", 0],
     ["a", 1],
   ]);
+});
+
+it("keeps coarse hit areas within the day and separate for touching events", () => {
+  const pieces = weekSegments(
+    [
+      event("first", "2026-10-13T09:00:00Z", "2026-10-13T09:30:00Z"),
+      event("next", "2026-10-13T09:30:00Z", "2026-10-13T10:00:00Z"),
+      event("late", "2026-10-13T23:50:00Z", "2026-10-14T00:00:00Z"),
+    ],
+    "2026-10-13",
+    "UTC",
+  );
+  expect(segmentHitInsets(pieces[0]!, pieces, 1440)).toEqual({ before: 20, after: 0 });
+  expect(segmentHitInsets(pieces[1]!, pieces, 1440)).toEqual({ before: 0, after: 20 });
+  expect(segmentHitInsets(pieces[2]!, pieces, 1440)).toEqual({ before: 36, after: 0 });
+});
+it("aligns ordinary days around the shared repeated-hour band and preserves crossing duration", () => {
+  const timeline = weekTimeline("2026-11-01", "America/New_York");
+  expect(timeline.hours.filter((row) => row.label === "01:00").map((row) => row.minute)).toEqual([
+    60, 120,
+  ]);
+  expect(timeline.days[0]!.missing).toEqual([{ startMinute: 120, endMinute: 180 }]);
+  const pieces = weekSegments(
+    [event("cross", "2026-10-26T05:30:00Z", "2026-10-26T06:30:00Z")],
+    "2026-11-01",
+    "America/New_York",
+    timeline,
+  );
+  expect(pieces.map((row) => [row.startMinute, row.endMinute])).toEqual([
+    [90, 120],
+    [180, 210],
+  ]);
+  expect(pieces.reduce((total, row) => total + row.endMinute - row.startMinute, 0)).toBe(60);
+});
+it("keeps a half-hour fold aligned in Australia/Lord_Howe", () => {
+  const timeline = weekTimeline("2026-04-05", "Australia/Lord_Howe");
+  expect(timeline.minutes).toBe(1470);
+  expect(timeline.hours.find((row) => row.label === "09:00")?.minute).toBe(570);
+  expect(timeline.days[6]!.note).toBe("Clocks go back, 01:30 to 02:00 repeats");
 });

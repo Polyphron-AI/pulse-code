@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+// The real root already loads Calendar through Snooze. Keep that dependency outside fixture action timing.
+import "../calendar/CalendarDatePicker";
 import { getByRole } from "@testing-library/dom";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
@@ -110,11 +112,12 @@ it("keeps task URL state through capture resets and records light-theme smoke ho
   expect(resource.manifest.networkRequests).toBe(0);
 });
 
-it.each(["week", "picker", "dst-fold", "week-390"])(
+it.each(["week", "picker", "dst-fold", "dst-gap", "week-allday", "week-390"])(
   "captures the isolated Calendar %s route and matching display zone",
   async (state) => {
     const width = state === "week-390" ? 390 : 1280;
-    runtimeTimeZone = state === "dst-fold" ? "America/New_York" : "Africa/Johannesburg";
+    runtimeTimeZone =
+      state === "dst-fold" || state === "dst-gap" ? "America/New_York" : "Africa/Johannesburg";
     (
       window as unknown as {
         happyDOM: {
@@ -143,9 +146,15 @@ it.each(["week", "picker", "dst-fold", "week-390"])(
         getByRole(document.body, "button", { name: "Week" }).getAttribute("aria-pressed"),
       ).toBe("true");
     }
+    if (state === "dst-gap")
+      expect(document.body.textContent).toContain("Clocks go forward, 02:00 to 03:00 is skipped");
+    if (state === "week-allday") {
+      expect(document.body.textContent).toContain("Launch planning");
+      expect(document.body.textContent).toContain("Prepare launch brief");
+    }
     if (state === "dst-fold") {
-      expect(document.body.textContent).toContain("01:00 GMT-4");
-      expect(document.body.textContent).toContain("01:00 GMT-5");
+      expect(document.body.textContent).toContain("01:30 GMT-4");
+      expect(document.body.textContent).toContain("01:30 GMT-5");
     }
   },
 );

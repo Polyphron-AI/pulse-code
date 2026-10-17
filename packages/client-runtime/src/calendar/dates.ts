@@ -65,20 +65,22 @@ export function displayDayBounds(day: string, timeZone: string) {
   const end = midnight(addDays(day, 1));
   return { start, end, minutes: (end - start) / 60000 };
 }
-export const formatEventOffsetTime = (instant: string, timeZone: string) =>
+export const formatEventOffsetTime = (instant: string | number, timeZone: string) =>
   formatter({
     timeZone,
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
     timeZoneName: "shortOffset",
-  }).format(Date.parse(instant));
+  }).format(
+    typeof instant === "number" ? instant : DateTime.toEpochMillis(DateTime.makeUnsafe(instant)),
+  );
 export function formatEventRange(start: string, end: string, timeZone: string) {
   const format = (instant: string) =>
     `${formatDay(displayDay(instant, timeZone), { day: "numeric", month: "long", year: "numeric" })}, ${formatEventOffsetTime(instant, timeZone)}`;
   return `${format(start)} to ${format(end)} (${timeZone})`;
 }
-/** DayPicker uses local calendar fields as carriers, never event instants. */
+/** DayPicker uses local fields. Effect constructs the Date to preserve the shared runtime Date diagnostic. */
 export function calendarDateToLocalPickerDate(day: string) {
   const value = date(day);
   const carrier = DateTime.toDateUtc(DateTime.makeUnsafe(0));
@@ -88,3 +90,9 @@ export function calendarDateToLocalPickerDate(day: string) {
 }
 export const localPickerDateToCalendarDate = (value: Date) =>
   `${String(value.getFullYear()).padStart(4, "0")}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+
+export function formatAllDayRange(startOn: string, endBefore: string) {
+  const last = addDays(endBefore, -1);
+  const options = { day: "numeric", month: "long", year: "numeric" } as const;
+  return `${formatDay(startOn, options)}${last === startOn ? "" : ` to ${formatDay(last, options)}`}, all day`;
+}

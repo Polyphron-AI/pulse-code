@@ -374,9 +374,7 @@ it("switches Agenda and Week, keeps the date and resource project, and returns f
     await click(node, "button", "Week");
     await act(() => router.load());
     expect(rpc.rangeStarts).toHaveLength(1);
-    await act(() =>
-      fireEvent.keyDown(getByRole(node, "button", { name: /^Launch review,/ }), { key: "Enter" }),
-    );
+    await act(() => getByRole(node, "button", { name: /^Launch review,/ }).click());
     await act(() => router.load());
     expect(router.state.location.search.view).toBe("week");
     expect(router.state.location.search.item).toContain(event.id);
@@ -1124,6 +1122,39 @@ it.each([
     expect(getByRole(node, "alert").textContent).toBe(error);
     expect(node.textContent).not.toContain("Resolved body");
     expect(router.state.location.search).toMatchObject({ day: "2026-10-14", item });
+  } finally {
+    await dispose();
+  }
+});
+
+it("shows week copy for an empty Week range", async () => {
+  const { node, dispose } = await mount(undefined, "calendar");
+  try {
+    await click(node, "button", "Week");
+    rpc.rangeMode = "empty";
+    await notify();
+    expect(node.textContent).toContain("No meetings this week.");
+    expect(node.textContent).not.toContain("No meetings on this day.");
+  } finally {
+    await dispose();
+  }
+});
+it("shows an inclusive en-GB all-day range in event detail", async () => {
+  const { node, dispose } = await mount(
+    JSON.stringify({
+      type: "provider-resource",
+      provider: "workspace-calendar",
+      resourceId: event.id,
+    }),
+    "calendar",
+  );
+  try {
+    rpc.detailTime = { kind: "all-day", startOn: "2026-10-31", endBefore: "2026-11-03" };
+    rpc.detail = true;
+    await notify();
+    const text = getByRole(node, "region", { name: "Calendar event" }).textContent;
+    expect(text).toContain("31 October 2026 to 2 November 2026, all day");
+    expect(text).not.toContain("exclusive");
   } finally {
     await dispose();
   }

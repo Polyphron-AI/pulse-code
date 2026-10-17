@@ -161,7 +161,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 }
 
 @theme inline {
-  /* Two steps below Tailwind's text-xs (12px) for dense UI: metadata rows,
+  /* Calendar headings are 15px. Smaller dense UI sizes cover metadata rows,
      badges, counters, keyboard hints and diagnostics tables. 2xs is 11px,
      3xs is 10px. Provider icon overlays use 4xs (8px) and 5xs (7px) to fit
      their smaller badges. Registered with tailwind-merge in
