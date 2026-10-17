@@ -91,10 +91,25 @@ page's `projects` config entries, and also renders columns absent from the confi
 The shared environment/query atom reuses one change subscription,
 invalidates active pages on change and hides old cursor pages during refresh or failure.
 The first page keeps its rows while refreshing. A rejected cursor refreshes the matching first
-page even when a project generation change emitted no task event. Consumers drop cursor pages
-and treat invalid-input cursor failures as a restart signal without a toast. Reconnects use
+page even when a project generation change emitted no task event. Recovery skips an in-flight
+first-page refresh and a first-page value already replaced during that cursor request. Consumers
+drop cursor pages and treat invalid-input cursor failures as a restart signal without a toast. Reconnects use
 the session generation without polling. The legacy project list keeps its 200-task limit and
 incomplete flag until its UI replacement ships.
+
+The Tasks center keeps its search input and list controller mounted across filter and detail
+changes. Debounced search and the date clock stop while hidden. Filters select a new atom;
+confirmed cursor pages are discarded whenever the first-page value changes or refresh starts.
+A failed first-page refresh retains only its confirmed rows and an inline error, with Load more
+disabled until success. Totals always come from the first page. Project renames do not announce
+a task change, so a title can stay stale until a task change, reconnect, cursor recovery or a
+remount after the 30-second stale window. This is an accepted constraint of the current projection
+boundary, rather than a reason for a second subscription or polling.
+
+The shared row reserves 58 px for dates and 32 px for owners before truncating the title. Date
+formatters are cached by timezone and locale, and rows are memoized. The marked Tasks fixture
+renders the same presentation and rows with an in-memory command boundary. Named coworkers and
+the followers footer stay confined to that fixture; live ownership is still Me or Unassigned.
 
 ## Task dates and environment timezone
 

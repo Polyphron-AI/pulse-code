@@ -33,6 +33,10 @@ vi.mock("../components/workspace/CommunicationsWorkspace", () => ({
 vi.mock("../components/workspace/mail/MailSpace", () => ({ MailSpace: () => null }));
 vi.mock("../components/workspace/ProjectsSpace", () => ({ ProjectsSpace: () => null }));
 vi.mock("../components/workspace/OfficeWorkspace", () => ({ OfficeWorkspace: () => null }));
+vi.mock("../components/workspace/TasksSpace", () => ({
+  TasksSpace: () =>
+    createElement("main", null, createElement("h1", null, "Tasks"), "Live Tasks list"),
+}));
 
 describe("parseWorkspaceSearch", () => {
   it("preserves the environment and exact Telegram source when opening a remote linked message", () => {
@@ -182,7 +186,7 @@ it.each([
   ["tasks", "Tasks", false],
   ["meetings", "Meetings", true],
   ["calendar", "Calendar", true],
-] as const)("renders the unavailable %s destination", async (space, heading, localTools) => {
+] as const)("renders the %s destination", async (space, heading, localTools) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const rootRoute = createRootRoute();
   const chatRoute = createRoute({ getParentRoute: () => rootRoute, id: "_chat" });
@@ -207,7 +211,12 @@ it.each([
       root.render(createElement(ResourceProvider, null, createElement(RouterProvider, { router }))),
     );
     expect(getByRole(node, "heading", { name: heading })).toBeDefined();
-    expect(getByText(node, "This view is not available on this server yet.")).toBeDefined();
+    expect(
+      getByText(
+        node,
+        space === "tasks" ? "Live Tasks list" : "This view is not available on this server yet.",
+      ),
+    ).toBeDefined();
     const link = queryByRole(node, "link", { name: "Open local Office tools" });
     if (localTools) expect(link?.getAttribute("href")).toBe("/workspace?space=office");
     else expect(link).toBeNull();
@@ -216,4 +225,22 @@ it.each([
     node.remove();
     vi.unstubAllGlobals();
   }
+});
+
+it("retains task filters through the route parser re-export", () => {
+  expect(
+    parseWorkspaceSearch({
+      space: "tasks",
+      view: "done",
+      taskLayout: "list",
+      taskText: "launch",
+      taskOwner: "unassigned",
+    }),
+  ).toEqual({
+    space: "tasks",
+    view: "done",
+    taskLayout: "list",
+    taskText: "launch",
+    taskOwner: "unassigned",
+  });
 });

@@ -152,7 +152,7 @@ it("selects supported rail views with Enter/Space and explains unavailable views
     const [selected, setSelected] = useState<WorkspaceView>("all");
     return (
       <WorkspaceViewRail
-        items={workspaceRailItems.tasks.map(({ unavailableReason: _reason, ...item }) => item)}
+        items={workspaceRailItems.tasks}
         selected={selected}
         onSelect={(id) => {
           setSelected(id);

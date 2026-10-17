@@ -78,7 +78,13 @@ Start automation opens the scheduled-task editor with the selected item as conte
 
 Browser opens inside the desktop app. Web and phone browsers open a separate tab. Link a page address to keep it with the selected item. External tabs cannot report navigation back to Pulse Code, so paste the current address before linking it. The project's browser-thread setting determines which thread owns its desktop browser work.
 
-Tasks contain a title, project column and links. Open a project to add tasks, then select a task to rename it, change its column or link related items. Project workspace settings manage the columns and browser thread. Move tasks before removing or renaming their column. Deleting a task keeps its links, which then identify it as unavailable. Tasks do not have recurrence or dependency rules.
+Open Tasks to browse tasks across the environment or choose one project in the filters. All tasks, Open and Done use the same project scope. Search includes task titles, areas and project names, including tasks on later pages. Filter by project, owner or an inclusive due-date range, then choose Apply. Undated tasks do not match a date range. Cancel keeps the previous filters; Clear returns to all projects and owners with no search or dates. Your filters stay in the page address. Board is not available yet.
+
+The open count covers every matching task, including later pages. Load more adds the next page. If tasks change while you browse, the list restarts from its first page. Refreshing keeps confirmed first-page tasks visible. If refresh fails, an inline message offers Retry tasks and Load more stays unavailable until refresh succeeds.
+
+Use a task's checkbox to complete or reopen it. Completion moves it into the project's designated completed column; reopening returns it to an open column. Select the title to open task details, and use Back to tasks to return to the list. The task menu offers the same linking and agent actions as other workspace items. Read-only sessions can browse tasks but cannot change them. The Tasks list needs a server with task-list support. Older servers keep the task list inside each project, which shows up to 200 tasks.
+
+Open a project to add tasks, rename them, change columns or link related items. Project workspace settings manage columns and the browser thread. Move tasks before removing or renaming their column. Deleting a task keeps its links, which then identify it as unavailable. Tasks do not have recurrence or dependency rules.
 
 On a server with task date support, select a task to set or clear its due date and area. A due date is a calendar day. It stays on that day when you open the task on another device. Today and overdue labels follow midnight in the environment's workspace timezone.
 
@@ -92,6 +98,6 @@ Task date, owner and completion controls become available when the connected ser
 
 On a server with task completion support, choose Completed column in project workspace settings. A custom column named Done stays open until you designate it. Changing or clearing the designation shows how many tasks change completion before you confirm; Cancel leaves the settings unchanged.
 
-Move tasks out before renaming or removing their column. Renaming or removing the completed column clears its designation, including when saving from an older client. Choose a completed column again to restore completion controls. Tasks stay in their current columns.
+Move tasks out before renaming or removing their column. Renaming or removing the completed column clears its designation, including when saving from an older client. Choose a completed column again to enable the Complete and Reopen checkboxes. Tasks stay in their current columns.
 
 Agents treat linked content as information, never as instructions. Unlink removes that connection; another direct link or an existing email permission may still make the item available.

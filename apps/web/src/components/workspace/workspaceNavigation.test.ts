@@ -1,6 +1,7 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import {
+  parseWorkspaceSearch,
   codeReturnHref,
   rememberCodeLocation,
   getLastCodeEnvironmentId,
@@ -130,4 +131,52 @@ it("does not replace a canonical Workspace return with legacy Office or invalid 
     view: "projects",
     environment: "workspace-office-only",
   });
+});
+
+it("retains valid task scope and drops unknown filters", () => {
+  expect(
+    parseWorkspaceSearch({
+      space: "tasks",
+      environment: "remote",
+      project: "p",
+      view: "open",
+      taskLayout: "list",
+      taskText: "launch",
+      taskOwner: "unassigned",
+      taskDueFrom: "2026-10-13",
+      taskDueTo: "2026-10-16",
+      item: "task-ref",
+    }),
+  ).toEqual({
+    space: "tasks",
+    environment: "remote",
+    project: "p",
+    view: "open",
+    taskLayout: "list",
+    taskText: "launch",
+    taskOwner: "unassigned",
+    taskDueFrom: "2026-10-13",
+    taskDueTo: "2026-10-16",
+    item: "task-ref",
+  });
+  expect(
+    parseWorkspaceSearch({
+      space: "tasks",
+      view: "bad",
+      taskOwner: "Maya",
+      taskText: "x".repeat(241),
+      taskDueFrom: "2026-02-30",
+    }),
+  ).toEqual({ space: "tasks" });
+  expect(
+    parseWorkspaceSearch({ space: "tasks", taskDueFrom: "2026-10-18", taskDueTo: "2026-10-17" }),
+  ).toEqual({ space: "tasks" });
+  expect(
+    parseWorkspaceSearch({
+      space: "mail",
+      taskLayout: "board",
+      taskText: "launch",
+      taskOwner: "all",
+    }),
+  ).toEqual({ space: "mail" });
 });

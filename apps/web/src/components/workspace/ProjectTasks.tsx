@@ -17,7 +17,7 @@ import {
 } from "@t3tools/client-runtime/state/workspaceTaskDates";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { useContext, useEffect, useState } from "react";
-import { UserRound } from "lucide-react";
+import { TaskOwner } from "./WorkspaceTaskRow";
 import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { timestampLocale } from "../../timestampFormat";
@@ -37,29 +37,6 @@ export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandF
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : "The workspace change could not be saved.";
 };
-function TaskOwner({
-  owner,
-  profile,
-}: {
-  owner: WorkspaceTask["owner"];
-  profile: ServerSettings["workspaceOwnerProfile"];
-}) {
-  const assigned = owner === "environment-owner";
-  const name = assigned ? (profile?.displayName ?? "Me") : "Unassigned";
-  return (
-    <span
-      role="img"
-      aria-label={name}
-      className={
-        assigned
-          ? "inline-flex size-[19px] shrink-0 items-center justify-center rounded-full bg-primary/15 text-4xs font-semibold text-primary ring-1 ring-background"
-          : "inline-flex size-[19px] shrink-0 items-center justify-center text-muted-foreground"
-      }
-    >
-      {assigned ? (profile?.initials ?? "Me") : <UserRound className="size-3" aria-hidden="true" />}
-    </span>
-  );
-}
 export function ProjectWorkspaceSettings({
   environmentId,
   projectId,
@@ -423,7 +400,7 @@ function isTaskDraftDirty(draft: ReturnType<typeof taskDraft>) {
   );
 }
 
-function useTaskDateClock(timeZone: string, enabled: boolean) {
+export function useTaskDateClock(timeZone: string, enabled: boolean) {
   const [now, setNow] = useState(DateTime.nowUnsafe);
   useEffect(() => {
     if (!enabled) return;
@@ -604,7 +581,7 @@ function TaskEditor({
             {date ? (
               <time
                 dateTime={dueOn}
-                aria-label={`${date.fullDate}${date.overdue ? ", overdue" : ""}`}
+                aria-label={`${date.fullDate}${date.overdue && !task.done ? ", overdue" : ""}`}
                 className="text-xs text-muted-foreground"
               >
                 {date.label}

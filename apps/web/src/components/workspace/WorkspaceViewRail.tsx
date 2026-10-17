@@ -3,7 +3,7 @@ import {
   BookmarkIcon,
   CalendarDaysIcon,
   CheckIcon,
-  ClockIcon,
+  Clock3Icon,
   FolderIcon,
   Grid2X2Icon,
   InboxIcon,
@@ -86,14 +86,12 @@ export const workspaceRailItems: Readonly<
     {
       id: "open",
       label: "Open",
-      Icon: ClockIcon,
-      unavailableReason: "Open task filtering is unavailable on this version.",
+      Icon: Clock3Icon,
     },
     {
       id: "done",
       label: "Done",
       Icon: CheckIcon,
-      unavailableReason: "Completed task filtering is unavailable on this version.",
     },
   ],
   projects: [

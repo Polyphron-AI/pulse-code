@@ -2,6 +2,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 
 import { CommunicationsWorkspace } from "../components/workspace/CommunicationsWorkspace";
 import { MailSpace } from "../components/workspace/mail/MailSpace";
+import { TasksSpace } from "../components/workspace/TasksSpace";
 import { ProjectsSpace } from "../components/workspace/ProjectsSpace";
 import { OfficeWorkspace } from "../components/workspace/OfficeWorkspace";
 import {
@@ -40,6 +41,7 @@ function WorkspaceRouteView() {
     case "office":
       return <OfficeWorkspace />;
     case "tasks":
+      return <TasksSpace />;
     case "meetings":
     case "calendar":
       return <UnavailableWorkspace space={search.space} />;
@@ -55,7 +57,7 @@ function WorkspaceRouteView() {
 function UnavailableWorkspace({
   space,
 }: {
-  space: Extract<WorkspaceDestination, "tasks" | "meetings" | "calendar">;
+  space: Extract<WorkspaceDestination, "meetings" | "calendar">;
 }) {
   const search = Route.useSearch();
   const { environmentId } = useMailCapabilities(

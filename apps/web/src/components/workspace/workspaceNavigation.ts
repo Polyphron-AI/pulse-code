@@ -1,3 +1,5 @@
+import { WorkspaceTaskDueOn } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import type { EnvironmentId } from "@t3tools/contracts";
 import {
   CalendarDaysIcon,
@@ -39,8 +41,14 @@ export interface WorkspaceSearch {
   readonly project?: string;
   readonly environment?: string;
   readonly item?: string;
+  readonly taskLayout?: "list" | "board";
+  readonly taskText?: string;
+  readonly taskDueFrom?: string;
+  readonly taskDueTo?: string;
+  readonly taskOwner?: "all" | "environment-owner" | "unassigned";
 }
 
+const isTaskDate = Schema.is(WorkspaceTaskDueOn);
 const text = (value: unknown) =>
   typeof value === "string" && value.length > 0 && value.length <= 1_024 ? value : undefined;
 
@@ -52,19 +60,40 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
   const environment = text(raw.environment);
   const telegram = destination === "communications" && raw.communicationProvider === "telegram";
   const carriesIdentity = telegram || destination === "mail" || destination === "projects";
+  const taskScope = destination === "tasks";
   const account = carriesIdentity ? text(raw.account) : undefined;
   const folder = !telegram && carriesIdentity ? text(raw.folder) : undefined;
   const project = text(raw.project);
   const item = telegram
     ? text(raw.item)
-    : carriesIdentity && typeof raw.item === "string" && raw.item.length <= 8192
+    : (carriesIdentity || taskScope) && typeof raw.item === "string" && raw.item.length <= 8192
       ? raw.item
       : undefined;
   const view = (workspaceViews[destination] as readonly unknown[]).includes(raw.view)
     ? (raw.view as WorkspaceView)
     : undefined;
+  const dueFrom = taskScope && isTaskDate(raw.taskDueFrom) ? raw.taskDueFrom : undefined;
+  const dueTo = taskScope && isTaskDate(raw.taskDueTo) ? raw.taskDueTo : undefined;
+  const ordered = !dueFrom || !dueTo || dueFrom <= dueTo;
   return {
     space: destination,
+    ...(taskScope && (raw.taskLayout === "list" || raw.taskLayout === "board")
+      ? { taskLayout: raw.taskLayout }
+      : {}),
+    ...(taskScope &&
+    typeof raw.taskText === "string" &&
+    raw.taskText.trim().length > 0 &&
+    raw.taskText.length <= 240
+      ? { taskText: raw.taskText.trim() }
+      : {}),
+    ...(ordered && dueFrom ? { taskDueFrom: dueFrom } : {}),
+    ...(ordered && dueTo ? { taskDueTo: dueTo } : {}),
+    ...(taskScope &&
+    (raw.taskOwner === "all" ||
+      raw.taskOwner === "environment-owner" ||
+      raw.taskOwner === "unassigned")
+      ? { taskOwner: raw.taskOwner }
+      : {}),
     ...(view !== undefined ? { view } : {}),
     ...(environment !== undefined ? { environment } : {}),
     ...(telegram ? { communicationProvider: "telegram" as const } : {}),

@@ -144,7 +144,7 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
     expect(mount.firstElementChild).toHaveProperty("style.display", "flex");
     expect(mount.firstElementChild).toHaveProperty("style.flexDirection", "column");
     expect(document.body.textContent).toContain("Design preview · sample data");
-    expect(document.body.textContent).toContain(`Recipe ${id}`);
+    expect(document.body.textContent).toContain(id === "03" ? "Project tasks" : `Recipe ${id}`);
     expect(result.incompleteRegions).not.toContain("shell.engagement");
     expect(result.incompleteRegions).not.toContain("shell.resources");
     expect(getByRole(document.body, "combobox", { name: "Choose project" }).textContent).toContain(

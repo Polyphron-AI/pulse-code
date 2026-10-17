@@ -104,3 +104,17 @@ it.each([
     Number(hours) * 60 * 60 * 1000,
   );
 });
+
+it("reuses formatters across rows for the same zone and locale", () => {
+  const construct = vi.spyOn(Intl, "DateTimeFormat");
+  try {
+    const now = DateTime.makeUnsafe("2026-10-13T08:30:00Z");
+    formatWorkspaceTaskDueOn("2026-10-13", now, "Europe/Paris", "de-DE");
+    const first = construct.mock.calls.length;
+    for (const day of ["2026-10-14", "2027-10-14", "2026-10-13"])
+      formatWorkspaceTaskDueOn(day, now, "Europe/Paris", "de-DE");
+    expect(construct.mock.calls.length).toBe(first);
+  } finally {
+    construct.mockRestore();
+  }
+});
