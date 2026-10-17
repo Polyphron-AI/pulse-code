@@ -1,19 +1,19 @@
 import type { CalendarDueTask, CalendarOccurrenceSummary } from "@t3tools/contracts";
 import { useMemo, type ReactNode } from "react";
 import { PlusIcon } from "lucide-react";
-import {
-  formatDayHeading,
-  formatEventTime,
-  formatWeek,
-  displayDay,
-} from "@t3tools/client-runtime/calendar/dates";
+import { formatEventTime, formatWeek, displayDay } from "@t3tools/client-runtime/calendar/dates";
 import { Button } from "../../ui/button";
 import { CalendarEventCard, type CalendarEventCardProps } from "./CalendarEventCard";
 import { CalendarDayStrip } from "./CalendarDayStrip";
+import { CalendarWeek } from "./CalendarWeek";
+import { CalendarDatePicker } from "./CalendarDatePicker";
+import { sortCalendarEvents } from "./weekLayout";
 export interface CalendarAgendaProps {
   readonly day: string;
   readonly timeZone: string;
   readonly space: "calendar" | "meetings";
+  readonly view?: "agenda" | "week";
+  readonly pickerDefaultOpen?: boolean;
   readonly events: readonly CalendarOccurrenceSummary[];
   readonly dueTasks: readonly CalendarDueTask[];
   readonly status: "ready" | "loading" | "unavailable" | "disconnected";
@@ -39,11 +39,13 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
   const { day, timeZone } = props;
   const events = useMemo(
     () =>
-      props.events.filter((e) =>
-        e.time.kind === "all-day"
-          ? e.time.startOn <= day && day < e.time.endBefore
-          : displayDay(e.time.start, timeZone) <= day &&
-            displayDay(new Date(Date.parse(e.time.end) - 1).toISOString(), timeZone) >= day,
+      sortCalendarEvents(
+        props.events.filter((e) =>
+          e.time.kind === "all-day"
+            ? e.time.startOn <= day && day < e.time.endBefore
+            : displayDay(e.time.start, timeZone) <= day &&
+              displayDay(new Date(Date.parse(e.time.end) - 1).toISOString(), timeZone) >= day,
+        ),
       ),
     [props.events, day, timeZone],
   );
@@ -69,12 +71,24 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
   );
   return (
     <section
-      aria-label={props.space === "calendar" ? "Calendar agenda" : "Upcoming meetings"}
+      aria-label={
+        props.space === "calendar"
+          ? props.view === "week"
+            ? "Calendar week"
+            : "Calendar agenda"
+          : "Upcoming meetings"
+      }
       className="min-w-0 p-4"
     >
       <div className="mb-[17px] flex min-h-[41px] items-start justify-between gap-2">
         <div>
-          <h2 className="text-calendar-heading leading-5 font-semibold">{formatDayHeading(day)}</h2>
+          <h2 className="text-calendar-heading font-semibold">
+            <CalendarDatePicker
+              day={day}
+              onSelectDay={props.onSelectDay}
+              defaultOpen={props.pickerDefaultOpen ?? false}
+            />
+          </h2>
           <p className="mt-1 text-3xs leading-4 text-muted-foreground">
             {props.space === "meetings"
               ? "Prepare, meet and follow through."
@@ -115,28 +129,36 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
             : ""}
         </p>
       ) : null}
-      <div className="flex flex-col gap-4">
-        {due.length || events.some((e) => e.time.kind === "all-day") ? (
-          <div role="group" aria-label="All day and due tasks" className="flex flex-col gap-4">
-            {events.filter((e) => e.time.kind === "all-day").map(row)}
-            {due.map((task) => (
-              <div key={task.ref.taskId} className="grid grid-cols-[40px_minmax(0,1fr)] gap-3">
-                <span className="text-3xs text-muted-foreground">Due</span>
-                <button
-                  type="button"
-                  onClick={() => props.onOpenTask?.(task)}
-                  className="text-left text-xs underline"
-                >
-                  {task.title}
-                  {task.done ? " · Completed" : ""}
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {events.filter((e) => e.time.kind === "timed").map(row)}
-      </div>
-      {props.status === "ready" && !props.error && !events.length && !due.length ? (
+      {props.view === "week" ? (
+        <CalendarWeek {...props} />
+      ) : (
+        <div className="flex flex-col gap-4">
+          {due.length || events.some((e) => e.time.kind === "all-day") ? (
+            <div role="group" aria-label="All day and due tasks" className="flex flex-col gap-4">
+              {events.filter((e) => e.time.kind === "all-day").map(row)}
+              {due.map((task) => (
+                <div key={task.ref.taskId} className="grid grid-cols-[40px_minmax(0,1fr)] gap-3">
+                  <span className="text-3xs text-muted-foreground">Due</span>
+                  <button
+                    type="button"
+                    onClick={() => props.onOpenTask?.(task)}
+                    className="text-left text-xs underline"
+                  >
+                    {task.title}
+                    {task.done ? " · Completed" : ""}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {events.filter((e) => e.time.kind === "timed").map(row)}
+        </div>
+      )}
+      {props.status === "ready" &&
+      !props.error &&
+      (props.view === "week"
+        ? !props.events.length && !props.dueTasks.length
+        : !events.length && !due.length) ? (
         <p>No meetings on this day.</p>
       ) : null}
       <div className="mt-4 flex gap-2">

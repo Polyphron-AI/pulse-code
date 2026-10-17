@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
+import * as DateTime from "effect/DateTime";
 import {
   weekDates,
   formatEventTime,
@@ -6,7 +7,42 @@ import {
   addDays,
   formatDayHeading,
   formatWeek,
+  displayDayBounds,
+  formatEventRange,
+  calendarDateToLocalPickerDate,
+  localPickerDateToCalendarDate,
 } from "./dates.ts";
+it("uses real display-zone boundaries on 23 and 25 hour days", () => {
+  expect(displayDayBounds("2026-03-08", "America/New_York")).toEqual({
+    start: Date.parse("2026-03-08T05:00:00Z"),
+    end: Date.parse("2026-03-09T04:00:00Z"),
+    minutes: 1380,
+  });
+  expect(displayDayBounds("2026-11-01", "America/New_York")).toEqual({
+    start: Date.parse("2026-11-01T04:00:00Z"),
+    end: Date.parse("2026-11-02T05:00:00Z"),
+    minutes: 1500,
+  });
+  expect(displayDayBounds("2026-10-13", "Africa/Johannesburg").start).toBe(
+    Date.parse("2026-10-12T22:00:00Z"),
+  );
+});
+it("keeps picker calendar fields and distinguishes repeated instants", () => {
+  const carrier = calendarDateToLocalPickerDate("2026-11-01");
+  expect([carrier.getFullYear(), carrier.getMonth(), carrier.getDate()]).toEqual([2026, 10, 1]);
+  const clicked = DateTime.toDateUtc(DateTime.makeUnsafe(0));
+  clicked.setFullYear(2027, 0, 2);
+  clicked.setHours(12);
+  expect(localPickerDateToCalendarDate(clicked)).toBe("2027-01-02");
+  const range = formatEventRange(
+    "2026-11-01T05:30:00Z",
+    "2026-11-01T06:30:00Z",
+    "America/New_York",
+  );
+  expect(range).toContain("01:30 GMT-4");
+  expect(range).toContain("01:30 GMT-5");
+  expect(range).toContain("1 November 2026");
+});
 it("uses calendar fields through month and DST boundaries", () => {
   expect(weekDates("2026-10-13")).toEqual([
     "2026-10-12",

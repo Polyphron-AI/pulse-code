@@ -80,7 +80,7 @@ export function CalendarEventCard({
         <button
           type="button"
           aria-expanded={notesOpen}
-          className="relative inline-flex h-[23px] shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-input bg-popover px-2 text-2xs font-semibold shadow-xs/5 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 dark:bg-input/32"
+          className="relative inline-flex h-[23px] cursor-pointer shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-input bg-popover px-2 text-2xs font-semibold shadow-xs/5 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 dark:bg-input/32"
           onClick={(e) => onNotes(event, e.currentTarget)}
         >
           Notes &amp; agenda
@@ -88,7 +88,7 @@ export function CalendarEventCard({
         {url ? (
           <button
             type="button"
-            className="relative inline-flex h-[23px] shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-0 text-2xs font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11"
+            className="relative inline-flex h-[23px] cursor-pointer shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-0 text-2xs font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11"
             onClick={() => onJoin?.(event, url)}
           >
             Join meeting

@@ -3,7 +3,6 @@ import {
   createContext,
   useContext,
   useId,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -130,15 +129,11 @@ function CalendarBinding({
       header={header}
       resources={<WorkspaceProjectResources />}
     >
-      {space === "calendar" && search.view === "week" ? (
-        <p role="status" className="p-4">
-          Week view is unavailable on this version.
-        </p>
-      ) : null}
       <CalendarAgenda
         day={day}
         timeZone={timeZone}
         space={space}
+        view={space === "calendar" && search.view === "week" ? "week" : "agenda"}
         events={query.data?.events ?? []}
         dueTasks={query.data?.dueTasks ?? []}
         status={
@@ -163,7 +158,7 @@ function CalendarBinding({
             search: {
               ...search,
               space,
-              view: space === "calendar" ? "agenda" : "upcoming",
+              view: space === "calendar" ? (search.view ?? "agenda") : "upcoming",
               day: value,
             },
           });
@@ -174,7 +169,7 @@ function CalendarBinding({
             search: {
               ...search,
               space,
-              view: space === "calendar" ? "agenda" : "upcoming",
+              view: space === "calendar" ? (search.view ?? "agenda") : "upcoming",
               day,
               item: JSON.stringify(calendarItemRef(event.id)),
             },
@@ -300,23 +295,20 @@ function MeetingNotes({
     links.data?.linked
       .filter((v) => v.status === "confirmed" && isWorkspaceNote(v.item.ref))
       .map((v) => v.item) ?? [];
-  const open = useCallback(
-    (note: WorkspaceLinkEndpoint) => {
-      if (!mounted.current) return;
-      if (isWorkspaceNote(note.ref)) {
-        const context = currentContext.current;
-        const destination = context.resources.projectId ?? context.projectId;
-        const result = openMeetingNote(context.resources, {
-          environmentId,
-          note: note.ref,
-          ...(destination ? { projectId: destination } : {}),
-        });
-        if (result === "opened") onClose();
-        else setError("Choose a resource project, then open this note.");
-      }
-    },
-    [environmentId, onClose],
-  );
+  const open = (note: WorkspaceLinkEndpoint) => {
+    if (!mounted.current) return;
+    if (isWorkspaceNote(note.ref)) {
+      const context = currentContext.current;
+      const destination = context.resources.projectId ?? context.projectId;
+      const result = openMeetingNote(context.resources, {
+        environmentId,
+        note: note.ref,
+        ...(destination ? { projectId: destination } : {}),
+      });
+      if (result === "opened") onClose();
+      else setError("Choose a resource project, then open this note.");
+    }
+  };
   useEffect(() => {
     if (!links.error && candidates.length === 1 && !links.data?.truncated && !opened.current) {
       opened.current = true;

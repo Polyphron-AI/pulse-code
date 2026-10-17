@@ -110,6 +110,46 @@ it("keeps task URL state through capture resets and records light-theme smoke ho
   expect(resource.manifest.networkRequests).toBe(0);
 });
 
+it.each(["week", "picker", "dst-fold", "week-390"])(
+  "captures the isolated Calendar %s route and matching display zone",
+  async (state) => {
+    const width = state === "week-390" ? 390 : 1280;
+    runtimeTimeZone = state === "dst-fold" ? "America/New_York" : "Africa/Johannesburg";
+    (
+      window as unknown as {
+        happyDOM: {
+          setURL: (url: string) => void;
+          setWindowSize: (size: { width: number; height: number }) => void;
+        };
+      }
+    ).happyDOM.setWindowSize({ width, height: 800 });
+    (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(
+      `http://fixture.invalid/workspace?space=calendar&fixture=08&state=${state}`,
+    );
+    const capture = await boot();
+    capture.configureCapture({
+      ...host,
+      viewport: { ...host.viewport, width },
+      resolvedTimeZone: runtimeTimeZone,
+    });
+    const result = await capture.ready();
+    expect(result.manifest.route).toContain(`state=${state}`);
+    expect(result.manifest.timeZone).toBe(runtimeTimeZone);
+    expect(result.manifest.networkRequests).toBe(0);
+    if (state === "picker") expect(getByRole(document.body, "grid")).toBeDefined();
+    else {
+      expect(getByRole(document.body, "region", { name: "Week schedule" })).toBeDefined();
+      expect(
+        getByRole(document.body, "button", { name: "Week" }).getAttribute("aria-pressed"),
+      ).toBe("true");
+    }
+    if (state === "dst-fold") {
+      expect(document.body.textContent).toContain("01:00 GMT-4");
+      expect(document.body.textContent).toContain("01:00 GMT-5");
+    }
+  },
+);
+
 it("boots eight isolated memory routes, pins dark and preserves browser storage through resets and teardown", async () => {
   localStorage.setItem("pulse.workspace.fixture-environment.mail.engagement-width.v2", "450");
   localStorage.setItem(

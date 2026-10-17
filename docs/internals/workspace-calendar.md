@@ -24,6 +24,9 @@ while occurrence IDs remain durable. A cursor from another environment or instan
 
 Timed overlap uses display-zone midnights converted by Effect DateTime. It must account for
 23-hour and 25-hour days. All-day overlap compares Gregorian dates with an exclusive end.
+Only range summaries populate the optional `source` tuple. Detail and agent-read schemas inherit
+the optional field for compatibility, but their service responses omit it. It supports retaining
+unavailable sources in a loaded range, not occurrence identity or access decisions.
 Range reads fetch at most the requested limit plus one, selecting stored summaries without
 descriptions. The range index seeks a row-value cursor and stops at the exclusive upper sort key.
 Running UTF-8 byte accounting keeps pages within 64 KiB and retains continuations; details and text reads stay within
@@ -75,6 +78,10 @@ exhaustion. The shared change counter cannot prove either side untouched, so an 
 does not permit continuation reuse. A cursor conflict restarts the same bounded replay from page 1;
 invalid input remains an error. In-flight commands with the same environment and normalized range
 share work. A late continuation cannot reopen hidden listeners or overwrite a newer first page.
+If Load more succeeds during a refresh, the refresh replays the latest admitted depth before
+publishing. A recoverable continuation failure keeps the bounded saved rows for that side and
+marks it incomplete, without an unusable continuation cursor. Known unselected or removed source
+tuples are still excluded. Authorization and invalid-input failures remain errors.
 Queries and streams use zero idle TTL so their last unmount releases subscriptions immediately.
 Partial refreshes replace healthy sources. Only rows with an explicit source tuple whose new state
 is unavailable or disconnected can be retained, after fresh rows within the loaded cap. Unselected,

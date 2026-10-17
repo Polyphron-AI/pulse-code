@@ -47,5 +47,44 @@ export function formatWeek(day: string) {
   const days = weekDates(day);
   const first = days[0]!;
   const last = days[6]!;
-  return `${formatDay(first, { day: "numeric", ...(first.slice(0, 7) !== last.slice(0, 7) ? { month: "long" } : {}), ...(first.slice(0, 4) !== last.slice(0, 4) ? { year: "numeric" } : {}) })} – ${formatDay(last, { day: "numeric", month: "long", year: "numeric" })}`;
+  const start = formatDay(first, {
+    day: "numeric",
+    ...(first.slice(0, 7) !== last.slice(0, 7) ? { month: "long" } : {}),
+    ...(first.slice(0, 4) !== last.slice(0, 4) ? { year: "numeric" } : {}),
+  });
+  return `${start} – ${formatDay(last, { day: "numeric", month: "long", year: "numeric" })}`;
 }
+
+/** Actual instants bounding one civil day, including offset transitions. */
+export function displayDayBounds(day: string, timeZone: string) {
+  const midnight = (value: string) =>
+    DateTime.toEpochMillis(
+      DateTime.makeZonedUnsafe(`${value}T00:00:00Z`, { timeZone, adjustForTimeZone: true }),
+    );
+  const start = midnight(day);
+  const end = midnight(addDays(day, 1));
+  return { start, end, minutes: (end - start) / 60000 };
+}
+export const formatEventOffsetTime = (instant: string, timeZone: string) =>
+  formatter({
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "shortOffset",
+  }).format(Date.parse(instant));
+export function formatEventRange(start: string, end: string, timeZone: string) {
+  const format = (instant: string) =>
+    `${formatDay(displayDay(instant, timeZone), { day: "numeric", month: "long", year: "numeric" })}, ${formatEventOffsetTime(instant, timeZone)}`;
+  return `${format(start)} to ${format(end)} (${timeZone})`;
+}
+/** DayPicker uses local calendar fields as carriers, never event instants. */
+export function calendarDateToLocalPickerDate(day: string) {
+  const value = date(day);
+  const carrier = DateTime.toDateUtc(DateTime.makeUnsafe(0));
+  carrier.setFullYear(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+  carrier.setHours(12, 0, 0, 0);
+  return carrier;
+}
+export const localPickerDateToCalendarDate = (value: Date) =>
+  `${String(value.getFullYear()).padStart(4, "0")}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;

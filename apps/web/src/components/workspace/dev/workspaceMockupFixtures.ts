@@ -36,6 +36,8 @@ export const workspaceTasksMockupStates = [
   "board-disconnected",
 ] as const;
 export type WorkspaceTasksMockupState = (typeof workspaceTasksMockupStates)[number];
+export const workspaceCalendarMockupStates = ["week", "picker", "dst-fold", "week-390"] as const;
+export type WorkspaceCalendarMockupState = (typeof workspaceCalendarMockupStates)[number];
 export type WorkspaceMockupArea =
   | "mail"
   | "communications"
@@ -86,12 +88,13 @@ export interface WorkspaceMockupRecipe {
 export interface WorkspaceMockupSession {
   readonly id: WorkspaceMockupId;
   readonly taskState: WorkspaceTasksMockupState | null;
+  readonly calendarState: WorkspaceCalendarMockupState | null;
   readonly environmentId: EnvironmentId;
   readonly resourceProjectId: ProjectId;
   readonly recipe: WorkspaceMockupRecipe;
   readonly clock: { readonly now: () => Date; readonly today: () => "2026-10-13" };
   readonly locale: "en-GB";
-  readonly timeZone: "Africa/Johannesburg";
+  readonly timeZone: "Africa/Johannesburg" | "America/New_York";
   readonly seed: WorkspaceMockupSeed;
   readonly storage: Pick<Storage, "getItem" | "setItem">;
   readonly operations: ReadonlyArray<{
@@ -292,7 +295,7 @@ export interface WorkspaceMockupCaptureManifest {
     readonly zoom: 1;
   };
   readonly locale: "en-GB";
-  readonly timeZone: "Africa/Johannesburg";
+  readonly timeZone: WorkspaceMockupSession["timeZone"];
   readonly resolvedLocale: string;
   readonly resolvedTimeZone: string;
   readonly clock: "2026-10-13T10:30:00+02:00";
@@ -821,7 +824,11 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
   const state = url.searchParams.get("state");
   if (
     state !== null &&
-    ((id !== "03" && id !== "08") || !workspaceTasksMockupStates.some((value) => value === state))
+    !(
+      ((id === "03" || id === "08") &&
+        workspaceTasksMockupStates.some((value) => value === state)) ||
+      (id === "08" && workspaceCalendarMockupStates.some((value) => value === state))
+    )
   )
     throw new Error("Unknown task fixture state.");
   const theme = url.searchParams.get("theme");
@@ -836,6 +843,7 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
 export function createWorkspaceMockupSession(
   id: WorkspaceMockupId,
   taskState: WorkspaceTasksMockupState | null = null,
+  calendarState: WorkspaceCalendarMockupState | null = null,
 ): WorkspaceMockupSession {
   if (!Object.hasOwn(workspaceMockupRecipes, id)) throw new Error("Unknown fixture.");
   const seed = createWorkspaceMockupSeed();
@@ -866,13 +874,17 @@ export function createWorkspaceMockupSession(
   return {
     id,
     taskState,
+    calendarState,
     environmentId: seed.environmentId,
     resourceProjectId: seed.resourceProjectId,
-    recipe: workspaceMockupRecipes[id],
+    recipe:
+      calendarState && calendarState !== "picker"
+        ? { ...workspaceMockupRecipes[id], view: "week" }
+        : workspaceMockupRecipes[id],
     seed,
     clock: { now: () => new Date(fixedInstant), today: () => "2026-10-13" },
     locale: "en-GB",
-    timeZone: "Africa/Johannesburg",
+    timeZone: calendarState === "dst-fold" ? "America/New_York" : "Africa/Johannesburg",
     storage: {
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => {

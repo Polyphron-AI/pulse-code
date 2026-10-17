@@ -5,6 +5,7 @@ import {
   createWorkspaceMockupSession,
   parseWorkspaceMockupRequest,
   workspaceTasksMockupStates,
+  workspaceCalendarMockupStates,
 } from "./workspaceMockupFixtures";
 import type {
   CreateWorkspaceMockupModule,
@@ -216,13 +217,13 @@ function pinTheme(light: boolean) {
   };
 }
 
-function checkLocale(context: CaptureContext) {
+function checkLocale(context: CaptureContext, timeZone: WorkspaceMockupSession["timeZone"]) {
   const actual = Intl.DateTimeFormat().resolvedOptions();
   if (
     context.resolvedLocale !== "en-GB" ||
-    context.resolvedTimeZone !== "Africa/Johannesburg" ||
+    context.resolvedTimeZone !== timeZone ||
     actual.locale !== "en-GB" ||
-    actual.timeZone !== "Africa/Johannesburg"
+    actual.timeZone !== timeZone
   )
     throw new Error("Capture locale/time zone does not match fixture.");
 }
@@ -331,6 +332,9 @@ export async function startWorkspaceMockup(): Promise<void> {
             nextId === "03" || nextId === "08"
               ? (workspaceTasksMockupStates.find((value) => value === state) ?? null)
               : null,
+            nextId === "08"
+              ? (workspaceCalendarMockupStates.find((value) => value === state) ?? null)
+              : null,
           );
           const current = session;
           if (!current.recipe) throw new Error("Unknown fixture.");
@@ -415,7 +419,7 @@ export async function startWorkspaceMockup(): Promise<void> {
           /^(unknown|unresolved)$/i.test(next.os.trim())
         )
           throw new Error("Capture font and OS are required.");
-        checkLocale(next);
+        checkLocale(next, session!.timeZone);
         context = { ...next, viewport: { ...next.viewport } };
       },
       reset,
@@ -423,7 +427,7 @@ export async function startWorkspaceMockup(): Promise<void> {
         await queue;
         assertActive();
         if (!context) throw new Error("Capture host metadata is required.");
-        checkLocale(context);
+        checkLocale(context, session!.timeZone);
         const capturedGeneration = generation;
         const current = session!;
         await Promise.all([current.settled(), ...modules.map((module) => module.settled())]);
@@ -459,7 +463,7 @@ export async function startWorkspaceMockup(): Promise<void> {
             version: 1,
             fixtureId: current.id,
             referencePng: current.recipe.png,
-            route: `${current.recipe.route}${current.taskState ? `&state=${current.taskState}` : ""}${light ? "&theme=light" : ""}`,
+            route: `${current.recipe.route}${current.taskState || current.calendarState ? `&state=${current.taskState ?? current.calendarState}` : ""}${light ? "&theme=light" : ""}`,
             viewport: { ...context.viewport },
             locale: current.locale,
             timeZone: current.timeZone,

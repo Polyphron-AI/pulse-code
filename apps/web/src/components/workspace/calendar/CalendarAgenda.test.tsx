@@ -21,6 +21,7 @@ import { CalendarAgenda } from "./CalendarAgenda";
 import { Route, parseWorkspaceSearch } from "../../../routes/_chat.workspace";
 import { WorkspaceResourcesProvider, useWorkspaceResourceState } from "../workspaceResourceState";
 import { WorkspaceNavigation } from "../WorkspaceNavigationView";
+import { WorkspaceViewRail, workspaceRailItems } from "../WorkspaceViewRail";
 import { workspaceDestinationSearch, rememberWorkspaceLocation } from "../workspaceNavigation";
 const rpc = vi.hoisted(() => ({
   version: 0,
@@ -37,9 +38,11 @@ const rpc = vi.hoisted(() => ({
   max: 0,
   notes: 1,
   detail: false,
+  detailTime: undefined as CalendarOccurrenceSummary["time"] | undefined,
   error: null as string | null,
   commands: vi.fn(),
   range: vi.fn(),
+  rangeStarts: [] as string[],
   environment: "fixture-environment",
 }));
 const event = {
@@ -93,6 +96,10 @@ vi.mock("../../../state/query", () => ({
   useEnvironmentQuery: (
     query: { kind: string; input?: { environmentId: string; input: { id?: string } } } | null,
   ) => {
+    const rangeKey = query?.kind === "range" ? JSON.stringify(query.input) : null;
+    useEffect(() => {
+      if (rangeKey) rpc.rangeStarts.push(rangeKey);
+    }, [rangeKey]);
     useSyncExternalStore(
       (listener) => {
         rpc.listeners.add(listener);
@@ -136,7 +143,11 @@ vi.mock("../../../state/query", () => ({
         : query?.kind === "detail" && rpc.detail
           ? {
               ...event,
-              time: { kind: "all-day", startOn: "2026-12-02", endBefore: "2026-12-03" },
+              time: rpc.detailTime ?? {
+                kind: "all-day",
+                startOn: "2026-12-02",
+                endBefore: "2026-12-03",
+              },
               description: "Resolved body",
             }
           : query?.kind === "links"
@@ -248,6 +259,15 @@ function Shell() {
           });
         }}
       />
+      {search.space === "calendar" ? (
+        <WorkspaceViewRail
+          items={workspaceRailItems.calendar}
+          selected={search.view ?? "agenda"}
+          onSelect={(view) => {
+            void navigate({ to: "/workspace", search: { ...search, view } });
+          }}
+        />
+      ) : null}
       <Outlet />
     </WorkspaceResourcesProvider>
   );
@@ -265,8 +285,10 @@ async function mount(
   rpc.timeZone = timeZone;
   rpc.connected = true;
   rpc.detail = false;
+  rpc.detailTime = undefined;
   rpc.error = null;
   rpc.range.mockClear();
+  rpc.rangeStarts.length = 0;
   rpc.commands.mockReset();
   rpc.noteReads = 0;
   rpc.noteRequests = [];
@@ -316,6 +338,110 @@ const notify = async () =>
     rpc.version++;
     for (const l of rpc.listeners) l();
   });
+
+it("switches Agenda and Week, keeps the date and resource project, and returns from exact event detail to Week", async () => {
+  const { node, router, dispose } = await mount(undefined, "calendar");
+  try {
+    await click(node, "button", "Tuesday, 13 October 2026");
+    await click(node, "combobox", "Choose project");
+    await click(document.body, "option", "Chosen project");
+    const originalRange = rpc.range.mock.calls.at(-1)?.[0];
+    await click(node, "button", "Week");
+    await act(() => router.load());
+    expect(rpc.rangeStarts).toHaveLength(1);
+    await act(async () => {
+      router.history.back();
+      await router.load();
+    });
+    expect(getByRole(node, "region", { name: "Calendar agenda" })).toBeDefined();
+    await act(async () => {
+      router.history.forward();
+      await router.load();
+    });
+    expect(getByRole(node, "region", { name: "Week schedule" })).toBeDefined();
+    expect(router.state.location.search).toMatchObject({
+      space: "calendar",
+      view: "week",
+      day: "2026-10-13",
+    });
+    expect(rpc.range.mock.calls.at(-1)?.[0]).toEqual(originalRange);
+    await click(node, "button", "Wednesday, 14 October 2026");
+    expect(router.state.location.search.view).toBe("week");
+    await click(node, "button", "Agenda");
+    await act(() => router.load());
+    expect(getByRole(node, "region", { name: "Calendar agenda" })).toBeDefined();
+    expect(router.state.location.search.day).toBe("2026-10-14");
+    await click(node, "button", "Week");
+    await act(() => router.load());
+    expect(rpc.rangeStarts).toHaveLength(1);
+    await act(() =>
+      fireEvent.keyDown(getByRole(node, "button", { name: /^Launch review,/ }), { key: "Enter" }),
+    );
+    await act(() => router.load());
+    expect(router.state.location.search.view).toBe("week");
+    expect(router.state.location.search.item).toContain(event.id);
+    await click(node, "button", "Close event");
+    await act(() => router.load());
+    expect(getByRole(node, "region", { name: "Week schedule" })).toBeDefined();
+    expect(getByRole(node, "combobox").textContent).toContain("Chosen project");
+    expect(rpc.commands).not.toHaveBeenCalled();
+  } finally {
+    await dispose();
+  }
+});
+
+it("moves the route and seven chips to a picked date outside the pictured week", async () => {
+  const { node, router, dispose } = await mount(undefined, "calendar");
+  try {
+    await click(node, "button", "Choose date");
+    await act(() => vi.dynamicImportSettled());
+    await click(document.body, "button", "Go to the Next Month");
+    await act(() =>
+      getByRole(document.body, "button", { name: /Monday, 2 November 2026/ }).click(),
+    );
+    await act(() => router.load());
+    expect(router.state.location.search).toMatchObject({
+      space: "calendar",
+      view: "agenda",
+      day: "2026-11-02",
+    });
+    expect(
+      getByRole(node, "button", { name: "Monday, 2 November 2026" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(rpc.range.mock.calls.at(-1)?.[0]).toMatchObject({
+      input: { startOn: "2026-11-02", endBefore: "2026-11-09" },
+    });
+  } finally {
+    await dispose();
+  }
+});
+
+it("announces complete actual instants and both offsets in fold event detail", async () => {
+  const { node, dispose } = await mount(
+    JSON.stringify({
+      type: "provider-resource",
+      provider: "workspace-calendar",
+      resourceId: event.id,
+    }),
+    "calendar",
+    "America/New_York",
+  );
+  try {
+    rpc.detailTime = {
+      kind: "timed",
+      start: "2026-11-01T05:30:00Z",
+      end: "2026-11-01T06:30:00Z",
+      sourceTimeZone: "UTC",
+    };
+    rpc.detail = true;
+    await notify();
+    expect(getByRole(node, "region", { name: "Calendar event" }).textContent).toContain(
+      "1 November 2026, 01:30 GMT-4 to 1 November 2026, 01:30 GMT-5 (America/New_York)",
+    );
+  } finally {
+    await dispose();
+  }
+});
 
 it.each(["reopen", "while open"])(
   "links the project shown at confirmation after a project switch %s",
@@ -669,6 +795,12 @@ it("places cross-midnight events on both days, keeps all-day and date-only due r
     title: "Overnight",
     time: { ...event.time, start: "2026-10-12T21:00:00Z", end: "2026-10-12T23:30:00Z" },
   };
+  const midnight = {
+    ...overnight,
+    id: "midnight",
+    title: "Ends at midnight",
+    time: { ...overnight.time, end: "2026-10-12T22:00:00Z" },
+  };
   const allDay = {
     ...event,
     id: "all-day",
@@ -690,7 +822,7 @@ it("places cross-midnight events on both days, keeps all-day and date-only due r
           day={day}
           timeZone="Africa/Johannesburg"
           space="calendar"
-          events={[overnight, allDay]}
+          events={[overnight, allDay, midnight]}
           dueTasks={[{ ...due, done }]}
           status="ready"
           onSelectDay={() => {}}
@@ -704,6 +836,9 @@ it("places cross-midnight events on both days, keeps all-day and date-only due r
     for (const day of ["2026-10-12", "2026-10-13"]) {
       await render(day);
       expect(getByRole(node, "button", { name: "Overnight" })).toBeDefined();
+      expect(Boolean(queryByRole(node, "button", { name: "Ends at midnight" }))).toBe(
+        day === "2026-10-12",
+      );
       expect(getByRole(node, "group", { name: "All day and due tasks" }).textContent).toContain(
         "All-day planning",
       );

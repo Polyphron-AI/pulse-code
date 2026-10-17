@@ -4,7 +4,52 @@ import { createRoot } from "react-dom/client";
 import { getByRole, getAllByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { createWorkspaceMockupModule } from "./calendarMockupModule";
-import { createWorkspaceMockupSession } from "./workspaceMockupFixtures";
+import {
+  createWorkspaceMockupSession,
+  parseWorkspaceMockupRequest,
+  workspaceCalendarMockupStates,
+} from "./workspaceMockupFixtures";
+it.each(workspaceCalendarMockupStates)(
+  "offers isolated %s capture with no live calls",
+  async (state) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    expect(
+      parseWorkspaceMockupRequest(
+        new URL(`https://fixture.invalid/workspace?space=calendar&fixture=08&state=${state}`),
+        true,
+      ),
+    ).toBe("08");
+    const session = createWorkspaceMockupSession("08", null, state);
+    const module = createWorkspaceMockupModule(session);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(() => root.render(module.center));
+      await act(async () => {
+        await module.settled();
+        await vi.dynamicImportSettled();
+      });
+      expect(
+        getByRole(
+          document.body,
+          state === "picker" ? "grid" : "region",
+          state === "picker" ? {} : { name: "Week schedule" },
+        ),
+      ).toBeDefined();
+      if (state === "dst-fold") expect(node.textContent).toContain("01:00 GMT-5");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      module.dispose();
+      session.dispose();
+      vi.unstubAllGlobals();
+    }
+  },
+);
 it.each(["07", "08"] as const)(
   "renders %s through pure production agenda with inert commands and fresh reset",
   async (id) => {

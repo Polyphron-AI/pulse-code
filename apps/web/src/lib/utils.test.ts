@@ -1,5 +1,12 @@
 import { describe, assert, it } from "vite-plus/test";
-import { getLocalFileManagerName, isWindowsPlatform } from "./utils";
+import { cn, getLocalFileManagerName, isWindowsPlatform } from "./utils";
+it("merges calendar heading size independently from text color", () => {
+  assert.strictEqual(
+    cn("text-calendar-heading", "text-muted-foreground"),
+    "text-calendar-heading text-muted-foreground",
+  );
+  assert.strictEqual(cn("text-calendar-heading", "text-xs"), "text-xs");
+});
 
 describe("getLocalFileManagerName", () => {
   it.each([

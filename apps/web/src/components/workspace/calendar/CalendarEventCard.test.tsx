@@ -71,6 +71,7 @@ it("keeps card actions at the reference type scale and Join flush with its text"
       expect(button.className).toContain("text-2xs");
       expect(button.className).toContain("font-semibold");
       expect(button.className).toContain("h-[23px]");
+      expect(button.className).toContain("cursor-pointer");
     }
     expect(getByRole(node, "button", { name: "Join meeting" }).className).toContain("px-0");
     expect(getByRole(node, "group", { name: "Participants" }).children).toHaveLength(2);

@@ -293,8 +293,11 @@ it.effect("bounds serialized pages and detail reads while deriving previews at i
     expect(page.events[0]!.descriptionPreview).toHaveLength(160);
     expect(page.events[0]).not.toHaveProperty("description");
     const detail = yield* calendar.get({ id: page.events[0]!.id });
+    expect(page.events[0]).toHaveProperty("source");
+    expect(detail).not.toHaveProperty("source");
     expect(serializedBytes(detail)).toBeLessThanOrEqual(32000);
     const read = yield* calendar.read({ id: detail.id });
+    expect(read).not.toHaveProperty("source");
     expect(read).toMatchObject({
       time: occurrence.time,
       sourceLabel: "Test calendar",

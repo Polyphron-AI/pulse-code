@@ -139,6 +139,144 @@ const page = (title = "Review") => ({
 });
 const target = { environmentId: TARGET.environmentId, input: range };
 
+it.effect("replays a successful Load more that finishes during the first refresh read", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const moreStarted = yield* Deferred.make<void>();
+      const moreRelease = yield* Deferred.make<void>();
+      const refreshStarted = yield* Deferred.make<void>();
+      const refreshRelease = yield* Deferred.make<void>();
+      let refreshing = false;
+      const second = { ...event, id: "wce_00000000-0000-0000-0000-000000000002", title: "Second" };
+      const client = {
+        [WS_METHODS.calendarSubscribeChanges]: () => Stream.never,
+        [WS_METHODS.calendarRefresh]: () =>
+          Effect.sync(() => {
+            refreshing = true;
+            return page();
+          }),
+        [WS_METHODS.calendarListRange]: (input: { cursor?: string }) =>
+          Effect.gen(function* () {
+            if (input.cursor) {
+              if (!refreshing) {
+                yield* Deferred.succeed(moreStarted, undefined);
+                yield* Deferred.await(moreRelease);
+              }
+              return { ...page(), events: [second] };
+            }
+            if (refreshing) {
+              yield* Deferred.succeed(refreshStarted, undefined);
+              yield* Deferred.await(refreshRelease);
+            }
+            return { ...page(), nextCursor: "more" };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.range(target);
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      const more = runAtomCommand(registry, atoms.loadMore, {
+        environmentId: target.environmentId,
+        input: { range, kind: "events" },
+      });
+      yield* Deferred.await(moreStarted);
+      yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
+      yield* Deferred.await(refreshStarted);
+      yield* Deferred.succeed(moreRelease, undefined);
+      expect((yield* Effect.promise(() => more))._tag).toBe("Success");
+      yield* Deferred.succeed(refreshRelease, undefined);
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      const value = AsyncResult.getOrThrow(registry.get(query));
+      expect(value.events.map((e) => e.title)).toEqual(["Review", "Second"]);
+    }),
+  ),
+);
+
+it.effect.each(["events", "dueTasks", "unselected", "removed"] as const)(
+  "keeps bounded saved %s when a continuation replay fails",
+  (side) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const kind = side === "dueTasks" ? "dueTasks" : "events";
+        let fail = false;
+        const source = { connectionId: "known", calendarId: "calendar" };
+        const second = {
+          ...event,
+          id: "wce_00000000-0000-0000-0000-000000000002",
+          title: "Saved page",
+          source,
+        };
+        const task = {
+          ref: { type: "task" as const, taskId: "saved-task" },
+          title: "Saved due",
+          projectId: "fixture-project",
+          dueOn: "2026-10-13",
+          done: false,
+          revision: 1,
+        };
+        const client = {
+          [WS_METHODS.calendarSubscribeChanges]: () => Stream.never,
+          [WS_METHODS.calendarRefresh]: () =>
+            Effect.sync(() => {
+              fail = true;
+              return page();
+            }),
+          [WS_METHODS.calendarListRange]: (input: { cursor?: string; dueCursor?: string }) => {
+            if (input.cursor || input.dueCursor)
+              return fail
+                ? Effect.fail(
+                    new CalendarError({ kind: "unavailable", message: "Continuation failed" }),
+                  )
+                : Effect.succeed({
+                    ...page(),
+                    events: kind === "events" ? [second] : [],
+                    dueTasks: kind === "dueTasks" ? [task] : [],
+                  });
+            return Effect.succeed({
+              ...page(fail ? "Fresh" : "Review"),
+              sourceStates:
+                fail && side === "removed"
+                  ? []
+                  : [
+                      {
+                        ...source,
+                        generation: 1,
+                        state: fail && side === "unselected" ? "unselected" : "ready",
+                      },
+                    ],
+              ...(kind === "events" ? { nextCursor: "more" } : { nextDueCursor: "more" }),
+            });
+          },
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.loadMore, {
+            environmentId: target.environmentId,
+            input: { range, kind },
+          }),
+        );
+        yield* Effect.promise(() => runAtomCommand(registry, atoms.refresh, target));
+        const read = yield* Effect.promise(() => executeAtomQuery(registry, query));
+        expect(read._tag).toBe("Success");
+        const result = AsyncResult.getOrThrow(registry.get(query));
+        expect(result.events[0]?.title).toBe("Fresh");
+        const titles =
+          kind === "events"
+            ? result.events.map((e) => e.title)
+            : result.dueTasks.map((t) => t.title);
+        if (side === "unselected" || side === "removed") expect(titles).not.toContain("Saved page");
+        else expect(titles).toContain(kind === "events" ? "Saved page" : "Saved due");
+        expect(kind === "events" ? result.incomplete : result.dueIncomplete).toBe(true);
+        expect(kind === "events" ? result.nextCursor : result.nextDueCursor).toBeUndefined();
+      }),
+    ),
+);
+
 it.effect("shares changes and never refreshes on clock advance", () =>
   Effect.scoped(
     Effect.gen(function* () {

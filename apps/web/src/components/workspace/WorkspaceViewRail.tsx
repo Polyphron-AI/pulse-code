@@ -5,7 +5,7 @@ import {
   CheckIcon,
   Clock3Icon,
   FolderIcon,
-  Grid2X2Icon,
+  PanelsTopLeftIcon,
   InboxIcon,
   LinkIcon,
   ListTodoIcon,
@@ -60,8 +60,7 @@ export const workspaceRailItems: Readonly<
     {
       id: "week",
       label: "Week",
-      Icon: Grid2X2Icon,
-      unavailableReason: "Week view is unavailable on this version.",
+      Icon: PanelsTopLeftIcon,
     },
   ],
   mail: [
