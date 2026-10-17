@@ -9,23 +9,31 @@ type WorkspaceActionButtonProps = Pick<
 
 /** Shared action presentation for real item hosts and Browser fixture commands. */
 export function WorkspaceItemActionButtons({
+  layout = "toolbar",
   startThread,
   addToProject,
   startProject,
   startAutomation,
   tooltips,
 }: {
+  layout?: "toolbar" | "menu" | undefined;
   startThread: WorkspaceActionButtonProps;
   addToProject?: WorkspaceActionButtonProps | undefined;
   startProject?: WorkspaceActionButtonProps | undefined;
   startAutomation?: WorkspaceActionButtonProps | undefined;
   tooltips?: Partial<Record<"startThread" | "addToProject" | "startProject", ReactNode>>;
 }) {
-  return (
+  const size = layout === "menu" ? "xs" : "sm";
+  const actions = (
     <>
       <Tooltip>
         <TooltipTrigger render={<span />}>
-          <Button {...startThread} data-workspace-action="startThread" size="sm" variant="outline">
+          <Button
+            {...startThread}
+            data-workspace-action="startThread"
+            size={size}
+            variant={layout === "menu" ? "ghost" : "outline"}
+          >
             Start thread
           </Button>
         </TooltipTrigger>
@@ -37,7 +45,7 @@ export function WorkspaceItemActionButtons({
             <Button
               {...addToProject}
               data-workspace-action="addToProject"
-              size="sm"
+              size={size}
               variant="ghost"
             >
               Add to project
@@ -52,7 +60,7 @@ export function WorkspaceItemActionButtons({
             <Button
               {...startProject}
               data-workspace-action="startProject"
-              size="sm"
+              size={size}
               variant="ghost"
             >
               Start project
@@ -65,12 +73,17 @@ export function WorkspaceItemActionButtons({
         <Button
           {...startAutomation}
           data-workspace-action="startAutomation"
-          size="sm"
+          size={size}
           variant="ghost"
         >
           Start automation
         </Button>
       ) : null}
     </>
+  );
+  return layout === "menu" ? (
+    <div className="flex flex-col items-start gap-1">{actions}</div>
+  ) : (
+    actions
   );
 }

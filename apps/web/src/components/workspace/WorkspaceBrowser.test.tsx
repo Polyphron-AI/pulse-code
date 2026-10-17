@@ -51,8 +51,6 @@ const mocks = vi.hoisted(() => ({
   configured: true,
   configError: null as string | null,
   configLoading: false,
-  stateUpdates: vi.fn(),
-  trackStateUpdates: false,
   config: vi.fn(),
   configuredThread: "t",
   readError: null as string | null,
@@ -73,23 +71,6 @@ const mocks = vi.hoisted(() => ({
   unlink: vi.fn(),
   actionItems: vi.fn(),
 }));
-// Record attempted late error writes while forwarding updates to React, which silently drops them after unmount.
-vi.mock("react", async (original) => {
-  const actual = await original<typeof import("react")>();
-  return {
-    ...actual,
-    useState: (initial: unknown) => {
-      const [value, setValue] = actual.useState(initial);
-      return [
-        value,
-        (next: unknown) => {
-          if (mocks.trackStateUpdates && initial === null) mocks.stateUpdates(next);
-          setValue(next);
-        },
-      ];
-    },
-  };
-});
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../state/workspaceLinks", () => ({
   workspaceLinks: {
@@ -103,11 +84,13 @@ vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: ({
     item,
     environmentId,
+    layout,
   }: {
     item: WorkspaceLinkEndpoint;
     environmentId: EnvironmentId;
+    layout?: "toolbar" | "menu";
   }) => {
-    mocks.actionItems({ item, environmentId });
+    mocks.actionItems({ item, environmentId, layout });
     return <button>Start thread from {item.title}</button>;
   },
   WorkspaceItemMenu: ({
@@ -350,7 +333,6 @@ beforeEach(() => {
   mocks.configuredThread = "t";
   mocks.configError = null;
   mocks.configLoading = false;
-  mocks.trackStateUpdates = false;
   mocks.readError = null;
   mocks.previewMounts = 0;
   mocks.focusUrlNonce = null;
@@ -455,10 +437,7 @@ it.each(["scope change", "unmount"])(
       await act(() => root!.unmount());
       root = undefined;
     }
-    mocks.stateUpdates.mockClear();
-    mocks.trackStateUpdates = true;
     await act(() => reject(new Error("late failure")));
-    expect(mocks.stateUpdates).not.toHaveBeenCalledWith("late failure");
     if (!root) {
       root = createRoot(node);
       await act(() => render());
@@ -470,11 +449,108 @@ it.each(["scope change", "unmount"])(
     expect(link.hasAttribute("disabled")).toBe(false);
     expect(link.getAttribute("aria-disabled")).not.toBe("true");
     expect(mocks.linkEnvironment.mock.calls).toEqual([[environmentId]]);
-    expect(
-      consoleError.mock.calls.filter((args) => /unmounted|state update/i.test(String(args))),
-    ).toEqual([]);
+    expect(consoleError).not.toHaveBeenCalled();
   },
 );
+
+it.each(["environment change", "project change", "unmount"])(
+  "drops a late Link rejection after %s through a non-keyed Browser",
+  async (transition) => {
+    applyPreviewServerSnapshot(threadRef, snapshot);
+    applyPreviewServerSnapshot(
+      { ...threadRef, environmentId: EnvironmentId.make("other") },
+      snapshot,
+    );
+    applyPreviewServerSnapshot(
+      { ...threadRef, threadId: ThreadId.make("t-chat-project") },
+      { ...snapshot, threadId: ThreadId.make("t-chat-project") },
+    );
+    let reject!: (cause: Error) => void;
+    mocks.link.mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    const consoleError = vi.spyOn(console, "error");
+    node = document.createElement("div");
+    document.body.append(node);
+    root = createRoot(node);
+    const render = (scope: Partial<typeof props> = {}) =>
+      root!.render(
+        <AppAtomRegistryProvider>
+          <WorkspaceBrowser {...props} {...scope} />
+        </AppAtomRegistryProvider>,
+      );
+    await act(() => render());
+    await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+    await act(() => getByRole(document.body, "button", { name: "Link this page" }).click());
+    await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+    const address = getByRole(node!, "textbox", { name: "Browser page address" });
+    if (transition === "environment change")
+      await act(() => render({ environmentId: EnvironmentId.make("other") }));
+    else if (transition === "project change") {
+      mocks.configuredThread = "t-chat-project";
+      await act(() => render({ projectId: ProjectId.make("q") }));
+    } else {
+      await act(() => root!.unmount());
+      root = undefined;
+    }
+    if (root) {
+      expect(getByRole(node!, "textbox", { name: "Browser page address" })).toBe(address);
+      expect(address.hasAttribute("disabled")).toBe(false);
+    }
+    await act(() => reject(new Error("late failure")));
+    if (!root) {
+      root = createRoot(node);
+      await act(() => render());
+    }
+    expect(document.body.textContent).not.toContain("late failure");
+    expect(document.body.textContent).not.toContain("already being linked");
+    await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+    const link = getByRole(document.body, "button", { name: "Link this page" });
+    expect(link.hasAttribute("disabled")).toBe(false);
+    expect(link.getAttribute("aria-disabled")).not.toBe("true");
+    expect(mocks.linkEnvironment.mock.calls).toEqual([[environmentId]]);
+    expect(consoleError).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["", "   "])("shows the linked-page fallback for a blank saved title %j", async (title) => {
+  mocks.projectLinks = decodeLinkList({
+    linked: [
+      {
+        id: "wl_00000000-0000-0000-0000-000000000001",
+        item: { ref: { type: "url", url: "https://example.test/saved" }, title },
+        status: "confirmed",
+        source: { type: "user" },
+        updatedAt: "2026-10-17T08:00:00.000Z",
+      },
+    ],
+    suggested: [],
+    truncated: false,
+  });
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  const input = getByRole(node, "textbox", { name: "Browser page address" });
+  await act(() => editInput(input, "saved"));
+  await act(() =>
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  const results = getByRole(node, "region", { name: "Linked pages" });
+  const row = getByRole(results, "button", { name: "Linked page: https://example.test/saved" });
+  expect(row.textContent).toBe("Linked pagehttps://example.test/saved");
+  expect(getByRole(results, "button", { name: "Open Linked page" })).toBeDefined();
+});
 
 it("admits only one Link before the pending state can render", async () => {
   mocks.desktop = false;
@@ -522,13 +598,13 @@ it("closes only results on Escape inside the 390px Resources sheet", async () =>
   await act(() =>
     input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
   );
-  const results = getByRole(document.body, "dialog", { name: "Linked pages" });
+  const results = getByRole(document.body, "region", { name: "Linked pages" });
   expect(sheet.contains(results)).toBe(true);
   expect(results.parentElement?.contains(input)).toBe(true);
   await act(() =>
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
   );
-  expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
+  expect(queryByRole(document.body, "region", { name: "Linked pages" })).toBeNull();
   expect(getByRole(document.body, "dialog", { name: "Resources" })).toBe(sheet);
   expect(document.activeElement).toBe(input);
 });
@@ -661,7 +737,7 @@ it.each([false, true])("searches direct pages and opens results in desktop=%s", 
   await act(() =>
     input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
   );
-  const results = getByRole(document.body, "dialog", { name: "Linked pages" });
+  const results = getByRole(document.body, "region", { name: "Linked pages" });
   expect(getByRole(results, "list").textContent).toContain("Project handbook");
   expect(results.textContent).toContain("Only loaded linked pages are searched.");
   expect(mocks.linkQueries).toHaveBeenLastCalledWith({
@@ -685,7 +761,7 @@ it.each([false, true])("searches direct pages and opens results in desktop=%s", 
     expect(mocks.external).toHaveBeenCalledExactlyOnceWith(
       "https://example.test/handbook?utm_source=demo#intro",
     );
-  expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
+  expect(queryByRole(document.body, "region", { name: "Linked pages" })).toBeNull();
 });
 
 it("links the captured page to the captured target after navigation", async () => {
@@ -851,6 +927,7 @@ it("freezes the page menu and target until close after navigation and selection 
   );
   expect(mocks.actionItems).toHaveBeenLastCalledWith({
     environmentId,
+    layout: "menu",
     item: { ref: { type: "url", url: snapshot.navStatus.url }, title: "Original page" },
   });
   await act(() => getByRole(document.body, "button", { name: "Link this page" }).click());
@@ -867,6 +944,7 @@ it("freezes the page menu and target until close after navigation and selection 
   );
   expect(mocks.actionItems).toHaveBeenLastCalledWith({
     environmentId,
+    layout: "menu",
     item: { ref: { type: "url", url: "https://later.test/" }, title: "Later page" },
   });
 });
@@ -896,14 +974,14 @@ it("clears an empty search and reports no matches without opening a page", async
   await act(() =>
     input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
   );
-  expect(getByRole(document.body, "dialog", { name: "Linked pages" }).textContent).toContain(
+  expect(getByRole(document.body, "region", { name: "Linked pages" }).textContent).toContain(
     "No linked pages match. Paste an http or https address to open a page.",
   );
   await act(() => edit(""));
   await act(() =>
     input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
   );
-  expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
+  expect(queryByRole(document.body, "region", { name: "Linked pages" })).toBeNull();
   expect(queryByRole(document.body, "alert")).toBeNull();
   expect(mocks.external).not.toHaveBeenCalled();
   expect(mocks.open).not.toHaveBeenCalled();

@@ -742,6 +742,47 @@ it.each(["shortcut", "palette"])(
   },
 );
 
+it.each([undefined, "menu"] as const)(
+  "preserves item actions and project cancellation in the %s layout",
+  async (layout) => {
+    let view!: ReactTestRenderer;
+    await act(() => {
+      view = create(
+        <WorkspaceItemActions environmentId={environmentId} item={a} layout={layout} />,
+      );
+    });
+    try {
+      const buttons = view.root
+        .findAllByType("button")
+        .filter((button) => button.props["data-workspace-action"]);
+      expect(buttons).toHaveLength(4);
+      expect(
+        buttons.map((button) => [button.props.children, button.props.size, button.props.variant]),
+      ).toEqual([
+        ["Start thread", layout === "menu" ? "xs" : "sm", layout === "menu" ? "ghost" : "outline"],
+        ["Add to project", layout === "menu" ? "xs" : "sm", "ghost"],
+        ["Start project", layout === "menu" ? "xs" : "sm", "ghost"],
+        ["Start automation", layout === "menu" ? "xs" : "sm", "ghost"],
+      ]);
+      await act(() =>
+        buttons.find((button) => button.props.children === "Start project")!.props.onClick(),
+      );
+      expect(view.root.findByType("form").props["aria-label"]).toBe("Start project from A");
+      await act(() =>
+        view.root
+          .findAllByType("button")
+          .find((button) => button.props.children === "Cancel")!
+          .props.onClick(),
+      );
+      expect(view.root.findAllByType("form")).toHaveLength(0);
+      expect(mocks.createProject).not.toHaveBeenCalled();
+      expect(mocks.linkToProject).not.toHaveBeenCalled();
+    } finally {
+      await act(() => view.unmount());
+    }
+  },
+);
+
 describe("workspace action entrances", () => {
   it("renders selected-item actions and shortcut labels without crashing the reader", () => {
     const markup = renderToStaticMarkup(

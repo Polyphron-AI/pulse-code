@@ -151,30 +151,29 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                   </Button>
                 }
                 sharedActions={
-                  <div className="flex flex-wrap items-center gap-2">
-                    <WorkspaceItemActionButtons
-                      startThread={{
-                        onClick: () => {
-                          void session.record("open-thread", captured.page.ref);
-                        },
-                      }}
-                      addToProject={{
-                        onClick: () => {
-                          void session.record("add-to-project", captured.page.ref);
-                        },
-                      }}
-                      startProject={{
-                        onClick: () => {
-                          void session.record("start-project", captured.page.ref);
-                        },
-                      }}
-                      startAutomation={{
-                        onClick: () => {
-                          void session.record("start-automation", captured.page.ref);
-                        },
-                      }}
-                    />
-                  </div>
+                  <WorkspaceItemActionButtons
+                    layout="menu"
+                    startThread={{
+                      onClick: () => {
+                        void session.record("open-thread", captured.page.ref);
+                      },
+                    }}
+                    addToProject={{
+                      onClick: () => {
+                        void session.record("add-to-project", captured.page.ref);
+                      },
+                    }}
+                    startProject={{
+                      onClick: () => {
+                        void session.record("start-project", captured.page.ref);
+                      },
+                    }}
+                    startAutomation={{
+                      onClick: () => {
+                        void session.record("start-automation", captured.page.ref);
+                      },
+                    }}
+                  />
                 }
               />
             ) : undefined

@@ -80,6 +80,7 @@ function dispatchWorkspaceShortcut(
 type ItemActionProps = {
   environmentId: EnvironmentId;
   item: WorkspaceLinkEndpoint;
+  layout?: "toolbar" | "menu" | undefined;
   shortcuts?: boolean;
   onlyStartThread?: boolean;
   initialAction?: import("./WorkspaceNativeActions.logic").WorkspaceNativeAction;
@@ -129,6 +130,7 @@ export function WorkspaceItemActions(props: ItemActionProps) {
 function AvailableWorkspaceItemActions({
   environmentId,
   item,
+  layout,
   shortcuts = false,
   onlyStartThread = false,
   initialAction,
@@ -378,6 +380,7 @@ function AvailableWorkspaceItemActions({
       }}
     >
       <WorkspaceItemActionButtons
+        layout={layout}
         startThread={{
           ref: threadButton,
           disabled: busy || !canOperate || links.data === null || !capability.workspaceItemContext,

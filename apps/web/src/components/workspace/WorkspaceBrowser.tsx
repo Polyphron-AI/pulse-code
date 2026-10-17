@@ -112,14 +112,27 @@ export function WorkspaceBrowser({
   const admittedRequest = useRef<WorkspaceBrowserProps["request"]>(null);
   const externalOpening = useRef(false);
   const linkingPage = useRef(false);
-  const mounted = useRef(true);
+  const scope = useMemo(() => ({ environmentId, projectId }), [environmentId, projectId]);
+  const activeScope = useRef<typeof scope | null>(null);
+  const previousScope = useRef(scope);
   useLayoutEffect(() => {
-    mounted.current = true;
+    activeScope.current = scope;
+    if (previousScope.current !== scope) {
+      previousScope.current = scope;
+      externalOpening.current = false;
+      linkingPage.current = false;
+      admittedRequest.current = null;
+      setBusy(false);
+      setLinking(false);
+      setError(null);
+      setRetryUrl(null);
+      setRequestedAddress(null);
+    }
     return () => {
-      mounted.current = false;
+      activeScope.current = null;
     };
-  }, []);
-  const inScope = useCallback(() => mounted.current, []);
+  }, [scope]);
+  const inScope = useCallback(() => activeScope.current === scope, [scope]);
   const linkUnavailableReason = !connected
     ? "Reconnect to link this page."
     : !canOperate
@@ -195,8 +208,8 @@ export function WorkspaceBrowser({
       if (inScope())
         setError(cause instanceof Error ? cause.message : "This page could not be linked.");
     } finally {
-      linkingPage.current = false;
       if (inScope()) {
+        linkingPage.current = false;
         setBusy(false);
         setLinking(false);
       }
@@ -213,8 +226,10 @@ export function WorkspaceBrowser({
       if (inScope())
         setError(cause instanceof Error ? cause.message : "The page could not be opened.");
     } finally {
-      externalOpening.current = false;
-      if (inScope()) setBusy(false);
+      if (inScope()) {
+        externalOpening.current = false;
+        setBusy(false);
+      }
     }
   };
   const chrome = {
@@ -649,7 +664,11 @@ function ResourceBrowserChrome({
             }
             sharedActions={
               menu?.page && ready && workspaceLinks ? (
-                <WorkspaceItemActions environmentId={environmentId} item={menu.page} />
+                <WorkspaceItemActions
+                  environmentId={environmentId}
+                  item={menu.page}
+                  layout="menu"
+                />
               ) : null
             }
           />

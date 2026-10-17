@@ -225,7 +225,7 @@ it.each(
       expect(document.activeElement).toBe(
         getByRole(document.body, "textbox", { name: "Browser page address" }),
       );
-    const popup = getByRole(document.body, "dialog", {
+    const popup = getByRole(document.body, state === "captured-page" ? "dialog" : "region", {
       name: state === "captured-page" ? "Browser actions" : "Linked pages",
     });
     expect(popup.textContent).toContain(

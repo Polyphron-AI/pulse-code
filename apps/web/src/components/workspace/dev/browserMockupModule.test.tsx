@@ -30,7 +30,7 @@ it.each(["search-results", "empty-results", "truncated-results", "captured-page"
         expect(document.activeElement).toBe(
           getByRole(node, "textbox", { name: "Browser page address" }),
         );
-      const popup = getByRole(document.body, "dialog", {
+      const popup = getByRole(document.body, state === "captured-page" ? "dialog" : "region", {
         name: state === "captured-page" ? "Browser actions" : "Linked pages",
       });
       if (state === "captured-page") {
@@ -45,7 +45,12 @@ it.each(["search-results", "empty-results", "truncated-results", "captured-page"
           "Start automation",
         ])
           expect(getByRole(popup, "button", { name })).toBeDefined();
-        await act(() => getByRole(popup, "button", { name: "Add to project" }).click());
+        const startThread = getByRole(popup, "button", { name: "Start thread" });
+        const addToProject = getByRole(popup, "button", { name: "Add to project" });
+        expect(startThread.classList.contains("border-transparent")).toBe(true);
+        expect(startThread.classList.contains("sm:h-6")).toBe(true);
+        expect(startThread.closest(".flex-col")).toBe(addToProject.closest(".flex-col"));
+        await act(() => addToProject.click());
         expect(session.operations).toEqual([
           {
             kind: "add-to-project",

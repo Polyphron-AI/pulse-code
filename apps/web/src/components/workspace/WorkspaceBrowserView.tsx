@@ -131,7 +131,7 @@ export function WorkspaceBrowserView({
       </form>
       {searchOpen ? (
         <div
-          role="dialog"
+          role="region"
           aria-label="Linked pages"
           className="mb-[13px] max-h-80 min-w-0 shrink-0 overflow-y-auto rounded-lg border border-border bg-popover p-2 text-popover-foreground"
         >
@@ -182,19 +182,18 @@ export function WorkspaceBrowserSearchResults({
       ) : (
         <ul className="flex min-w-0 flex-col gap-2" aria-label="Project linked pages">
           {pages.map((page) => {
+            const title = page.item.title?.trim() || "Linked page";
             const row = (
               <>
                 <button
                   type="button"
                   className="min-w-0 flex-1 px-1.75 text-left hover:underline"
                   aria-label={
-                    page.item.ref.type === "url"
-                      ? `${page.item.title || "Linked page"}: ${page.item.ref.url}`
-                      : page.item.title || "Linked page"
+                    page.item.ref.type === "url" ? `${title}: ${page.item.ref.url}` : title
                   }
                   onClick={() => onOpen(page.item)}
                 >
-                  <span className="block break-words">{page.item.title ?? "Linked page"}</span>
+                  <span className="block break-words">{title}</span>
                   <span className="block truncate text-muted-foreground">
                     {page.item.ref.type === "url" ? page.item.ref.url : ""}
                   </span>
@@ -202,7 +201,7 @@ export function WorkspaceBrowserSearchResults({
                 <Button
                   size="xs"
                   variant="ghost"
-                  aria-label={`Open ${page.item.title ?? "linked page"}`}
+                  aria-label={`Open ${title}`}
                   onClick={() => onOpen(page.item)}
                 >
                   Open
