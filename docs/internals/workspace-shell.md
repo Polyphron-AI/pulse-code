@@ -132,8 +132,8 @@ capability. Clearing it restores the Me display fallback, without unassigning ta
 
 Owner profiles decode as complete objects with bounded trimmed strings, so device Unicode or
 locale support cannot reject ServerConfig. Both settings write paths validate names without
-control characters, line/paragraph separators, bidi controls or zero-width space. They normalize to NFC and merge
-the decoded profile. ZWNJ and ZWJ are allowed in names; initials contain one to three letters or
+control characters, line/paragraph separators or format characters except ZWNJ and ZWJ.
+They normalize to NFC and merge the decoded profile. Initials contain one to three letters or
 digits, each followed by optional combining marks. The decoded initials string has an 80-unit
 bound so combining marks do not count as extra initials.
 A partial profile is rejected before deep merge can retain an omitted field. Profile saves require

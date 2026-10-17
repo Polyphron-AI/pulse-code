@@ -90,8 +90,11 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
       if (
         workspaceOwnerProfile !== null &&
         (!/^(?:[\p{L}\p{N}]\p{M}*){1,3}$/u.test(workspaceOwnerProfile.initials) ||
-          /[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069\u200b]/u.test(
-            workspaceOwnerProfile.displayName + workspaceOwnerProfile.initials,
+          /[\p{Cc}\p{Zl}\p{Zp}]|(?![\u200c\u200d])\p{Cf}/u.test(
+            workspaceOwnerProfile.displayName +
+              workspaceOwnerProfile.initials +
+              (profile?.displayName ?? "") +
+              (profile?.initials ?? ""),
           ))
       )
         throw new RangeError("Invalid owner profile");

@@ -344,3 +344,46 @@ it("rejects punctuation initials before sending a profile", async () => {
   expect(mocks.update).not.toHaveBeenCalled();
   expect(JSON.stringify(renderer!.toJSON())).toContain("letters or digits");
 });
+
+it.each(["\u200e", "\u200f", "\ufeff", "\u2060", "\u00ad", "\u{e0001}"])(
+  "rejects invisible format character %j before sending the owner profile",
+  async (format) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    await act(() => {
+      renderer = create(<WorkspaceDisplaySettings />);
+    });
+    for (const [label, value] of [
+      ["Owner display name", `A${format}B`],
+      ["Owner initials", "AB"],
+    ])
+      await act(() =>
+        renderer!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value } }),
+      );
+    await act(() =>
+      renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }),
+    );
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(1);
+  },
+);
+it.each([
+  { displayName: "\u0639\u0644\u06cc\u200c\u0631\u0636\u0627", initials: "\u0639" },
+  { displayName: "\u0928\u093e\u092e", initials: "\u0936\u093f" },
+  { displayName: "A\u200dB", initials: "AB" },
+])("accepts international owner profile %j", async (profile) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.update.mockResolvedValue(true);
+  await act(() => {
+    renderer = create(<WorkspaceDisplaySettings />);
+  });
+  for (const [label, value] of [
+    ["Owner display name", profile.displayName],
+    ["Owner initials", profile.initials],
+  ])
+    await act(() =>
+      renderer!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value } }),
+    );
+  await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
+  expect(mocks.update).toHaveBeenCalledExactlyOnceWith({ workspaceOwnerProfile: profile });
+  expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+});

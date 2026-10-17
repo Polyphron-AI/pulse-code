@@ -161,7 +161,7 @@ const validateWorkspaceOwnerProfilePatch = (patch: ServerSettingsPatch, settings
   }).pipe(
     Effect.filterOrFail(
       (decoded) =>
-        !/[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069\u200b]/u.test(
+        !/[\p{Cc}\p{Zl}\p{Zp}]|(?![\u200c\u200d])\p{Cf}/u.test(
           decoded.displayName + decoded.initials + profile.displayName + profile.initials,
         ) && /^(?:[\p{L}\p{N}]\p{M}*){1,3}$/u.test(decoded.initials),
       () => new RangeError("Invalid owner display profile"),

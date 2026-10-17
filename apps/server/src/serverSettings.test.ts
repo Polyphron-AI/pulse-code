@@ -189,15 +189,23 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         "\u2066",
         "\u2069",
         "\u200b",
-      ])
-        assert.equal(
-          (yield* service
-            .updateSettings({
-              workspaceOwnerProfile: { displayName: `A${control}B`, initials: "AB" },
-            })
-            .pipe(Effect.flip)).operation,
-          "validate-workspace-owner-profile",
-        );
+        "\u200e",
+        "\u200f",
+        "\ufeff",
+        "\u2060",
+        "\u00ad",
+        "\u{e0001}",
+      ]) {
+        const patch = { workspaceOwnerProfile: { displayName: `A${control}B`, initials: "AB" } };
+        for (const write of [
+          service.updateSettings(patch),
+          service.updateProviderInstance(mutation, patch),
+        ])
+          assert.equal(
+            (yield* write.pipe(Effect.flip)).operation,
+            "validate-workspace-owner-profile",
+          );
+      }
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
   it.effect(
