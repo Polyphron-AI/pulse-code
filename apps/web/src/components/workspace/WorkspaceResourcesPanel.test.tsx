@@ -59,7 +59,7 @@ vi.mock("./WorkspaceToolsPanel", () => ({
   },
   WorkspaceProjectAgents: () => <Body name="Agents" />,
 }));
-vi.mock("./ProjectTasks", () => ({ ProjectTasks: () => <Body name="Tasks" /> }));
+vi.mock("./ProjectTasksResource", () => ({ ProjectTasksResource: () => <Body name="Tasks" /> }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({ workspaceTools: bodies.toolsAvailable, workspaceLinks: true }),
 }));
@@ -309,18 +309,15 @@ it("transfers open resources on resize and restores the saved wide visibility af
   expect(queryByRole(document.body, "dialog")).toBeNull();
   expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
 });
-it.each(["Tasks", "Docs", "PRs"])(
-  "styles the %s fallback with existing muted text tokens",
-  async (tab) => {
-    bodies.toolsAvailable = false;
-    await mount();
-    await act(() => getByRole(node, "button", { name: "Open file" }).click());
-    await act(() => getByRole(node, "tab", { name: tab }).click());
-    const paragraph = getByRole(node, "tabpanel").querySelector("p")!;
-    expect(paragraph.classList.contains("text-sm")).toBe(true);
-    expect(paragraph.classList.contains("text-muted-foreground")).toBe(true);
-  },
-);
+it.each(["Docs", "PRs"])("styles the %s fallback with existing muted text tokens", async (tab) => {
+  bodies.toolsAvailable = false;
+  await mount();
+  await act(() => getByRole(node, "button", { name: "Open file" }).click());
+  await act(() => getByRole(node, "tab", { name: tab }).click());
+  const paragraph = getByRole(node, "tabpanel").querySelector("p")!;
+  expect(paragraph.classList.contains("text-sm")).toBe(true);
+  expect(paragraph.classList.contains("text-muted-foreground")).toBe(true);
+});
 it("keeps deleted selections unavailable until explicitly recovered", async () => {
   await mount();
   await act(() => getByRole(node, "button", { name: "Open file" }).click());

@@ -107,6 +107,69 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
   return { atoms: createWorkspaceToolsAtoms(runtime), registry, supervisor };
 });
 
+it.effect("refreshes task totals in two subscribed client registries", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(0);
+      let openTotal = 4;
+      const client = {
+        [WS_METHODS.workspaceSubscribeChanges]: () =>
+          SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
+        [WS_METHODS.workspaceQueryTasks]: () =>
+          Effect.sync(() => ({
+            tasks: [],
+            openTotal,
+            total: 5,
+            nextCursor: null,
+            projects: [],
+            laneTotals: [],
+          })),
+      } as unknown as WsRpcProtocolClient;
+      const first = yield* makeTestRuntime(client);
+      const second = yield* makeTestRuntime(client);
+      const firstQuery = first.atoms.queryTasks({
+        environmentId: TARGET.environmentId,
+        input: { projectId: importProjectId.make("project"), state: "all", limit: 50 },
+      });
+      const secondQuery = second.atoms.queryTasks({
+        environmentId: TARGET.environmentId,
+        input: { projectId: importProjectId.make("project"), state: "all", limit: 50 },
+      });
+      const unmountFirst = first.registry.mount(firstQuery);
+      const unmountSecond = second.registry.mount(secondQuery);
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          unmountFirst();
+          unmountSecond();
+        }),
+      );
+      const initial = yield* Effect.promise(() => executeAtomQuery(second.registry, secondQuery));
+      expect(AsyncResult.isSuccess(initial) && initial.value.openTotal).toBe(4);
+      yield* Effect.promise(() => executeAtomQuery(first.registry, firstQuery));
+      const firstUpdated = Latch.makeUnsafe();
+      const secondUpdated = Latch.makeUnsafe();
+      const stopFirst = first.registry.subscribe(firstQuery, (result) => {
+        if (AsyncResult.isSuccess(result) && result.value.openTotal === 3)
+          firstUpdated.openUnsafe();
+      });
+      const stopSecond = second.registry.subscribe(secondQuery, (result) => {
+        if (AsyncResult.isSuccess(result) && result.value.openTotal === 3)
+          secondUpdated.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          stopFirst();
+          stopSecond();
+        }),
+      );
+      openTotal = 3;
+      yield* SubscriptionRef.set(counter, 1);
+      yield* firstUpdated.await;
+      yield* secondUpdated.await;
+    }),
+  ),
+);
+
 it.effect("refreshes project task columns after another device changes the environment", () =>
   Effect.scoped(
     Effect.gen(function* () {

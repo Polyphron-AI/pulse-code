@@ -19,29 +19,9 @@ const Browser = lazy(() =>
 const Agents = lazy(() =>
   import("./WorkspaceToolsPanel").then((module) => ({ default: module.WorkspaceProjectAgents })),
 );
-const Tasks = lazy(async () => {
-  const [{ ProjectTasks }, { useMailCapabilities }] = await Promise.all([
-    import("./ProjectTasks"),
-    import("./mail/useMailCapabilities"),
-  ]);
-  return {
-    default: function ResourceTasks(props: WorkspaceResourceBodyProps) {
-      const capabilities = useMailCapabilities(props.environmentId);
-      return capabilities.workspaceTools ? (
-        <ProjectTasks
-          environmentId={props.environmentId}
-          projectId={props.projectId}
-          selected={null}
-          onSelect={(task) => {
-            if (task) props.onOpen({ type: "task", taskId: task.id });
-          }}
-        />
-      ) : (
-        <p className="text-sm text-muted-foreground">Tasks are not available on this server yet.</p>
-      );
-    },
-  };
-});
+const Tasks = lazy(() =>
+  import("./ProjectTasksResource").then((module) => ({ default: module.ProjectTasksResource })),
+);
 
 /** The single live resource switch. Later waves replace only their tab's case. */
 export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): ReactNode {
