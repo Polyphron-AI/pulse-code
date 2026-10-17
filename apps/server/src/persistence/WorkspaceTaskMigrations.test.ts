@@ -74,7 +74,7 @@ it.effect("indexes project, date and owner queries and invalidates task/config g
     ]);
     for (const input of [
       {},
-      { dueFrom: "2026-10-16" },
+      { dueFrom: "2026-10-16", dueTo: "2026-10-18" },
       { projectId: "p" },
       { owner: "unassigned" },
       { owner: "environment-owner" },
@@ -104,6 +104,10 @@ it.effect("indexes project, date and owner queries and invalidates task/config g
           ),
         ).toBe(true);
         expect(plan.filter((row) => row.detail.includes("TEMP B-TREE"))).toEqual([]);
+        if (query.dueFrom && query.dueTo)
+          expect(
+            plan.some((row) => row.detail.includes("<expr>>?") && row.detail.includes("<expr><?")),
+          ).toBe(true);
       }
     }
     const bounded = yield* decodeQuery({ dueFrom: "2026-10-16", dueTo: "2026-10-18" });
