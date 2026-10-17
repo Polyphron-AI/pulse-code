@@ -1,8 +1,13 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { EnvironmentAuthorizationError } from "./auth.ts";
 import { IsoDateTime, NonNegativeInt, PositiveInt } from "./baseSchemas.ts";
-import { WorkspaceTaskDueOn } from "./pulseWorkspaceTools.ts";
+import {
+  WorkspaceTaskDueOn,
+  WorkspaceTaskId,
+  WorkspaceTaskSummary,
+} from "./pulseWorkspaceTools.ts";
 
 export const CalendarDate = WorkspaceTaskDueOn;
 const text = (max: number) =>
@@ -19,19 +24,7 @@ const text = (max: number) =>
 const Title = text(300).check(Schema.isMinLength(1));
 const SourceId = text(512).check(Schema.isMinLength(1));
 const isDate = Schema.is(CalendarDate);
-const TimeZone = text(100).check(
-  Schema.isMinLength(1),
-  Schema.isPattern(/^[A-Za-z]/),
-  Schema.makeFilter((value) => {
-    try {
-      return (
-        new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone.length > 0
-      );
-    } catch {
-      return false;
-    }
-  }),
-);
+const TimeZone = text(100).check(Schema.isPattern(/^[A-Za-z][A-Za-z0-9_+\-/]*$/));
 const Instant = IsoDateTime.check(
   Schema.isMaxLength(40),
   Schema.makeFilter(
@@ -106,6 +99,7 @@ export const CalendarRangeInput = Schema.Struct({
   endBefore: CalendarDate,
   timeZone: TimeZone,
   cursor: Schema.optionalKey(Cursor),
+  dueCursor: Schema.optionalKey(text(16384).check(Schema.isMinLength(1))),
   limit: Schema.optionalKey(PositiveInt.check(Schema.isLessThanOrEqualTo(100))),
 }).check(
   Schema.makeFilter((range) => {
@@ -132,8 +126,22 @@ const serializedBytes = (value: unknown) => {
   }
   return bytes;
 };
+export const CalendarDueTask = Schema.Struct({
+  ref: Schema.Struct({ type: Schema.Literal("task"), taskId: WorkspaceTaskId }),
+  title: WorkspaceTaskSummary.fields.title,
+  projectId: WorkspaceTaskSummary.fields.projectId,
+  dueOn: CalendarDate,
+  done: Schema.Boolean,
+  revision: NonNegativeInt,
+});
+export type CalendarDueTask = typeof CalendarDueTask.Type;
 export const CalendarPage = Schema.Struct({
   events: Schema.Array(CalendarOccurrenceSummary).check(Schema.isMaxLength(100)),
+  dueTasks: Schema.Array(CalendarDueTask)
+    .check(Schema.isMaxLength(100))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  nextDueCursor: Schema.optionalKey(text(16384).check(Schema.isMinLength(1))),
+  dueIncomplete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   nextCursor: Schema.optionalKey(Cursor),
   incomplete: Schema.Boolean,
   sourceStates: Schema.Array(CalendarSourceState).check(Schema.isMaxLength(100)),
@@ -169,8 +177,21 @@ const error = Schema.Union([CalendarError, EnvironmentAuthorizationError]);
 export const PULSE_CALENDAR_METHODS = {
   calendarListRange: "pulse.calendar.listRange",
   calendarGet: "pulse.calendar.get",
+  calendarSubscribeChanges: "pulse.calendar.subscribeChanges",
+  calendarRefresh: "pulse.calendar.refresh",
 } as const;
 export const PulseCalendarRpcs = [
+  Rpc.make(PULSE_CALENDAR_METHODS.calendarSubscribeChanges, {
+    payload: Schema.Struct({}),
+    success: NonNegativeInt,
+    error: EnvironmentAuthorizationError,
+    stream: true,
+  }),
+  Rpc.make(PULSE_CALENDAR_METHODS.calendarRefresh, {
+    payload: CalendarRangeInput,
+    success: CalendarPage,
+    error,
+  }),
   Rpc.make(PULSE_CALENDAR_METHODS.calendarListRange, {
     payload: CalendarRangeInput,
     success: CalendarPage,

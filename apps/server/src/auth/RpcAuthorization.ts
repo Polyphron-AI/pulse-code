@@ -29,6 +29,8 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
 export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.calendarListRange]: AuthOrchestrationReadScope,
   [WS_METHODS.calendarGet]: AuthOrchestrationReadScope,
+  [WS_METHODS.calendarSubscribeChanges]: AuthOrchestrationReadScope,
+  [WS_METHODS.calendarRefresh]: AuthOrchestrationReadScope,
   [WS_METHODS.notesCreate]: AuthOrchestrationOperateScope,
   [WS_METHODS.notesUpdate]: AuthOrchestrationOperateScope,
   [WS_METHODS.notesDelete]: AuthOrchestrationOperateScope,

@@ -1,5 +1,7 @@
 import {
   CalendarError,
+  NonNegativeInt,
+  WorkspaceToolsError,
   CalendarGetInput,
   CalendarIngestItem,
   CalendarOccurrence,
@@ -17,9 +19,13 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeCrypto from "node:crypto";
+import { WorkspaceTools } from "./WorkspaceTools.ts";
+import { dueTaskItem, dueTaskQuery, hasDueOn } from "./calendar/dueTasks.ts";
 import { sliceUtf8 } from "../mail/MailImapRead.ts";
 
 const Source = Schema.Struct({
@@ -40,6 +46,15 @@ const Cursor = Schema.Struct({
   sortKey: Schema.Number,
   id: CalendarOccurrenceId,
 });
+const DueCursor = Schema.Struct({
+  version: Schema.Literal(1),
+  instance: Schema.String,
+  query: Schema.String,
+  toolsCursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(8192))),
+  offset: NonNegativeInt.check(Schema.isLessThanOrEqualTo(100)),
+  page: Schema.String,
+});
+const isToolsError = Schema.is(WorkspaceToolsError);
 const SummaryJson = Schema.fromJsonString(CalendarOccurrenceSummary);
 const DetailJson = Schema.fromJsonString(CalendarOccurrence);
 const decodeDetailJson = Schema.decodeEffect(DetailJson);
@@ -88,6 +103,12 @@ const dayStart = (date: string, timeZone: string) =>
       disambiguation: "compatible",
     }),
   );
+const canonicalZone = (timeZone: string) =>
+  Effect.try({
+    try: () => new Intl.DateTimeFormat("en", { timeZone }).resolvedOptions().timeZone,
+    catch: () => fail("invalid-input", "Choose a supported IANA time zone."),
+  });
+const encodeItem = Schema.encodeSync(CalendarIngestItem);
 const normalize = (item: CalendarIngestItem) => {
   if (item.status === "cancelled") return item;
   const { joinUrl, ...fields } = item;
@@ -118,6 +139,9 @@ interface Options {
 
 export const make = Effect.fnUntraced(function* (options: Options = {}) {
   const sql = yield* SqlClient.SqlClient;
+  const tools = yield* WorkspaceTools;
+  const counter = yield* SubscriptionRef.make(0);
+  const announce = SubscriptionRef.update(counter, (n) => n + 1);
   const crypto = yield* Crypto.Crypto;
   const instance = yield* crypto.randomUUIDv4;
   const resolve =
@@ -165,8 +189,17 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
     return boundAttendees(detail);
   }, safe);
 
-  return {
+  const changes = SubscriptionRef.changes(counter).pipe(
+    Stream.zipLatest(Stream.concat(Stream.succeed(0), tools.changes)),
+    Stream.map(([calendar, tasks]) => calendar + tasks),
+    Stream.filter((n) => n > 0),
+    Stream.changes,
+  );
+  const service = {
     get,
+    changes,
+    // Account adapters call this after committing availability or selection changes.
+    invalidate: announce,
     read: Effect.fnUntraced(function* (raw: CalendarReadInput) {
       const input = yield* decode(CalendarReadInput, raw);
       const detail = yield* get({ id: input.id });
@@ -184,75 +217,103 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
         }),
       );
     }, safe),
-    ingestPage: Effect.fnUntraced(function* (raw: Ingest) {
-      const input = yield* decode(Ingest, raw);
-      yield* requireSource(input.connectionId, input.calendarId, input.generation);
-      yield* sql.withTransaction(
-        Effect.gen(function* () {
-          yield* requireSource(input.connectionId, input.calendarId, input.generation);
-          for (const item of input.items) {
-            const [previous] = yield* sql<{
-              id: string;
-              fingerprint: string;
-              revision: number;
-            }>`SELECT id,fingerprint,revision FROM workspace_calendar_occurrences WHERE connection_id=${input.connectionId} AND calendar_id=${input.calendarId} AND external_event_id=${item.externalEventId} AND occurrence_key=${item.occurrenceKey}`;
-            const id = previous?.id ?? `wce_${yield* crypto.randomUUIDv4}`;
-            const revision = (previous?.revision ?? 0) + 1;
-            const normalized = normalize(item);
-            const fingerprint = hash([input.generation, normalized]);
-            if (previous?.fingerprint === fingerprint) continue;
-            const detail =
-              normalized.status === "confirmed"
-                ? yield* decodeDetail({ ...normalized, id, revision })
-                : undefined;
-            const payload = detail ? yield* encodeDetailJson(detail) : "{}";
-            const summary = detail
-              ? yield* encodeSummaryJson(boundAttendees(yield* decodeSummary(detail)))
-              : "{}";
-            const time = normalized.status === "confirmed" ? normalized.time : undefined;
-            const startMs = time?.kind === "timed" ? Date.parse(time.start) : null;
-            const endMs = time?.kind === "timed" ? Date.parse(time.end) : null;
-            const startOn = time?.kind === "all-day" ? time.startOn : null;
-            const endBefore = time?.kind === "all-day" ? time.endBefore : null;
-            const sortKey = startMs ?? (startOn ? dayStart(startOn, "UTC") : 0);
-            // The mapping row is the bounded replay journal: identity, fingerprint and revision
-            // update with the current payload, never another full copy per ingestion.
-            if (previous) {
-              const rows =
-                yield* sql`UPDATE workspace_calendar_occurrences SET status=${item.status},payload_json=${payload},summary_json=${summary},fingerprint=${fingerprint},revision=${revision},source_generation=${input.generation},time_kind=${time?.kind ?? null},start_ms=${startMs},end_ms=${endMs},start_on=${startOn},end_before=${endBefore},sort_key=${sortKey} WHERE id=${id} AND revision=${previous.revision} RETURNING id`;
-              if (!rows.length)
-                return yield* fail(
-                  "conflict",
-                  "This event changed during ingestion. Refresh this range.",
-                );
-            } else {
-              yield* sql`INSERT INTO workspace_calendar_occurrences(id,connection_id,calendar_id,external_event_id,occurrence_key,status,payload_json,summary_json,fingerprint,revision,source_generation,time_kind,start_ms,end_ms,start_on,end_before,sort_key) VALUES(${id},${input.connectionId},${input.calendarId},${item.externalEventId},${item.occurrenceKey},${item.status},${payload},${summary},${fingerprint},${revision},${input.generation},${time?.kind ?? null},${startMs},${endMs},${startOn},${endBefore},${sortKey})`;
+    ingestPage: Effect.fnUntraced(
+      function* (raw: Ingest) {
+        const decoded = yield* decode(Ingest, raw);
+        const items: CalendarIngestItem[] = [];
+        for (const item of decoded.items) {
+          items.push(
+            item.status === "confirmed" && item.time.kind === "timed"
+              ? {
+                  ...item,
+                  time: {
+                    ...item.time,
+                    sourceTimeZone: yield* canonicalZone(item.time.sourceTimeZone),
+                  },
+                }
+              : item,
+          );
+        }
+        const input = { ...decoded, items };
+        yield* requireSource(input.connectionId, input.calendarId, input.generation);
+        const changed = yield* sql.withTransaction(
+          Effect.gen(function* () {
+            let changed = false;
+            yield* requireSource(input.connectionId, input.calendarId, input.generation);
+            yield* sql`INSERT OR IGNORE INTO workspace_calendar_sources(connection_id,calendar_id) VALUES(${input.connectionId},${input.calendarId})`;
+            for (const item of input.items) {
+              const [previous] = yield* sql<{
+                id: string;
+                fingerprint: string;
+                revision: number;
+              }>`SELECT id,fingerprint,revision FROM workspace_calendar_occurrences WHERE connection_id=${input.connectionId} AND calendar_id=${input.calendarId} AND external_event_id=${item.externalEventId} AND occurrence_key=${item.occurrenceKey}`;
+              const id = previous?.id ?? `wce_${yield* crypto.randomUUIDv4}`;
+              const revision = (previous?.revision ?? 0) + 1;
+              const normalized = normalize(item);
+              const fingerprint = hash([input.generation, encodeItem(normalized)]);
+              if (previous?.fingerprint === fingerprint) continue;
+              changed = true;
+              const detail =
+                normalized.status === "confirmed"
+                  ? yield* decodeDetail({ ...normalized, id, revision })
+                  : undefined;
+              const payload = detail ? yield* encodeDetailJson(detail) : "{}";
+              const summary = detail
+                ? yield* encodeSummaryJson(boundAttendees(yield* decodeSummary(detail)))
+                : "{}";
+              const time = normalized.status === "confirmed" ? normalized.time : undefined;
+              const startMs = time?.kind === "timed" ? Date.parse(time.start) : null;
+              const endMs = time?.kind === "timed" ? Date.parse(time.end) : null;
+              const startOn = time?.kind === "all-day" ? time.startOn : null;
+              const endBefore = time?.kind === "all-day" ? time.endBefore : null;
+              const sortKey = startMs ?? (startOn ? dayStart(startOn, "UTC") : 0);
+              // The mapping row is the bounded replay journal: identity, fingerprint and revision
+              // update with the current payload, never another full copy per ingestion.
+              if (previous) {
+                const rows =
+                  yield* sql`UPDATE workspace_calendar_occurrences SET status=${item.status},payload_json=${payload},summary_json=${summary},fingerprint=${fingerprint},revision=${revision},source_generation=${input.generation},time_kind=${time?.kind ?? null},start_ms=${startMs},end_ms=${endMs},start_on=${startOn},end_before=${endBefore},sort_key=${sortKey} WHERE id=${id} AND revision=${previous.revision} RETURNING id`;
+                if (!rows.length)
+                  return yield* fail(
+                    "conflict",
+                    "This event changed during ingestion. Refresh this range.",
+                  );
+              } else {
+                yield* sql`INSERT INTO workspace_calendar_occurrences(id,connection_id,calendar_id,external_event_id,occurrence_key,status,payload_json,summary_json,fingerprint,revision,source_generation,time_kind,start_ms,end_ms,start_on,end_before,sort_key) VALUES(${id},${input.connectionId},${input.calendarId},${item.externalEventId},${item.occurrenceKey},${item.status},${payload},${summary},${fingerprint},${revision},${input.generation},${time?.kind ?? null},${startMs},${endMs},${startOn},${endBefore},${sortKey})`;
+              }
             }
-          }
-        }),
-      );
-    }, safe),
+            return changed;
+          }),
+        );
+        if (changed) yield* announce;
+      },
+      Effect.uninterruptible,
+      safe,
+    ),
     listRange: Effect.fnUntraced(function* (raw: CalendarRangeInput) {
-      const input = yield* decode(CalendarRangeInput, raw);
+      const decoded = yield* decode(CalendarRangeInput, raw);
+      const input = { ...decoded, timeZone: yield* canonicalZone(decoded.timeZone) };
       const limit = input.limit ?? 50;
       const query = hash([input.startOn, input.endBefore, input.timeZone, limit]);
       const sources = yield* sql<{
         connectionId: string;
         calendarId: string;
-      }>`SELECT connection_id AS "connectionId",calendar_id AS "calendarId" FROM workspace_calendar_occurrences GROUP BY connection_id,calendar_id ORDER BY connection_id,calendar_id LIMIT 101`;
+      }>`SELECT connection_id AS "connectionId",calendar_id AS "calendarId" FROM workspace_calendar_sources ORDER BY connection_id,calendar_id LIMIT 101`;
       const sourceStates: CalendarSourceState[] = [];
       for (const source of sources.slice(0, 100)) {
-        const state = yield* resolve(source.connectionId, source.calendarId);
+        const state = yield* resolve(source.connectionId, source.calendarId).pipe(
+          Effect.catch(() => Effect.succeed(undefined)),
+        );
         sourceStates.push({
           ...source,
-          generation: state.generation,
-          state: !options.resolveSource
-            ? "unavailable"
-            : !state.connected
-              ? "disconnected"
-              : !state.selected
-                ? "unselected"
-                : "ready",
+          generation: state?.generation ?? 0,
+          state:
+            !options.resolveSource || !state
+              ? "unavailable"
+              : !state.connected
+                ? "disconnected"
+                : !state.selected
+                  ? "unselected"
+                  : "ready",
         });
       }
       const selection = hash(sourceStates);
@@ -280,6 +341,7 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
       }
       const from = dayStart(input.startOn, input.timeZone);
       const until = dayStart(input.endBefore, input.timeZone);
+      const upperSortKey = Math.max(until, dayStart(input.endBefore, "UTC"));
       const selected = sourceStates.filter((state) => state.state === "ready");
       const rows = !selected.length
         ? []
@@ -288,48 +350,142 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
             payload: string;
             revision: number;
             sortKey: number;
-          }>`SELECT id,summary_json AS payload,revision,sort_key AS "sortKey" FROM workspace_calendar_occurrences WHERE status='confirmed' AND ${sql.or(selected.map((source) => sql`(connection_id=${source.connectionId} AND calendar_id=${source.calendarId})`))} AND ((time_kind='timed' AND start_ms<${until} AND end_ms>${from}) OR (time_kind='all-day' AND start_on<${input.endBefore} AND end_before>${input.startOn})) AND ${cursor ? sql`(sort_key>${cursor.sortKey} OR (sort_key=${cursor.sortKey} AND id>${cursor.id}))` : sql`1=1`} ORDER BY sort_key,id LIMIT ${limit + 1}`;
-      const events: CalendarOccurrenceSummary[] = [];
-      for (const row of rows.slice(0, limit))
-        events.push({
-          ...(yield* decodeSummaryJson(row.payload)),
-          id: row.id,
-          revision: row.revision,
-        });
+          }>`SELECT id,summary_json AS payload,revision,sort_key AS "sortKey" FROM workspace_calendar_occurrences WHERE status='confirmed' AND sort_key<${upperSortKey} AND ${sql.or(selected.map((source) => sql`(connection_id=${source.connectionId} AND calendar_id=${source.calendarId})`))} AND ((time_kind='timed' AND start_ms<${until} AND end_ms>${from}) OR (time_kind='all-day' AND start_on<${input.endBefore} AND end_before>${input.startOn})) AND ${cursor ? sql`(sort_key,id)>(${cursor.sortKey},${cursor.id})` : sql`1=1`} ORDER BY sort_key,id LIMIT ${limit + 1}`;
+      let dueCursor: typeof DueCursor.Type | undefined;
+      if (input.dueCursor) {
+        dueCursor = yield* decode(
+          Schema.fromJsonString(DueCursor),
+          Buffer.from(input.dueCursor, "base64url").toString("utf8"),
+        );
+        if (dueCursor.instance !== instance)
+          return yield* fail(
+            "conflict",
+            "The calendar server changed. Restart from the first page.",
+          );
+        if (dueCursor.query !== query)
+          return yield* fail(
+            "invalid-input",
+            "This task page belongs to a different calendar range.",
+          );
+      }
+      const taskResult = yield* tools
+        .queryTasks({
+          ...dueTaskQuery(input.startOn, input.endBefore),
+          ...(dueCursor?.toolsCursor ? { cursor: dueCursor.toolsCursor } : {}),
+        })
+        .pipe(Effect.result);
+      if (
+        taskResult._tag === "Failure" &&
+        isToolsError(taskResult.failure) &&
+        taskResult.failure.kind === "invalid-input"
+      )
+        return yield* fail(
+          input.dueCursor ? "conflict" : "invalid-input",
+          "Tasks changed. Restart from the first page.",
+        );
+      const taskPage = taskResult._tag === "Success" ? taskResult.success : undefined;
+      const dueItems = taskPage?.tasks.filter(hasDueOn).map(dueTaskItem) ?? [];
+      const dueFingerprint = hash(dueItems);
+      if (
+        dueCursor &&
+        dueCursor.offset > 0 &&
+        (dueCursor.page !== dueFingerprint || dueCursor.offset >= dueItems.length)
+      )
+        return yield* fail("conflict", "Tasks changed. Restart from the first page.");
+      const dueOffset = dueCursor?.offset ?? 0;
+      const encodeDueCursor = (toolsCursor: string | undefined, offset: number, page: string) =>
+        Buffer.from(
+          encodeJson({
+            version: 1,
+            instance,
+            query,
+            ...(toolsCursor ? { toolsCursor } : {}),
+            offset,
+            page,
+          }),
+        ).toString("base64url");
+      const states: CalendarSourceState[] = [];
+      let stateBytes = 2;
+      for (const state of sourceStates) {
+        const size = bytes(state) + (states.length ? 1 : 0);
+        if (stateBytes + size > 16000) break;
+        states.push(state);
+        stateBytes += size;
+      }
       const page = {
-        events,
-        sourceStates: [...sourceStates],
+        events: [] as CalendarOccurrenceSummary[],
+        dueTasks: [] as ReturnType<typeof dueTaskItem>[],
+        dueIncomplete: !taskPage,
+        sourceStates: states,
         incomplete:
           !options.resolveSource ||
-          sources.length > 100 ||
+          sources.length > states.length ||
           sourceStates.some((state) => state.state !== "ready" && state.state !== "unselected"),
       };
-      // Reserve room for one maximal event and a continuation before trimming event rows.
-      while (bytes(page.sourceStates) > 16000) {
-        page.sourceStates.pop();
-        page.incomplete = true;
+      const continuation = (sortKey: number, id: string) =>
+        Buffer.from(
+          encodeJson({
+            version: 1,
+            instance,
+            query,
+            sources: selection,
+            sortKey,
+            id,
+          }),
+        ).toString("base64url");
+      const dueReserve = Math.max(
+        encodeDueCursor(dueCursor?.toolsCursor, 100, dueFingerprint).length,
+        encodeDueCursor(taskPage?.nextCursor ?? undefined, 0, "").length,
+      );
+      let pageBytes = bytes({
+        ...page,
+        dueIncomplete: false,
+        nextCursor: continuation(Number.MIN_SAFE_INTEGER, `wce_${"f".repeat(36)}`),
+        nextDueCursor: "x".repeat(dueReserve),
+      });
+      const firstEvent = rows[0]
+        ? {
+            ...(yield* decodeSummaryJson(rows[0].payload)),
+            id: rows[0].id,
+            revision: rows[0].revision,
+          }
+        : undefined;
+      const eventReserve = firstEvent ? bytes(firstEvent) : 0;
+      for (const task of dueItems.slice(dueOffset)) {
+        const size = bytes(task) + (page.dueTasks.length ? 1 : 0);
+        if (pageBytes + size + eventReserve > 65536) break;
+        page.dueTasks.push(task);
+        pageBytes += size;
       }
-      const response = () => {
-        const last = rows[page.events.length - 1];
-        const nextCursor =
-          last && rows.length > page.events.length
-            ? Buffer.from(
-                encodeJson({
-                  version: 1,
-                  instance,
-                  query,
-                  sources: selection,
-                  sortKey: last.sortKey,
-                  id: last.id,
-                }),
-              ).toString("base64url")
+      for (const [index, row] of rows.slice(0, limit).entries()) {
+        const event =
+          index === 0
+            ? firstEvent!
+            : { ...(yield* decodeSummaryJson(row.payload)), id: row.id, revision: row.revision };
+        const size = (index === 0 ? eventReserve : bytes(event)) + (page.events.length ? 1 : 0);
+        if (pageBytes + size > 65536) break;
+        page.events.push(event);
+        pageBytes += size;
+      }
+      const consumed = dueOffset + page.dueTasks.length;
+      const nextDueCursor =
+        consumed < dueItems.length
+          ? encodeDueCursor(dueCursor?.toolsCursor, consumed, dueFingerprint)
+          : taskPage?.nextCursor
+            ? encodeDueCursor(taskPage.nextCursor, 0, "")
             : undefined;
-        return { ...page, ...(nextCursor ? { nextCursor } : {}) };
-      };
-      while (bytes(response()) > 65536 && page.events.length > 1) page.events.pop();
-      return yield* decode(CalendarPage, response());
+      const last = rows[page.events.length - 1];
+      return yield* decode(CalendarPage, {
+        ...page,
+        dueIncomplete: !taskPage || nextDueCursor !== undefined,
+        ...(nextDueCursor ? { nextDueCursor } : {}),
+        ...(last && rows.length > page.events.length
+          ? { nextCursor: continuation(last.sortKey, last.id) }
+          : {}),
+      });
     }, safe),
   };
+  return { ...service, refresh: service.listRange };
 });
 export class WorkspaceCalendar extends Context.Service<
   WorkspaceCalendar,

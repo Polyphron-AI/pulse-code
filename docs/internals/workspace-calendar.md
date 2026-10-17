@@ -2,15 +2,15 @@
 
 Calendar and Meetings consume one environment-owned `WorkspaceCalendar` instance. It is provided
 alongside workspace tools so later MCP readers and WebSocket handlers share its state. The
-`workspaceCalendar` capability is optional. It advertises bounded range and detail reads, not a
-connected account or an event editor. Provider admission and the client views are separate work.
+`workspaceCalendar` capability is optional. It advertises bounded reads, invalidations and requested
+read refresh, not a connected account or an event editor. Provider admission and the client views are separate work.
 
 An occurrence ID belongs to the source tuple of connection, calendar, external event and original
 occurrence key. A moved recurring instance keeps that key. Its current start, title and source
 label never identify it. Cancellation retains the mapping as an unavailable tombstone; confirmed
 ingestion restores the same ID. Calendar stores no note IDs. Relationships belong to WorkspaceLinks.
 
-The mapping row also holds the latest normalized-input fingerprint and result revision. Identical
+The mapping row also holds the latest schema-encoded normalized-input fingerprint and result revision. Identical
 ingestion at the same source generation does not write or increment the revision. A changed input,
 including cancellation or restoration, updates the row under a revision predicate in the page
 transaction. This is current-state idempotence, not a historical request journal. No payload copy
@@ -25,15 +25,55 @@ while occurrence IDs remain durable. A cursor from another environment or instan
 Timed overlap uses display-zone midnights converted by Effect DateTime. It must account for
 23-hour and 25-hour days. All-day overlap compares Gregorian dates with an exclusive end.
 Range reads fetch at most the requested limit plus one, selecting stored summaries without
-descriptions. Pages shrink at 64 KiB and retain a continuation; details and text reads stay within
+descriptions. The range index seeks a row-value cursor and stops at the exclusive upper sort key.
+Running UTF-8 byte accounting keeps pages within 64 KiB and retains continuations; details and text reads stay within
 32,000 serialized bytes. Escaped attendee metadata can be shortened with its truncation flag while
 keeping the description intact.
 
-Source discovery is capped at 101 stored source tuples and resolves at most 100. Excess sources or
-source-state metadata beyond 16,000 serialized bytes set `incomplete`. The account adapter must
-retain that admission limit or provide bounded selected-source enumeration before expanding it.
+Migration 071 backfills a small source registry once and drops the unused timed/date indexes from 070. Requested reads enumerate at most 101 registry tuples and resolve at most 100, without scanning
+occurrence history for sources. Excess sources or source-state metadata beyond 16,000 serialized
+bytes set `incomplete`. A failed resolver marks that tuple unavailable and leaves other sources
+readable. The account adapter must enumerate selected sources even before their first ingestion.
 
-Phone delivery follows D24 through responsive web. These contracts require neither Buffer nor
-TextEncoder and add no React Native screens. Native, real-account and remote-device acceptance
-remain separate from service tests. Change streams and client atoms belong to W6-T1b; this service
-starts no timer or background refresh.
+Zone decoding uses a bounded string pattern, including on native clients. Only server admission
+checks Intl support and canonicalizes range and ingestion zones. An older client's zone database
+must not reject metadata admitted by the server.
+
+## Due references and invalidation
+
+Due tasks retain task identity and calendar dates. One global TOOLS query uses inclusive bounds
+`startOn` through the day before `endBefore`, with state all and limit 100. Null due dates are
+excluded. Completion and due-date edits stay owned by TOOLS. They create no event or scheduled job.
+Event and due continuations are independent. A due cursor wraps the TOOLS cursor and, when byte
+limits split a TOOLS page, a checked page fingerprint and offset. A changed TOOLS generation or
+split-page fingerprint requires restarting from the first page. A range mismatch is invalid input.
+`dueIncomplete` distinguishes unfinished or unavailable task results from event-source availability.
+Older event-only payloads decode with empty due references and explicitly incomplete due results.
+
+Calendar invalidations contain one nonnegative numeric value, merging committed calendar changes
+with TOOLS invalidations. Streams read no ranges and refresh no provider. Identical ingestion,
+rolled-back pages and stale generations announce nothing. Account adapters call `invalidate` only
+after committing availability or selection changes. Ingestion commits and announcement cannot be
+separated by interruption. Refresh has read scope because it requests source reads, never provider
+writes. Until the provider adapter lands, Refresh reads the saved range.
+
+Calendar and Meetings share the web `workspaceCalendar` binding on `connectionAtomRuntime`. Atoms
+normalize range fields and zone case, capture the environment, and revalidate saved metadata on
+changes or reconnect. Source selection belongs to the environment resolver; selection changes
+invalidate these queries and invalidate server cursors. A server without the optional capability
+produces a successful unavailable state without calling missing endpoints.
+
+`loadMore` is explicit and separate for events and due tasks. It deduplicates IDs across requested
+pages and discards continuations when the first page changes. A cursor conflict restarts page 1;
+invalid input remains an error. In-flight commands with the same environment and normalized range
+share work. A late continuation cannot reopen hidden listeners or overwrite a newer first page.
+Queries and streams use zero idle TTL so their last unmount releases subscriptions immediately.
+The 30-second stale threshold controls requested mount freshness only. No elapsed clock triggers a
+request and no hidden consumer retains a provider listener.
+
+Phone delivery follows D24 through responsive web and the shared desktop UI. Contracts and
+client-runtime atoms use no DOM, Buffer or TextEncoder, and outbound zones need no host ICU lookup.
+No React Native screens are added. Native adoption should reuse `createWorkspaceCalendarAtoms`,
+including explicit paging and capability absence. Native, real-account, packaged, relay/tunnel and
+physical second-device acceptance remain separate from focused service and shared-runtime tests.
+Rendered Calendar/Meetings workflows and user guidance remain the W6-T4/T5/T9 integration gate.

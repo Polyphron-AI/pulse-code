@@ -1285,6 +1285,8 @@ const workspaceToolsWsRpcLayer = WorkspaceToolsWsRpcGroup.toLayer(
         return CalendarWsRpcGroup.of({
           [WS_METHODS.calendarListRange]: calendar.listRange,
           [WS_METHODS.calendarGet]: calendar.get,
+          [WS_METHODS.calendarRefresh]: calendar.refresh,
+          [WS_METHODS.calendarSubscribeChanges]: () => calendar.changes,
         });
       }),
     ),

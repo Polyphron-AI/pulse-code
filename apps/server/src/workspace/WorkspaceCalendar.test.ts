@@ -1,10 +1,13 @@
+import { vi } from "vite-plus/test";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { CalendarError } from "@t3tools/contracts";
+import * as Tools from "./WorkspaceTools.ts";
+import * as Stream from "effect/Stream";
+import { CalendarError, ProjectId } from "@t3tools/contracts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as Calendar from "./WorkspaceCalendar.ts";
 
@@ -36,7 +39,11 @@ const layer = Layer.effect(
   Calendar.make({
     resolveSource: () => Effect.succeed({ connected: true, generation: 1, selected: true }),
   }),
-).pipe(Layer.provideMerge(SqlitePersistenceMemory), Layer.provideMerge(NodeCrypto.layer));
+).pipe(
+  Layer.provideMerge(Tools.layer),
+  Layer.provideMerge(SqlitePersistenceMemory),
+  Layer.provideMerge(NodeCrypto.layer),
+);
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const isCalendarError = Schema.is(CalendarError);
 const serializedBytes = (value: unknown) => Buffer.byteLength(encodeJson(value));
@@ -256,7 +263,7 @@ it.effect("bounds serialized pages and detail reads while deriving previews at i
     const calendar = yield* Calendar.WorkspaceCalendar;
     yield* calendar.ingestPage({
       ...source,
-      items: Array.from({ length: 10 }, (_, n) => ({
+      items: Array.from({ length: 100 }, (_, n) => ({
         ...occurrence,
         externalEventId: `large-${n}`,
         title: "\u0000".repeat(300),
@@ -268,17 +275,17 @@ it.effect("bounds serialized pages and detail reads while deriving previews at i
     const page = yield* calendar.listRange(range);
     expect(serializedBytes(page)).toBeLessThanOrEqual(65536);
     expect(page.events.length).toBeGreaterThan(0);
-    expect(page.events.length).toBeLessThan(10);
+    expect(page.events.length).toBeLessThan(100);
     expect(page.nextCursor).toBeDefined();
     const ids = new Set(page.events.map((event) => event.id));
     let nextCursor = page.nextCursor;
-    for (let n = 0; n < 10 && nextCursor; n++) {
+    for (let n = 0; n < 100 && nextCursor; n++) {
       const next = yield* calendar.listRange({ ...range, cursor: nextCursor });
       expect(serializedBytes(next)).toBeLessThanOrEqual(65536);
       for (const event of next.events) ids.add(event.id);
       nextCursor = next.nextCursor;
     }
-    expect(ids.size).toBe(10);
+    expect(ids.size).toBe(100);
     expect(nextCursor).toBeUndefined();
     expect(page.events[0]!.descriptionPreview).toHaveLength(160);
     expect(page.events[0]).not.toHaveProperty("description");
@@ -394,12 +401,16 @@ it.effect("caps known source enumeration and reports partial results without inv
     const empty = yield* Calendar.make();
     expect(yield* empty.listRange(range)).toEqual({
       events: [],
+      dueTasks: [],
+      dueIncomplete: false,
       sourceStates: [],
       incomplete: true,
     });
     const calendar = yield* Calendar.WorkspaceCalendar;
     expect(yield* calendar.listRange(range)).toEqual({
       events: [],
+      dueTasks: [],
+      dueIncomplete: false,
       sourceStates: [],
       incomplete: false,
     });
@@ -411,5 +422,230 @@ it.effect("caps known source enumeration and reports partial results without inv
     expect(page.sourceStates).toHaveLength(100);
     expect(page.events).toHaveLength(100);
     expect(serializedBytes(page)).toBeLessThanOrEqual(65536);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("canonicalizes zones at admission and fingerprints encoded fields", () =>
+  Effect.gen(function* () {
+    const calendar = yield* Calendar.WorkspaceCalendar;
+    const item = {
+      ...occurrence,
+      time: { ...occurrence.time, sourceTimeZone: "africa/johannesburg" },
+    };
+    yield* calendar.ingestPage({ ...source, items: [item] });
+    const first = (yield* calendar.listRange({ ...range, timeZone: "africa/johannesburg" }))
+      .events[0]!;
+    expect(first.time).toMatchObject({ sourceTimeZone: "Africa/Johannesburg" });
+    yield* calendar.ingestPage({
+      ...source,
+      items: [Object.fromEntries(Object.entries(item).toReversed()) as typeof item],
+    });
+    expect((yield* calendar.get({ id: first.id })).revision).toBe(1);
+    expect(yield* Stream.runHead(calendar.changes)).toMatchObject({ value: 1 });
+    expect(
+      (yield* calendar.listRange({ ...range, timeZone: "Not/AZone" }).pipe(Effect.flip)).kind,
+    ).toBe("invalid-input");
+    expect(
+      (yield* calendar
+        .ingestPage({
+          ...source,
+          items: [{ ...occurrence, time: { ...occurrence.time, sourceTimeZone: "Not/AZone" } }],
+        })
+        .pipe(Effect.flip)).kind,
+    ).toBe("invalid-input");
+  }).pipe(Effect.provide(layer)),
+);
+it.effect("keeps a ready source visible when another resolver fails", () =>
+  Effect.gen(function* () {
+    let broken = false;
+    const calendar = yield* Calendar.make({
+      resolveSource: (connectionId) =>
+        broken && connectionId === "fake-b"
+          ? Effect.fail(new CalendarError({ kind: "rate-limited", message: "Unavailable" }))
+          : Effect.succeed({ connected: true, selected: true, generation: 1 }),
+    });
+    yield* calendar.ingestPage({ ...source, items: [occurrence] });
+    yield* calendar.ingestPage({ ...source, connectionId: "fake-b", items: [occurrence] });
+    broken = true;
+    const page = yield* calendar.listRange(range);
+    expect(page.events).toHaveLength(1);
+    expect(page.incomplete).toBe(true);
+    expect(page.sourceStates.map((s) => s.state)).toEqual(["ready", "unavailable"]);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect(
+  "projects due dates and reversible completion through TOOLS without creating events",
+  () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const projectId = ProjectId.make("due-project");
+      yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Due','/synthetic','[]','now','now')`;
+      const tools = yield* Tools.WorkspaceTools;
+      const calendar = yield* Calendar.WorkspaceCalendar;
+      let task = yield* tools.upsertTask({
+        projectId,
+        title: "Review",
+        column: "To do",
+        dueOn: "2026-10-13",
+      });
+      yield* tools.upsertTask({
+        projectId,
+        title: "Tomorrow",
+        column: "To do",
+        dueOn: "2026-10-14",
+      });
+      yield* tools.upsertTask({ projectId, title: "Undated", column: "To do" });
+      expect((yield* calendar.listRange(range)).dueTasks).toEqual([
+        {
+          ref: { type: "task", taskId: task.id },
+          projectId,
+          title: "Review",
+          dueOn: "2026-10-13",
+          done: false,
+          revision: task.revision,
+        },
+      ]);
+      task = yield* tools.transitionTask({
+        id: task.id,
+        expectedRevision: task.revision!,
+        change: { type: "completion", completed: true },
+      });
+      expect((yield* calendar.listRange(range)).dueTasks[0]).toMatchObject({ done: true });
+      task = yield* tools.transitionTask({
+        id: task.id,
+        expectedRevision: task.revision!,
+        change: { type: "completion", completed: false },
+      });
+      expect((yield* calendar.listRange(range)).dueTasks[0]).toMatchObject({ done: false });
+      task = yield* tools.patchTask({
+        id: task.id,
+        expectedRevision: task.revision!,
+        dueOn: "2026-10-12",
+      });
+      expect((yield* calendar.listRange(range)).dueTasks).toEqual([]);
+      task = yield* tools.patchTask({
+        id: task.id,
+        expectedRevision: task.revision!,
+        dueOn: "2026-10-13",
+      });
+      task = yield* tools.patchTask({ id: task.id, expectedRevision: task.revision!, dueOn: null });
+      expect((yield* calendar.listRange(range)).dueTasks).toEqual([]);
+      expect(yield* sql`SELECT id FROM workspace_calendar_occurrences`).toEqual([]);
+      expect(yield* sql`SELECT * FROM scheduled_tasks`).toEqual([]);
+      expect(yield* Stream.runHead(calendar.changes)).toMatchObject({ value: 8 });
+    }).pipe(Effect.provide(layer)),
+);
+it.effect("announces only committed changed pages including cancellation and restoration", () =>
+  Effect.gen(function* () {
+    const calendar = yield* Calendar.WorkspaceCalendar;
+    const sql = yield* SqlClient.SqlClient;
+    const count = (n: number) =>
+      Stream.runHead(calendar.changes).pipe(
+        Effect.map((value) => expect(value).toMatchObject({ value: n })),
+      );
+    yield* calendar.ingestPage({ ...source, items: [occurrence] });
+    yield* count(1);
+    yield* calendar.ingestPage({ ...source, items: [occurrence] });
+    yield* count(1);
+    yield* calendar.ingestPage({ ...source, generation: 2, items: [occurrence] }).pipe(Effect.flip);
+    yield* count(1);
+    yield* sql`CREATE TRIGGER reject_change BEFORE INSERT ON workspace_calendar_occurrences WHEN NEW.external_event_id='rejected' BEGIN SELECT RAISE(ABORT,'unavailable'); END`;
+    yield* calendar
+      .ingestPage({
+        ...source,
+        items: [
+          { ...occurrence, title: "Rolled back" },
+          { ...occurrence, externalEventId: "rejected" },
+        ],
+      })
+      .pipe(Effect.flip);
+    yield* count(1);
+    expect((yield* calendar.listRange(range)).events[0]!.revision).toBe(1);
+    yield* calendar.ingestPage({
+      ...source,
+      items: [
+        {
+          status: "cancelled",
+          externalEventId: occurrence.externalEventId,
+          occurrenceKey: occurrence.occurrenceKey,
+        },
+      ],
+    });
+    yield* count(2);
+    yield* calendar.ingestPage({ ...source, items: [occurrence] });
+    yield* count(3);
+    yield* calendar.invalidate;
+    yield* count(4);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("pages due references independently within the byte budget with one global query", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const projectId = ProjectId.make("paged-due");
+    yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Due','/synthetic','[]','now','now')`;
+    const tools = yield* Tools.WorkspaceTools;
+    const calendar = yield* Calendar.WorkspaceCalendar;
+    for (let n = 0; n < 101; n++)
+      yield* tools.upsertTask({
+        projectId,
+        title: "\u0000".repeat(240),
+        column: "To do",
+        dueOn: "2026-10-13",
+      });
+    yield* calendar.ingestPage({
+      ...source,
+      items: [
+        {
+          ...occurrence,
+          attendees: Array.from({ length: 20 }, () => ({ name: "\u0000".repeat(200) })),
+        },
+      ],
+    });
+    const query = vi.spyOn(tools, "queryTasks");
+    try {
+      const first = yield* calendar.listRange(range);
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(query).toHaveBeenLastCalledWith({
+        state: "all",
+        dueFrom: "2026-10-13",
+        dueTo: "2026-10-13",
+        limit: 100,
+      });
+      expect(first.dueIncomplete).toBe(true);
+      expect(first.nextDueCursor).toBeDefined();
+      const ids = new Set(first.dueTasks.map((task) => task.ref.taskId));
+      let cursor = first.nextDueCursor;
+      for (let n = 0; cursor && n < 20; n++) {
+        const next = yield* calendar.listRange({ ...range, dueCursor: cursor });
+        expect(serializedBytes(next)).toBeLessThanOrEqual(65536);
+        for (const task of next.dueTasks) {
+          expect(ids.has(task.ref.taskId)).toBe(false);
+          ids.add(task.ref.taskId);
+        }
+        cursor = next.nextDueCursor;
+        if (!cursor) expect(next.dueIncomplete).toBe(false);
+      }
+      expect(cursor).toBeUndefined();
+      expect(ids.size).toBe(101);
+      expect(
+        (yield* calendar
+          .listRange({ ...range, endBefore: "2026-10-15", dueCursor: first.nextDueCursor! })
+          .pipe(Effect.flip)).kind,
+      ).toBe("invalid-input");
+      yield* tools.upsertTask({
+        projectId,
+        title: "Changed",
+        column: "To do",
+        dueOn: "2026-10-13",
+      });
+      expect(
+        (yield* calendar.listRange({ ...range, dueCursor: first.nextDueCursor! }).pipe(Effect.flip))
+          .kind,
+      ).toBe("conflict");
+    } finally {
+      query.mockRestore();
+    }
   }).pipe(Effect.provide(layer)),
 );

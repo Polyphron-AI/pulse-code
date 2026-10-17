@@ -16,6 +16,7 @@ const isDate = Schema.is(CalendarDate);
 const isRange = Schema.is(CalendarRangeInput);
 const isTime = Schema.is(CalendarTime);
 const isPage = Schema.is(CalendarPage);
+const decodePage = Schema.decodeUnknownSync(CalendarPage);
 const decodeCapabilities = Schema.decodeUnknownSync(
   Schema.Struct({ pulseCapabilities: ServerConfig.fields.pulseCapabilities }),
 );
@@ -63,7 +64,7 @@ it("accepts leap days and bounds ranges, zones, pages and cursors", () => {
   for (const input of [
     { ...range, endBefore: range.startOn },
     { ...range, endBefore: "2026-11-14" },
-    { ...range, timeZone: "Not/AZone" },
+    { ...range, timeZone: "Not/A Zone" },
     { ...range, timeZone: "+02:00" },
     { ...range, limit: 0 },
     { ...range, limit: 101 },
@@ -119,6 +120,8 @@ it("rejects aggregate oversized pages with escaped Unicode", () => {
     isPage({
       events: Array.from({ length: 10 }, () => ({ ...event })),
       incomplete: false,
+      dueTasks: [],
+      dueIncomplete: false,
       sourceStates: [],
     }),
   ).toBe(false);
@@ -131,7 +134,51 @@ it("keeps the capability optional for old server configs and exposes no write RP
     pulseCapabilities: { workspaceCalendar: true },
   });
   expect(PulseCalendarRpcs.map((rpc) => rpc._tag)).toEqual([
+    "pulse.calendar.subscribeChanges",
+    "pulse.calendar.refresh",
     "pulse.calendar.listRange",
     "pulse.calendar.get",
   ]);
+});
+
+it("decodes timed pages with a zone absent from the client ICU database", () => {
+  const format = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function () {
+    throw new RangeError("older ICU");
+  });
+  try {
+    expect(
+      isPage({
+        events: [
+          {
+            ...item,
+            id: "wce_00000000-0000-0000-0000-000000000001",
+            revision: 1,
+            time: {
+              kind: "timed",
+              start: "2026-10-13T07:00:00Z",
+              end: "2026-10-13T08:00:00Z",
+              sourceTimeZone: "America/Ciudad_Juarez",
+            },
+          },
+        ],
+        sourceStates: [],
+        incomplete: false,
+        dueTasks: [],
+        dueIncomplete: false,
+      }),
+    ).toBe(true);
+    expect(isRange(range)).toBe(true);
+  } finally {
+    format.mockRestore();
+  }
+});
+
+it("decodes older event-only pages with explicitly incomplete due references", () => {
+  expect(decodePage({ events: [], incomplete: false, sourceStates: [] })).toEqual({
+    events: [],
+    incomplete: false,
+    sourceStates: [],
+    dueTasks: [],
+    dueIncomplete: true,
+  });
 });
