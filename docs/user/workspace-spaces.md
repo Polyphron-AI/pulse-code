@@ -17,7 +17,8 @@ keeps its link and explains why the event is unavailable.
 Choose Join meeting from Calendar or Meetings to open a supported Google Meet, Zoom or Teams link
 on the device you are using. Joining does not require a connected calendar account. Pulse does not
 attend, record or transcribe the call. If nothing opens, use Open meeting link or copy the address.
-An event without a supported meeting link explains that no link is available.
+The event's item menu also offers Join meeting and Copy meeting link. Dismiss closes the recovery
+message. An event without a supported meeting link explains that no link is available.
 
 To schedule, select a date in Calendar or Meetings, choose Schedule, then Google Calendar and
 Open calendar. Google Calendar opens outside Pulse on your device. Only the selected date is sent.

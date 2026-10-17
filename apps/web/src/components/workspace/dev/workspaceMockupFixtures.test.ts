@@ -218,3 +218,17 @@ it("rejects production selectors, ambiguous requests and every external state pa
     space: "mail",
   });
 });
+
+it.each(["01", "02", "03", "04", "05", "06"])(
+  "rejects calendar handoff states for recipe %s",
+  (id) => {
+    for (const state of ["no-url", "desktop-reject"]) {
+      expect(() =>
+        parseWorkspaceMockupRequest(
+          new URL(`https://fixture.invalid/workspace?fixture=${id}&state=${state}`),
+          true,
+        ),
+      ).toThrow("Unknown fixture state.");
+    }
+  },
+);

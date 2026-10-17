@@ -1,5 +1,5 @@
 import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { VideoIcon } from "lucide-react";
 import { validatedConferenceUrl } from "@t3tools/shared/calendarLinks";
 import { CalendarHandoffLink } from "./CalendarHandoffLink";
@@ -22,7 +22,10 @@ export function CalendarEventCard({
   menu,
   notesOpen = false,
 }: CalendarEventCardProps) {
-  const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
+  const url = useMemo(
+    () => (event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined),
+    [event.joinUrl],
+  );
   const copies = new Map<string, number>();
   const attendees = event.attendees.slice(0, 3).map((person) => {
     const identity = JSON.stringify([person.name, person.initials]);

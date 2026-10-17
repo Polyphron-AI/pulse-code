@@ -7,8 +7,6 @@ export type CalendarHandoffTarget =
 export type CalendarExternalOpener = (url: string) => Promise<void>;
 export interface CalendarHandoffClient {
   readonly openExternal?: CalendarExternalOpener;
-  // Isolated capture fixtures record the gesture without leaving the fixture.
-  readonly preventNavigation?: boolean;
   readonly copyText?: (url: string) => Promise<unknown>;
 }
 export type CalendarHandoff =

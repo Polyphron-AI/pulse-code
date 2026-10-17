@@ -30,8 +30,7 @@ import { useNewProject } from "../../hooks/useNewProject";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { randomUUID } from "../../lib/utils";
 import { readLocalApi } from "../../localApi";
-import { MoreHorizontalIcon } from "lucide-react";
-import { Popover, PopoverTrigger, PopoverPopup } from "../ui/popover";
+import { WorkspaceItemMenuView } from "./WorkspaceItemMenuView";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -562,19 +561,23 @@ function AvailableWorkspaceItemActions({
 export function WorkspaceItemMenu({
   children,
   provenance,
+  actions,
   ...props
-}: ItemActionProps & { children: ReactNode; provenance?: ReactNode }) {
-  const [captured, setCaptured] = useState<(ItemActionProps & { provenance?: ReactNode }) | null>(
-    null,
-  );
+}: ItemActionProps & { children: ReactNode; provenance?: ReactNode; actions?: ReactNode }) {
+  const [captured, setCaptured] = useState<
+    (ItemActionProps & { provenance?: ReactNode; actions?: ReactNode }) | null
+  >(null);
   const canOperate = useWorkspaceCanOperate(props.environmentId);
   const capability = useMailCapabilities(props.environmentId);
-  const available = capability.workspaceLinks && canOperate;
-  if (captured && (!capability.workspaceLinks || captured.environmentId !== props.environmentId))
+  const available = (capability.workspaceLinks && canOperate) || Boolean(actions);
+  if (
+    captured &&
+    ((!capability.workspaceLinks && !actions) || captured.environmentId !== props.environmentId)
+  )
     setCaptured(null);
   const open = captured !== null && captured.environmentId === props.environmentId;
   const setOpen = (value: boolean) =>
-    setCaptured(value && available ? { ...props, shortcuts: false, provenance } : null);
+    setCaptured(value && available ? { ...props, shortcuts: false, provenance, actions } : null);
   const { linkItem } = useMailLinks(props.environmentId);
   const [dropError, setDropError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -592,91 +595,90 @@ export function WorkspaceItemMenu({
     [],
   );
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <div
-        className="flex min-w-0 items-center gap-1"
-        draggable
-        onDragStart={(event) =>
-          event.dataTransfer.setData(
-            "application/x-pulse-workspace-item",
-            JSON.stringify({ environmentId: props.environmentId, item: props.item }),
-          )
-        }
-        onDragOver={(event) => {
-          if (event.dataTransfer.types.includes("application/x-pulse-workspace-item")) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-        }}
-        onDrop={(event) => {
+    <WorkspaceItemMenuView
+      open={open}
+      onOpenChange={setOpen}
+      actions={
+        <>
+          {captured?.provenance}
+          {captured?.actions}
+          {dropError !== null ? (
+            <p role="alert" className="mb-3 text-xs text-destructive">
+              {dropError}
+            </p>
+          ) : null}
+          {open && captured && capability.workspaceLinks ? (
+            <WorkspaceItemActions {...captured} shortcuts={false} />
+          ) : null}
+        </>
+      }
+      draggable
+      onDragStart={(event) =>
+        event.dataTransfer.setData(
+          "application/x-pulse-workspace-item",
+          JSON.stringify({ environmentId: props.environmentId, item: props.item }),
+        )
+      }
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes("application/x-pulse-workspace-item")) {
           event.preventDefault();
           event.stopPropagation();
-          const source = parseWorkspaceItemDrag(
-            event.dataTransfer.getData("application/x-pulse-workspace-item"),
-            props.environmentId,
-          );
-          if (source === undefined) {
-            setDropError("Drop an item from this environment.");
-            setOpen(true);
-            return;
-          }
-          void linkItem(props.item, source).catch((cause) => {
-            setDropError(linkErrorText(cause));
-            setOpen(true);
-          });
-        }}
-        onContextMenu={(event) => {
+        }
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const source = parseWorkspaceItemDrag(
+          event.dataTransfer.getData("application/x-pulse-workspace-item"),
+          props.environmentId,
+        );
+        if (source === undefined) {
+          setDropError("Drop an item from this environment.");
+          setOpen(true);
+          return;
+        }
+        void linkItem(props.item, source).catch((cause) => {
+          setDropError(linkErrorText(cause));
+          setOpen(true);
+        });
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setOpen(true);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
           event.preventDefault();
           setOpen(true);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-            event.preventDefault();
-            setOpen(true);
-          }
-        }}
-        onPointerDown={(event) => {
-          if (event.pointerType !== "touch") return;
+        }
+      }}
+      onPointerDown={(event) => {
+        if (event.pointerType !== "touch") return;
+        cancel();
+        touchOrigin.current = { x: event.clientX, y: event.clientY };
+        timer.current = setTimeout(() => {
+          suppressClick.current = true;
+          setOpen(true);
+        }, 500);
+      }}
+      onPointerUp={cancel}
+      onPointerCancel={cancel}
+      onPointerMove={(event) => {
+        const origin = touchOrigin.current;
+        if (
+          origin !== null &&
+          (Math.abs(event.clientX - origin.x) > 10 || Math.abs(event.clientY - origin.y) > 10)
+        )
           cancel();
-          touchOrigin.current = { x: event.clientX, y: event.clientY };
-          timer.current = setTimeout(() => {
-            suppressClick.current = true;
-            setOpen(true);
-          }, 500);
-        }}
-        onPointerUp={cancel}
-        onPointerCancel={cancel}
-        onPointerMove={(event) => {
-          const origin = touchOrigin.current;
-          if (
-            origin !== null &&
-            (Math.abs(event.clientX - origin.x) > 10 || Math.abs(event.clientY - origin.y) > 10)
-          )
-            cancel();
-        }}
-        onClickCapture={(event) => {
-          if (!suppressClick.current) return;
-          suppressClick.current = false;
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-      >
-        {children}
-        <PopoverTrigger
-          render={<Button size="icon-xs" variant="ghost" aria-label="Item actions" />}
-        >
-          <MoreHorizontalIcon />
-        </PopoverTrigger>
-      </div>
-      <PopoverPopup>
-        {captured?.provenance}
-        {dropError !== null ? (
-          <p role="alert" className="mb-3 text-xs text-destructive">
-            {dropError}
-          </p>
-        ) : null}
-        {open && captured ? <WorkspaceItemActions {...captured} shortcuts={false} /> : null}
-      </PopoverPopup>
-    </Popover>
+      }}
+      onClickCapture={(event) => {
+        if (!suppressClick.current) return;
+        suppressClick.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      {children}
+    </WorkspaceItemMenuView>
   );
 }

@@ -11,6 +11,11 @@ it.each([
   "javascript:alert(1)",
   "https://user:pass@zoom.us/j/123",
   "https://zoom.us:444/j/123",
+  "https:zoom.us:444/j/123",
+  "https:zoom.us/j/123",
+  "https:/zoom.us/j/123",
+  "https://zoom.us:/j/1",
+  "https://zoom.us/j/123?pwd=two words",
   "https://meet.google.com.evil.test/abc-defg-hij",
   "https://zoom.us.evil.test/j/123",
   "https://evilzoom.us/j/123",
@@ -35,6 +40,7 @@ it.each([
   "https://tenant.zoom.us/j/123456789?pwd=AbC%2B123&tk=exact&pwd=two+words#keep",
   "https://teams.microsoft.com/l/meetup-join/19%3Ameeting/thread?context=%7b%7d",
   "https://teams.live.com/meet/123456?p=abc%2Bdef",
+  "HTTPS://Zoom.us/j/1?pwd=X",
 ])("opens the exact meeting query on the requesting client in the gesture %s", async (url) => {
   const requestingClientOpener = vi.fn().mockResolvedValue(undefined);
   const result = openCalendarHandoff(

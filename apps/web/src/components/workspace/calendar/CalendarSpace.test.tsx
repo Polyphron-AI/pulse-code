@@ -8,14 +8,19 @@ import { MeetingsSpace } from "../meetings/MeetingsSpace";
 
 const boundaries = vi.hoisted(() => ({
   mutation: vi.fn(),
+  rpcRequests: vi.fn(),
+  copy: vi.fn().mockResolvedValue(undefined),
   oauth: vi.fn(),
-  recording: vi.fn(),
-  transcription: vi.fn(),
-  scheduling: vi.fn(),
+  systemSettings: vi.fn(),
+  talkInvoke: vi.fn(),
   agentTool: vi.fn(),
   microphone: vi.fn(),
   navigate: vi.fn(),
   search: { space: "calendar", day: "2026-10-13", environment: "remote-server" },
+}));
+vi.mock("../../../rpc/requestLatencyState", async (original) => ({
+  ...(await original<typeof import("../../../rpc/requestLatencyState")>()),
+  trackRpcRequestSent: boundaries.rpcRequests,
 }));
 vi.mock("@tanstack/react-router", () => ({
   useSearch: () => boundaries.search,
@@ -71,31 +76,37 @@ vi.mock("../WorkspaceEngagement", () => ({
   WorkspaceEngagement: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../WorkspaceResourcesPanel", () => ({ WorkspaceProjectResources: () => null }));
-vi.mock("../WorkspaceItemActions", () => ({ WorkspaceItemMenu: () => null }));
+vi.mock("../mail/useMailLinks", async (original) => ({
+  ...(await original<typeof import("../mail/useMailLinks")>()),
+  useMailLinks: () => ({ linkItem: boundaries.mutation }),
+}));
 
 it.each([
-  { space: "calendar", desktop: false },
-  { space: "meetings", desktop: false },
-  { space: "calendar", desktop: true },
-  { space: "meetings", desktop: true },
+  { space: "calendar", desktop: false, reject: false },
+  { space: "meetings", desktop: false, reject: false },
+  { space: "calendar", desktop: true, reject: false },
+  { space: "calendar", desktop: true, reject: true },
+  { space: "meetings", desktop: true, reject: false },
+  { space: "meetings", desktop: true, reject: true },
 ])(
-  "offers explicit Schedule and Join in disconnected read-only $space on desktop $desktop without OAuth or mutations",
-  async ({ space, desktop }) => {
+  "offers explicit Schedule and Join in disconnected read-only $space on desktop $desktop, reject $reject, without OAuth or mutations",
+  async ({ space, desktop, reject }) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("fetch", boundaries.mutation);
-    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: boundaries.microphone } });
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: boundaries.copy },
+      mediaDevices: { getUserMedia: boundaries.microphone },
+    });
     const original = Object.getOwnPropertyDescriptor(window, "desktopBridge");
-    const openExternal = vi.fn().mockResolvedValue(true);
+    const openExternal = vi.fn().mockResolvedValue(!reject);
     Object.defineProperty(window, "desktopBridge", {
       configurable: true,
       value: desktop
         ? {
             openExternal,
-            calendarConnect: boundaries.oauth,
-            talkInvoke: boundaries.recording,
-            transcribe: boundaries.transcription,
-            schedule: boundaries.scheduling,
-            agentTool: boundaries.agentTool,
+            receiveProviderAuthCallback: boundaries.oauth,
+            openSystemSettings: boundaries.systemSettings,
+            talkInvoke: boundaries.talkInvoke,
           }
         : undefined,
     });
@@ -107,6 +118,7 @@ it.each([
       if (vi.isMockFunction(value)) value.mockClear();
     });
     const popup = vi.spyOn(window, "open").mockReturnValue(null);
+    let observer: ((event: Event) => void) | undefined;
     try {
       await act(() =>
         root.render(
@@ -126,27 +138,39 @@ it.each([
       const schedule = getByRole(node, "button", { name: "Schedule" });
       await act(() => fireEvent.click(schedule));
       expect(getByRole(document.body, "dialog").textContent).toContain("outside Pulse");
+      expect(getByRole(document.body, "dialog").textContent).toContain("Tuesday, 13 October 2026");
+      expect(boundaries.mutation).not.toHaveBeenCalled();
+      expect(boundaries.rpcRequests).not.toHaveBeenCalled();
+      expect(openExternal).not.toHaveBeenCalled();
       expect(getByRole(document.body, "button", { name: "Google Calendar" })).toBeDefined();
       expect(queryByRole(document.body, "link", { name: "Open calendar" })).toBeNull();
       await act(() => fireEvent.click(getByRole(document.body, "button", { name: "Cancel" })));
       expect(boundaries.mutation).not.toHaveBeenCalled();
+      expect(boundaries.rpcRequests).not.toHaveBeenCalled();
       expect(openExternal).not.toHaveBeenCalled();
       expect(popup).not.toHaveBeenCalled();
       expect(queryByRole(document.body, "dialog")).toBeNull();
+      expect(document.activeElement).toBe(schedule);
       await act(() => fireEvent.click(schedule));
       await act(() =>
         fireEvent.click(getByRole(document.body, "button", { name: "Google Calendar" })),
       );
-      const destination = getByRole(document.body, desktop ? "button" : "link", {
+      expect(
+        getByRole(document.body, "button", { name: "Google Calendar" }).getAttribute(
+          "aria-pressed",
+        ),
+      ).toBe("true");
+      const destination = getByRole(document.body, "link", {
         name: "Open calendar",
       });
+      expect(document.activeElement).toBe(destination);
       if (!desktop) {
         expect(destination.getAttribute("href")).toBe(
           "https://calendar.google.com/calendar/r/day/2026/10/13",
         );
         expect(destination.getAttribute("target")).toBe("_blank");
         expect(destination.getAttribute("rel")).toBe("noopener noreferrer");
-        const observer = (event: Event) => {
+        observer = (event: Event) => {
           expect(event.defaultPrevented).toBe(false);
           event.preventDefault();
         };
@@ -157,7 +181,11 @@ it.each([
         expect(openExternal).toHaveBeenCalledExactlyOnceWith(
           "https://calendar.google.com/calendar/r/day/2026/10/13",
         );
-      else
+      if (reject)
+        expect(getByRole(document.body, "dialog").textContent).toContain(
+          "Unable to open Google Calendar. Copy the address and open it on this device.",
+        );
+      else if (!desktop)
         expect(getByRole(document.body, "dialog").textContent).toContain(
           "If nothing opened, use Open calendar link or copy the address.",
         );
@@ -166,9 +194,8 @@ it.each([
         boundaries.mutation,
         boundaries.oauth,
         boundaries.microphone,
-        boundaries.recording,
-        boundaries.transcription,
-        boundaries.scheduling,
+        boundaries.systemSettings,
+        boundaries.talkInvoke,
         boundaries.agentTool,
       ])
         expect(fake).not.toHaveBeenCalled();
@@ -178,14 +205,31 @@ it.each([
       await act(() => fireEvent.click(getByRole(document.body, "button", { name: "Cancel" })));
       await act(() => fireEvent.click(schedule));
       expect(getByRole(document.body, "button", { name: "Google Calendar" })).toBeDefined();
-      expect(
-        queryByRole(document.body, desktop ? "button" : "link", { name: "Open calendar" }),
-      ).toBeNull();
+      expect(queryByRole(document.body, "link", { name: "Open calendar" })).toBeNull();
       await act(() => fireEvent.keyDown(getByRole(document.body, "dialog"), { key: "Escape" }));
       expect(queryByRole(document.body, "dialog")).toBeNull();
+      expect(document.activeElement).toBe(schedule);
       expect(openExternal).toHaveBeenCalledTimes(opens);
+      openExternal.mockClear();
+      await act(() => fireEvent.click(getByRole(node, "button", { name: "Item actions" })));
+      const menu = getByRole(document.body, "dialog");
+      const menuJoin = getByRole(menu, desktop ? "button" : "link", { name: "Join meeting" });
+      await act(() => fireEvent.click(getByRole(menu, "button", { name: "Copy meeting link" })));
+      expect(boundaries.copy).toHaveBeenCalledExactlyOnceWith(url);
+      if (!desktop) {
+        observer = (event: Event) => {
+          expect(event.defaultPrevented).toBe(false);
+          event.preventDefault();
+        };
+        document.body.addEventListener("click", observer, { once: true });
+      }
+      await act(() => fireEvent.click(menuJoin));
+      if (desktop) expect(openExternal).toHaveBeenCalledExactlyOnceWith(url);
+      else expect(menuJoin.getAttribute("href")).toBe(url);
+      expect(boundaries.rpcRequests).not.toHaveBeenCalled();
       expect(boundaries.mutation).not.toHaveBeenCalled();
     } finally {
+      if (observer) document.body.removeEventListener("click", observer);
       await act(() => root.unmount());
       node.remove();
       if (original) Object.defineProperty(window, "desktopBridge", original);

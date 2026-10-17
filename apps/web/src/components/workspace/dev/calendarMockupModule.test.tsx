@@ -166,7 +166,7 @@ it.each(["07", "08"] as const)(
             queryByRole(cards[2]! as HTMLElement, "link", { name: "Join meeting" }),
           ).toBeNull();
           expect(cards[2]!.textContent).toContain("No meeting link is available.");
-          expect(cards[2]!.querySelector("svg")).toBeNull();
+          expect(cards[2]!.querySelector("svg.lucide-video")).toBeNull();
           expect(getAllByRole(node, "link", { name: "Join meeting" })).toHaveLength(2);
         } else {
           await act(async () => {
@@ -184,6 +184,43 @@ it.each(["07", "08"] as const)(
     } finally {
       await act(() => root.unmount());
       vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it.each(["07", "08"] as const)(
+  "uses the existing item menu presentation for Join and Copy in %s",
+  async (id) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const session = createWorkspaceMockupSession(id);
+    const module = createWorkspaceMockupModule(session);
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    try {
+      await act(() => root.render(module.center));
+      const card = node.querySelector("article")!;
+      await act(() => getByRole(card, "button", { name: "Item actions" }).click());
+      const menu = getByRole(document.body, "dialog");
+      const join = getByRole(menu, "link", { name: "Join meeting" });
+      expect(join.getAttribute("href")).toBe(session.seed.events[0]!.joinUrl);
+      expect(join.getAttribute("rel")).toBe("noopener noreferrer");
+      await act(() => getByRole(menu, "button", { name: "Copy meeting link" }).click());
+      expect(menu.textContent).toContain("Meeting link copied.");
+      await act(async () => {
+        join.click();
+        await module.settled();
+      });
+      expect(session.operations.map((operation) => operation.kind)).toEqual(["join"]);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await act(() => root.unmount());
+      module.dispose();
+      session.dispose();
+      node.remove();
       vi.unstubAllGlobals();
     }
   },

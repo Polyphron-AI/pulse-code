@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import * as Cause from "effect/Cause";
-import "../meetings/WorkspaceNoteView";
+
 import { act, useEffect, useMemo as ReactUseMemo, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -38,6 +38,7 @@ const rpc = vi.hoisted(() => ({
   max: 0,
   notes: 1,
   detail: false,
+  detailMissingLink: false,
   detailTime: undefined as CalendarOccurrenceSummary["time"] | undefined,
   error: null as string | null,
   commands: vi.fn(),
@@ -143,6 +144,7 @@ vi.mock("../../../state/query", () => ({
         : query?.kind === "detail" && rpc.detail
           ? {
               ...event,
+              ...(rpc.detailMissingLink ? { joinUrl: undefined } : {}),
               time: rpc.detailTime ?? {
                 kind: "all-day",
                 startOn: "2026-12-02",
@@ -235,6 +237,15 @@ vi.mock("../WorkspaceToolsPanel", () => ({
   WorkspaceProjectAgents: () => null,
 }));
 vi.mock("../ProjectsSpace", () => ({ ProjectsSpace: () => <p>Projects destination</p> }));
+// Warm resource imports before the timed route journeys run on a cold worker.
+await Promise.all([
+  import("../WorkspaceToolsPanel"),
+  import("../WorkspaceBrowser"),
+  import("../ProjectTasksResource"),
+  import("../meetings/WorkspaceNoteView"),
+  import("../../../state/workspaceNotes"),
+]);
+
 function Shell() {
   const raw = useSearch({ strict: false });
   const search = ReactUseMemo(() => parseWorkspaceSearch(raw), [raw]);
@@ -285,6 +296,7 @@ async function mount(
   rpc.timeZone = timeZone;
   rpc.connected = true;
   rpc.detail = false;
+  rpc.detailMissingLink = false;
   rpc.detailTime = undefined;
   rpc.error = null;
   rpc.range.mockClear();
@@ -1175,6 +1187,26 @@ it("shows an inclusive en-GB all-day range in event detail", async () => {
     const text = getByRole(node, "region", { name: "Calendar event" }).textContent;
     expect(text).toContain("31 October 2026 to 2 November 2026, all day");
     expect(text).not.toContain("exclusive");
+  } finally {
+    await dispose();
+  }
+});
+
+it("shows the missing-link explanation in exact event detail without Join", async () => {
+  const { node, dispose } = await mount(
+    JSON.stringify({
+      type: "provider-resource",
+      provider: "workspace-calendar",
+      resourceId: event.id,
+    }),
+  );
+  try {
+    rpc.detail = true;
+    rpc.detailMissingLink = true;
+    await notify();
+    expect(node.textContent).toContain("No meeting link is available.");
+    expect(queryByRole(node, "link", { name: "Join meeting" })).toBeNull();
+    expect(rpc.commands).not.toHaveBeenCalled();
   } finally {
     await dispose();
   }

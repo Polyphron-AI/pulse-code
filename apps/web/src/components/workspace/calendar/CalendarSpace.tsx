@@ -47,6 +47,8 @@ import { Input } from "../../ui/input";
 import { Checkbox } from "../../ui/checkbox";
 import { Label } from "../../ui/label";
 import { calendarItemRef } from "./calendarItemRef";
+import { CalendarHandoffLink } from "./CalendarHandoffLink";
+import { validatedConferenceUrl } from "@t3tools/shared/calendarLinks";
 import { CalendarAgenda } from "./CalendarAgenda";
 type NoteAttempt = {
   requestId: string;
@@ -201,14 +203,24 @@ function CalendarBinding({
           });
         }}
         onOpenTask={(task) => open(task.ref)}
-        renderMenu={(event) => (
-          <WorkspaceItemMenu
-            environmentId={environmentId}
-            item={{ ref: calendarItemRef(event.id), title: event.title }}
-          >
-            <span className="sr-only">Event actions</span>
-          </WorkspaceItemMenu>
-        )}
+        renderMenu={(event) => {
+          const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
+          return (
+            <WorkspaceItemMenu
+              environmentId={environmentId}
+              item={{ ref: calendarItemRef(event.id), title: event.title }}
+              actions={
+                url ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-3">
+                    <CalendarHandoffLink key={url} target={{ kind: "meeting", raw: url }} menu />
+                  </div>
+                ) : null
+              }
+            >
+              <span className="sr-only">Event actions</span>
+            </WorkspaceItemMenu>
+          );
+        }}
       />
       {query.data?.unavailableReason ? (
         <div className="px-4 pb-4">

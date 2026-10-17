@@ -4,6 +4,11 @@ import { createRoot } from "react-dom/client";
 import { fireEvent, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { CalendarEventCard } from "./CalendarEventCard";
+const rpc = vi.hoisted(() => ({ requests: vi.fn() }));
+vi.mock("../../../rpc/requestLatencyState", async (original) => ({
+  ...(await original<typeof import("../../../rpc/requestLatencyState")>()),
+  trackRpcRequestSent: rpc.requests,
+}));
 it("opens a title independently of notes and collapses absent conferencing", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div");
@@ -90,12 +95,11 @@ it.each(["web", "desktop-open", "desktop-reject"])(
     const forbidden = {
       oauth: vi.fn(),
       microphone: vi.fn(),
-      recording: vi.fn(),
-      transcription: vi.fn(),
-      scheduling: vi.fn(),
-      agentTool: vi.fn(),
+      systemSettings: vi.fn(),
+      talkInvoke: vi.fn(),
       mutation: vi.fn(),
     };
+    rpc.requests.mockClear();
     const webOpen = vi.spyOn(window, "open").mockReturnValue(null);
     vi.stubGlobal("fetch", forbidden.mutation);
     const copy = vi.fn().mockResolvedValue(undefined);
@@ -110,11 +114,9 @@ it.each(["web", "desktop-open", "desktop-reject"])(
           ? undefined
           : {
               openExternal,
-              calendarConnect: forbidden.oauth,
-              talkInvoke: forbidden.recording,
-              transcribe: forbidden.transcription,
-              schedule: forbidden.scheduling,
-              agentTool: forbidden.agentTool,
+              receiveProviderAuthCallback: forbidden.oauth,
+              openSystemSettings: forbidden.systemSettings,
+              talkInvoke: forbidden.talkInvoke,
             },
     });
     const url = "https://tenant.zoom.us/j/123456789?pwd=AbC%2B123&tk=exact&pwd=two+words#keep";
@@ -141,6 +143,8 @@ it.each(["web", "desktop-open", "desktop-reject"])(
           />,
         ),
       );
+      const statuses = node.querySelectorAll('[role="status"]');
+      expect(Array.from(statuses, (status) => status.textContent)).toEqual(["", ""]);
       const join = getByRole(node, mode === "web" ? "link" : "button", { name: "Join meeting" });
       const notes = getByRole(node, "button", { name: "Notes & agenda" });
       expect(notes.compareDocumentPosition(join) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -183,6 +187,16 @@ it.each(["web", "desktop-open", "desktop-reject"])(
         await act(() => fireEvent.click(getByRole(node, "button", { name: "Copy meeting link" })));
         expect(copy).toHaveBeenCalledExactlyOnceWith(url);
         expect(node.textContent).toContain("Meeting link copied.");
+      }
+      expect(node.querySelectorAll('[role="status"]')[0]).toBe(statuses[0]);
+      expect(node.querySelectorAll('[role="status"]')[1]).toBe(statuses[1]);
+      expect(rpc.requests).not.toHaveBeenCalled();
+      if (mode !== "web") expect(openExternal).toHaveBeenCalledTimes(1);
+      if (mode !== "desktop-open") {
+        await act(() => fireEvent.click(getByRole(node, "button", { name: "Dismiss" })));
+        expect(queryByRole(node, "button", { name: "Copy meeting link" })).toBeNull();
+        expect(node.textContent).not.toContain("If nothing opened");
+        expect(node.querySelectorAll('[role="status"]')[0]).toBe(statuses[0]);
       }
       expect(webOpen).not.toHaveBeenCalled();
       for (const fake of Object.values(forbidden)) expect(fake).not.toHaveBeenCalled();

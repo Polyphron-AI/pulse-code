@@ -2,20 +2,16 @@ export function validatedConferenceUrl(raw: string): string | undefined {
   const value = raw.trim();
   // oxlint-disable-next-line no-control-regex -- Reject control bytes in handoff URLs.
   if (value.length > 2048 || /[\u0000-\u001f\u007f\\]/.test(raw) || value.includes(" ")) return;
+  // URL normalizes explicit empty and default ports, so inspect the raw authority.
+  const authority = /^https:\/\/([^/?#]*)/i.exec(value)?.[1];
+  if (!authority || authority.includes(":")) return;
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     return;
   }
-  // URL.port erases an explicit default port, so check the original authority too.
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    /:\d+$/.test(value.split("/")[2] ?? "")
-  )
-    return;
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return;
   const host = url.hostname.toLowerCase();
   const meet =
     host === "meet.google.com" && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:\/|$)/.test(url.pathname);

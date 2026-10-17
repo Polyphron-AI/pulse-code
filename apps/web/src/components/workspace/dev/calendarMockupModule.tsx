@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
 import { CalendarAgenda } from "../calendar/CalendarAgenda";
+import { WorkspaceItemMenuView } from "../WorkspaceItemMenuView";
+import { CalendarHandoffLink } from "../calendar/CalendarHandoffLink";
+import { validatedConferenceUrl } from "@t3tools/shared/calendarLinks";
 import type { CalendarHandoffClient } from "../calendar/calendarHandoff";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
@@ -100,7 +103,6 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
   };
   const initial = fold ? "2026-11-01" : gap ? "2026-03-08" : session.clock.today();
   const handoffClient: CalendarHandoffClient = {
-    preventNavigation: true,
     copyText: async () => {},
     ...(state === "desktop-reject"
       ? {
@@ -110,63 +112,114 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
         }
       : {}),
   };
+  function EventMenu({ event }: { readonly event: CalendarOccurrenceSummary }) {
+    const [open, setOpen] = useState(false);
+    const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
+    return (
+      <WorkspaceItemMenuView
+        open={open}
+        onOpenChange={setOpen}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setOpen(true);
+        }}
+        actions={
+          open && url ? (
+            <div
+              className="flex flex-wrap items-center gap-3"
+              onClickCapture={(event) => {
+                if ((event.target as HTMLElement).closest('a[target="_blank"]'))
+                  event.preventDefault();
+              }}
+            >
+              <CalendarHandoffLink
+                target={{ kind: "meeting", raw: url }}
+                client={handoffClient}
+                menu
+                onOpen={(address) =>
+                  record(
+                    "join",
+                    {
+                      type: "provider-resource",
+                      provider: "workspace-calendar",
+                      resourceId: event.id,
+                    },
+                    address,
+                  )
+                }
+              />
+            </div>
+          ) : null
+        }
+      >
+        <span className="sr-only">Event actions</span>
+      </WorkspaceItemMenuView>
+    );
+  }
   function Center() {
     const [day, setDay] = useState<string>(initial);
     return (
-      <CalendarAgenda
-        day={day}
-        today={session.clock.today()}
-        timeZone={timeZone}
-        view={session.recipe.view === "week" ? "week" : "agenda"}
-        pickerDefaultOpen={state === "picker"}
-        space={session.recipe.space === "meetings" ? "meetings" : "calendar"}
-        events={fold ? foldEvents : gap ? gapEvents : untimed ? [...events, allDay] : events}
-        dueTasks={
-          untimed
-            ? Array.from({ length: state === "week-overflow" ? 12 : 1 }, (_, index) => ({
-                ref: {
-                  type: "task" as const,
-                  taskId: index === 0 ? "fixture-due" : `fixture-due-${index}`,
-                },
-                title: index === 0 ? "Prepare launch brief" : `Launch follow-up ${index}`,
-                projectId: session.resourceProjectId,
-                dueOn: "2026-10-15",
-                done: false,
-                revision: 1,
-              }))
-            : []
-        }
-        status="ready"
-        onSelectDay={(value) => {
-          if (disposed) return;
-          setDay(value);
-          record("navigate", undefined, value);
+      <div
+        onClickCapture={(event) => {
+          if ((event.target as HTMLElement).closest('a[target="_blank"]')) event.preventDefault();
         }}
-        onSelect={(event) =>
-          record("navigate", {
-            type: "provider-resource",
-            provider: "workspace-calendar",
-            resourceId: event.id,
-          })
-        }
-        onNotes={(event) => {
-          const note = session.seed.events.find((e) => e.id === event.id)!.noteId;
-          record("navigate", {
-            type: "provider-resource",
-            provider: "workspace-note",
-            resourceId: note,
-          });
-        }}
-        onJoin={(event, url) =>
-          record(
-            "join",
-            { type: "provider-resource", provider: "workspace-calendar", resourceId: event.id },
-            url,
-          )
-        }
-        onSchedule={(url) => record("schedule", undefined, url)}
-        handoffClient={handoffClient}
-      />
+      >
+        <CalendarAgenda
+          day={day}
+          today={session.clock.today()}
+          timeZone={timeZone}
+          view={session.recipe.view === "week" ? "week" : "agenda"}
+          pickerDefaultOpen={state === "picker"}
+          space={session.recipe.space === "meetings" ? "meetings" : "calendar"}
+          events={fold ? foldEvents : gap ? gapEvents : untimed ? [...events, allDay] : events}
+          dueTasks={
+            untimed
+              ? Array.from({ length: state === "week-overflow" ? 12 : 1 }, (_, index) => ({
+                  ref: {
+                    type: "task" as const,
+                    taskId: index === 0 ? "fixture-due" : `fixture-due-${index}`,
+                  },
+                  title: index === 0 ? "Prepare launch brief" : `Launch follow-up ${index}`,
+                  projectId: session.resourceProjectId,
+                  dueOn: "2026-10-15",
+                  done: false,
+                  revision: 1,
+                }))
+              : []
+          }
+          status="ready"
+          onSelectDay={(value) => {
+            if (disposed) return;
+            setDay(value);
+            record("navigate", undefined, value);
+          }}
+          onSelect={(event) =>
+            record("navigate", {
+              type: "provider-resource",
+              provider: "workspace-calendar",
+              resourceId: event.id,
+            })
+          }
+          onNotes={(event) => {
+            const note = session.seed.events.find((e) => e.id === event.id)!.noteId;
+            record("navigate", {
+              type: "provider-resource",
+              provider: "workspace-note",
+              resourceId: note,
+            });
+          }}
+          onJoin={(event, url) =>
+            record(
+              "join",
+              { type: "provider-resource", provider: "workspace-calendar", resourceId: event.id },
+              url,
+            )
+          }
+          onSchedule={(url) => record("schedule", undefined, url)}
+          handoffClient={handoffClient}
+          renderMenu={(event) => <EventMenu event={event} />}
+        />
+      </div>
     );
   }
   return {
