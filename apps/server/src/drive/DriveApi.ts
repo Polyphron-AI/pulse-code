@@ -10,12 +10,20 @@ import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
 const Metadata = Schema.Struct({
   id: DriveFileId,
-  name: Schema.String.check(Schema.isMaxLength(300)),
-  mimeType: Schema.String.check(Schema.isMaxLength(160)),
+  name: Schema.String,
+  mimeType: Schema.String,
   trashed: Schema.optionalKey(Schema.Boolean),
-  modifiedTime: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
-  size: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(30))),
-  owners: DriveFile.fields.owners,
+  modifiedTime: Schema.optionalKey(Schema.String),
+  size: Schema.optionalKey(Schema.String),
+  owners: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        displayName: Schema.optionalKey(Schema.String),
+        emailAddress: Schema.optionalKey(Schema.String),
+        me: Schema.optionalKey(Schema.Boolean),
+      }),
+    ).check(Schema.isMaxLength(100)),
+  ),
   parents: DriveFile.fields.parents,
   driveId: DriveFile.fields.driveId,
   shortcutDetails: DriveFile.fields.shortcutDetails,
@@ -30,65 +38,58 @@ const mimeByType = {
 } as const;
 const quote = (value: string) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const ProviderToken = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096));
+const Owner = Schema.String.check(
+  Schema.isMaxLength(256),
+  Schema.isPattern(/^(?:me|[^\s@,;'"\\]+@[^\s@,;'"\\]+\.[^\s@,;'"\\]+)$/),
+);
+const DateBound = Schema.String.check(
+  Schema.isMaxLength(64),
+  Schema.isPattern(
+    /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/,
+  ),
+  Schema.makeFilter((value) => {
+    const calendarDate = value.slice(0, 10);
+    const parsed = DateTime.make(`${calendarDate}T00:00:00Z`);
+    return (
+      Option.isSome(parsed) &&
+      DateTime.formatIsoDateUtc(parsed.value) === calendarDate &&
+      Option.isSome(DateTime.make(value))
+    );
+  }),
+);
 const ListInput = Schema.Struct({
   parentId: DriveFileId,
   pageToken: Schema.optionalKey(ProviderToken),
   query: DriveBrowseInput.fields.query,
   type: DriveBrowseInput.fields.type,
-  owner: DriveBrowseInput.fields.owner,
-  modifiedAfter: DriveBrowseInput.fields.modifiedAfter,
-  modifiedBefore: DriveBrowseInput.fields.modifiedBefore,
+  owner: Schema.optionalKey(Owner),
+  modifiedAfter: Schema.optionalKey(DateBound),
+  modifiedBefore: Schema.optionalKey(DateBound),
   sort: DriveBrowseInput.fields.sort,
   direction: DriveBrowseInput.fields.direction,
   limit: DriveBrowseInput.fields.limit,
 });
 const decodeListInput = Schema.decodeUnknownEffect(ListInput);
-const validDate = (value: string) => {
-  const parts =
-    /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
-      value,
-    );
-  if (!parts || Option.isNone(DateTime.make(value))) return false;
-  const year = Number(parts[1]),
-    month = Number(parts[2]),
-    day = Number(parts[3]);
-  const max =
-    [
-      31,
-      year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
-      31,
-      30,
-      31,
-      30,
-      31,
-      31,
-      30,
-      31,
-      30,
-      31,
-    ][month - 1] ?? 0;
-  return day >= 1 && day <= max;
-};
 export const validateListInput = Effect.fnUntraced(function* (input: typeof ListInput.Type) {
   const decoded = yield* decodeListInput(input).pipe(
     Effect.mapError(() =>
       fail("invalid-input", "Use valid folder filters and a page size from 1 to 50."),
     ),
   );
-  if (
-    (decoded.owner !== undefined &&
-      !/^(?:me|[^\s@,;'"\\]+@[^\s@,;'"\\]+\.[^\s@,;'"\\]+)$/.test(decoded.owner)) ||
-    (decoded.modifiedAfter !== undefined && !validDate(decoded.modifiedAfter)) ||
-    (decoded.modifiedBefore !== undefined && !validDate(decoded.modifiedBefore)) ||
-    (decoded.modifiedAfter &&
-      decoded.modifiedBefore &&
-      Date.parse(decoded.modifiedAfter) >= Date.parse(decoded.modifiedBefore))
-  )
+  const after = decoded.modifiedAfter ? DateTime.makeUnsafe(decoded.modifiedAfter) : undefined;
+  const before = decoded.modifiedBefore ? DateTime.makeUnsafe(decoded.modifiedBefore) : undefined;
+  if (after && before && !DateTime.isLessThan(after, before))
     return yield* fail(
       "invalid-input",
       "Use one owner email or me, and valid ordered RFC3339 date bounds.",
     );
-  return decoded;
+  const { query, ...rest } = decoded;
+  return {
+    ...rest,
+    ...(query?.trim() ? { query: query.trim() } : {}),
+    ...(after ? { modifiedAfter: DateTime.formatIso(after) } : {}),
+    ...(before ? { modifiedBefore: DateTime.formatIso(before) } : {}),
+  };
 });
 const isDriveError = Schema.is(DriveError);
 const fail = (kind: DriveError["kind"], message: string) => new DriveError({ kind, message });
@@ -111,7 +112,15 @@ const metadata = (value: typeof Metadata.Type): DriveFile => ({
   ...(value.owners?.[0]
     ? { owner: (value.owners[0].displayName ?? value.owners[0].emailAddress ?? "").slice(0, 160) }
     : {}),
-  ...(value.owners ? { owners: value.owners } : {}),
+  ...(value.owners
+    ? {
+        owners: value.owners.map(({ displayName, emailAddress, ...owner }) => ({
+          ...owner,
+          ...(displayName !== undefined ? { displayName: displayName.slice(0, 160) } : {}),
+          ...(emailAddress !== undefined ? { emailAddress: emailAddress.slice(0, 256) } : {}),
+        })),
+      }
+    : {}),
   ...(value.parents ? { parents: value.parents } : {}),
   ...(value.driveId ? { driveId: value.driveId } : {}),
   ...(value.shortcutDetails ? { shortcutDetails: value.shortcutDetails } : {}),
@@ -253,7 +262,7 @@ export const make = Effect.gen(function* () {
           incompleteSearch: Schema.optionalKey(Schema.Boolean),
         }),
         {
-          q: `trashed = false and name contains '${query.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`,
+          q: `trashed = false and name contains ${quote(query)}`,
           pageSize: String(limit),
           fields: `files(${fields}),nextPageToken,incompleteSearch`,
           includeItemsFromAllDrives: "true",

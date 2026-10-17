@@ -43,64 +43,105 @@ const OTHER_TARGET = new PrimaryConnectionTarget({
   httpBaseUrl: "https://other.example.test",
   wsBaseUrl: "wss://other.example.test",
 });
-it.effect("keeps a deferred browse result attached to its originating environment and input", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const entered = yield* Deferred.make<void>();
-      const release = yield* Deferred.make<void>();
-      const calls: string[] = [];
-      const input = {
-        projectId: ProjectId.make("same-project"),
-        connectionId: "drv_00000000-0000-0000-0000-000000000001",
-        parentId: "root-a",
-        path: [],
-        sort: "name" as const,
-        direction: "asc" as const,
-        limit: 20,
-      };
-      const slow = {
-        [WS_METHODS.driveListChildren]: (value: typeof input) =>
-          Effect.gen(function* () {
-            calls.push(value.parentId);
-            yield* Deferred.succeed(entered, undefined);
-            yield* Deferred.await(release);
-            return {
+it.effect.each(["local", "direct", "relay", "tunnel"])(
+  "keeps a deferred %s browse result attached to its originating environment and input",
+  (mode) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const calls: Array<typeof input> = [];
+        const input = {
+          projectId: ProjectId.make("same-project"),
+          connectionId: "drv_00000000-0000-0000-0000-000000000001",
+          parentId: "root-a",
+          path: [],
+          sort: "name" as const,
+          direction: "asc" as const,
+          limit: 20,
+        };
+        const slow = {
+          [WS_METHODS.driveListChildren]: (value: typeof input) =>
+            Effect.gen(function* () {
+              calls.push(value);
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              return {
+                files: [],
+                rootFile: {
+                  id: value.parentId,
+                  name: "Original root",
+                  mimeType: "application/vnd.google-apps.folder",
+                  url: `https://drive.google.com/drive/folders/${value.parentId}`,
+                },
+                incomplete: false,
+              };
+            }),
+        } as unknown as WsRpcProtocolClient;
+        const fast = {
+          [WS_METHODS.driveListChildren]: (value: typeof input) =>
+            Effect.succeed({
               files: [],
               rootFile: {
                 id: value.parentId,
-                name: "Original root",
+                name: "Current root",
                 mimeType: "application/vnd.google-apps.folder",
                 url: `https://drive.google.com/drive/folders/${value.parentId}`,
               },
-              incomplete: false,
-            };
+              incomplete: true,
+            }),
+        } as unknown as WsRpcProtocolClient;
+        const environmentId = EnvironmentId.make(mode);
+        const origin =
+          mode === "local"
+            ? "http://127.0.0.1:3773"
+            : mode === "direct"
+              ? "http://remote.tailnet.test:3773"
+              : "https://tunnel.example.test/environment";
+        const target =
+          mode === "relay"
+            ? new RelayConnectionTarget({ environmentId, label: mode })
+            : new PrimaryConnectionTarget({
+                environmentId,
+                label: mode,
+                httpBaseUrl: origin,
+                wsBaseUrl: origin.replace(/^http/, "ws"),
+              });
+        const { atoms, registry } = yield* makeTestRuntime(slow, fast, target);
+        expect(atoms.listChildren).toBeDefined();
+        const old = yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.listChildren, {
+            environmentId: TARGET.environmentId,
+            input,
           }),
-      } as unknown as WsRpcProtocolClient;
-      const fast = {
-        [WS_METHODS.driveListChildren]: () => Effect.succeed({ files: [], incomplete: true }),
-      } as unknown as WsRpcProtocolClient;
-      const { atoms, registry } = yield* makeTestRuntime(slow, fast);
-      expect(atoms.listChildren).toBeDefined();
-      const old = yield* Effect.promise(() =>
-        runAtomCommand(registry, atoms.listChildren, {
-          environmentId: TARGET.environmentId,
-          input,
-        }),
-      ).pipe(Effect.forkChild);
-      yield* Deferred.await(entered);
-      const current = yield* Effect.promise(() =>
-        runAtomCommand(registry, atoms.listChildren, {
-          environmentId: OTHER_TARGET.environmentId,
-          input: { ...input, parentId: "root-b" },
-        }),
-      );
-      expect(AsyncResult.getOrThrow(current)).toEqual({ files: [], incomplete: true });
-      yield* Deferred.succeed(release, undefined);
-      expect(AsyncResult.getOrThrow(yield* Fiber.join(old)).rootFile?.id).toBe("root-a");
-      expect(input.parentId).toBe("root-a");
-      expect(calls).toEqual(["root-a"]);
-    }),
-  ),
+        ).pipe(Effect.forkChild);
+        yield* Deferred.await(entered);
+        const current = yield* Effect.promise(() =>
+          runAtomCommand(registry, atoms.listChildren, {
+            environmentId,
+            input: { ...input, parentId: "root-b" },
+          }),
+        );
+        expect(AsyncResult.getOrThrow(current)).toMatchObject({
+          files: [],
+          rootFile: { id: "root-b" },
+          incomplete: true,
+        });
+        yield* Deferred.succeed(release, undefined);
+        expect(AsyncResult.getOrThrow(yield* Fiber.join(old)).rootFile?.id).toBe("root-a");
+        expect(calls).toEqual([
+          {
+            projectId: ProjectId.make("same-project"),
+            connectionId: "drv_00000000-0000-0000-0000-000000000001",
+            parentId: "root-a",
+            path: [],
+            sort: "name",
+            direction: "asc",
+            limit: 20,
+          },
+        ]);
+      }),
+    ),
 );
 
 function session(client: WsRpcProtocolClient): RpcSession {

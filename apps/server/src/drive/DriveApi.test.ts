@@ -103,7 +103,7 @@ it.effect("filters and sorts the folder query before requesting a page", () =>
     const call = fake.calls.at(-1)!;
     expect(call.method).toBe("GET");
     expect(call.url.searchParams.get("q")).toBe(
-      "trashed = false and 'synkek-root' in parents and name contains 'Nina\\'s \\\\ plan' and mimeType = 'application/vnd.google-apps.document' and 'owner@example.test' in owners and modifiedTime >= '2026-10-10T00:00:00Z'",
+      "trashed = false and 'synkek-root' in parents and name contains 'Nina\\'s \\\\ plan' and mimeType = 'application/vnd.google-apps.document' and 'owner@example.test' in owners and modifiedTime >= '2026-10-10T00:00:00.000Z'",
     );
     expect(call.url.searchParams.get("orderBy")).toBe("folder,modifiedTime desc,name");
     expect(call.url.searchParams.get("pageToken")).toBe("second-provider-page");
@@ -134,7 +134,7 @@ it.effect.each(["asc", "desc"] as const)(
       const params = fake.calls[0]!.url.searchParams;
       expect(params.get("orderBy")).toBe(direction === "asc" ? "folder,name" : "folder,name desc");
       expect(params.get("q")).toBe(
-        "trashed = false and 'synkek-root' in parents and mimeType != 'application/vnd.google-apps.folder' and mimeType != 'application/vnd.google-apps.document' and mimeType != 'application/vnd.google-apps.spreadsheet' and mimeType != 'application/vnd.google-apps.presentation' and mimeType != 'application/vnd.google-apps.shortcut' and 'me' in owners and modifiedTime < '2026-10-15T00:00:00Z'",
+        "trashed = false and 'synkek-root' in parents and mimeType != 'application/vnd.google-apps.folder' and mimeType != 'application/vnd.google-apps.document' and mimeType != 'application/vnd.google-apps.spreadsheet' and mimeType != 'application/vnd.google-apps.presentation' and mimeType != 'application/vnd.google-apps.shortcut' and 'me' in owners and modifiedTime < '2026-10-15T00:00:00.000Z'",
       );
     }),
 );
@@ -143,8 +143,16 @@ it.effect.each([
   { owner: "a@example.test' or trashed = true" },
   { owner: "a@example.test,b@example.test" },
   { modifiedAfter: "2026-02-30T00:00:00Z" },
+  { modifiedAfter: "2026-02-29T23:00:00-02:00" },
+  { modifiedAfter: "2026-04-31T01:00:00+02:00" },
+  { modifiedAfter: "2026-00-10T00:00:00Z" },
+  { modifiedAfter: "2026-10-10T24:00:00Z" },
+  { modifiedAfter: "2026-10-10T00:00:00" },
+  { owner: "a@example.test\\" },
+  { owner: "a@example.test; b@example.test" },
   { modifiedBefore: "yesterday" },
   { modifiedAfter: "2026-10-15T00:00:00Z", modifiedBefore: "2026-10-14T00:00:00Z" },
+  { modifiedAfter: "2026-10-15T02:00:00+02:00", modifiedBefore: "2026-10-15T00:00:00Z" },
   { limit: 51 },
   { pageToken: "x".repeat(4097) },
 ])("rejects invalid listing filters before HTTP: %j", (invalid) =>
@@ -161,7 +169,6 @@ it.effect.each([
 it.effect.each([
   Array.from({ length: 21 }, (_, i) => ({ id: `file-${i}`, name: "File", mimeType: "text/plain" })),
   [{ id: "../bad", name: "File", mimeType: "text/plain" }],
-  [{ id: "file", name: "x".repeat(301), mimeType: "text/plain" }],
   [{ id: "file", name: "File", mimeType: "text/plain", parents: ["../bad"] }],
   [
     {
@@ -177,5 +184,73 @@ it.effect.each([
     fake.state.listRequests.push({ files });
     const api = yield* Api.make.pipe(Effect.provide(fake.layer));
     expect((yield* api.listChildren("token", input).pipe(Effect.flip)).kind).toBe("unavailable");
+  }),
+);
+
+it.effect("truncates a 301-character child name without dropping its row", () =>
+  Effect.gen(function* () {
+    const fake = makeFakeDrive();
+    fake.state.listRequests.push({
+      files: [{ id: "file", name: "x".repeat(301), mimeType: "text/plain" }],
+    });
+    const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+    expect((yield* api.listChildren("token", input)).files.map((file) => file.name)).toEqual([
+      "x".repeat(300),
+    ]);
+  }),
+);
+
+it.effect("normalizes checked calendar bounds and query text at the API boundary", () =>
+  Effect.gen(function* () {
+    expect(
+      yield* Api.validateListInput({
+        ...input,
+        query: "  brief  ",
+        owner: "me",
+        modifiedAfter: "2024-02-29T23:30:00-02:00",
+        modifiedBefore: "2024-03-01T03:00:00+00:00",
+      }),
+    ).toEqual({
+      ...input,
+      query: "brief",
+      owner: "me",
+      modifiedAfter: "2024-03-01T01:30:00.000Z",
+      modifiedBefore: "2024-03-01T03:00:00.000Z",
+    });
+  }),
+);
+
+it.effect("sorts modifiedTime ascending with both normalized date bounds", () =>
+  Effect.gen(function* () {
+    const fake = makeFakeDrive();
+    fake.state.listRequests.push({ files: [] });
+    const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+    yield* api.listChildren("token", {
+      ...input,
+      sort: "modifiedTime",
+      modifiedAfter: "2026-10-10T02:00:00+02:00",
+      modifiedBefore: "2026-10-15T00:00:00Z",
+    });
+    expect(fake.calls[0]!.url.searchParams.get("orderBy")).toBe("folder,modifiedTime,name");
+    expect(fake.calls[0]!.url.searchParams.get("q")).toBe(
+      "trashed = false and 'synkek-root' in parents and modifiedTime >= '2026-10-10T00:00:00.000Z' and modifiedTime < '2026-10-15T00:00:00.000Z'",
+    );
+  }),
+);
+
+it.effect("escapes quotes and backslashes identically in search and child queries", () =>
+  Effect.gen(function* () {
+    const fake = makeFakeDrive();
+    fake.state.listRequests.push({ files: [] }, { files: [] });
+    const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+    const query = "Nina's \\ plan";
+    yield* api.search("token", query, 20);
+    yield* api.listChildren("token", { ...input, query });
+    expect(fake.calls[0]!.url.searchParams.get("q")).toBe(
+      "trashed = false and name contains 'Nina\\'s \\\\ plan'",
+    );
+    expect(fake.calls[1]!.url.searchParams.get("q")).toBe(
+      "trashed = false and 'synkek-root' in parents and name contains 'Nina\\'s \\\\ plan'",
+    );
   }),
 );

@@ -379,11 +379,13 @@ export const make = Effect.gen(function* () {
             connectionId: string;
             fileJson: string;
           }>`SELECT connection_id AS "connectionId",file_json AS "fileJson" FROM drive_file_bindings WHERE file_id IN ${sql.in([...new Set(ids)])}`;
-          return yield* Effect.forEach(rows, (row) =>
+          const bindings = yield* Effect.forEach(rows, (row) =>
             decodeFile(row.fileJson).pipe(
               Effect.map((file) => ({ connectionId: row.connectionId, file })),
+              Effect.option,
             ),
           );
+          return bindings.flatMap((binding) => (Option.isSome(binding) ? [binding.value] : []));
         }),
       ),
     bind: (connectionId: string, generation: number, file: typeof DriveFile.Type) =>

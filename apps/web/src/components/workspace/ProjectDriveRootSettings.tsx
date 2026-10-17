@@ -116,23 +116,27 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
   const singleBinding = useEnvironmentQuery(
     !driveExplorer && fileId ? drive.binding({ environmentId, input: { fileId } }) : null,
   );
+  const fileIds = [
+    ...new Set(
+      candidates.flatMap((link) => (link.item.ref.type === "file" ? [link.item.ref.fileId] : [])),
+    ),
+  ].sort();
   const bindings = useEnvironmentQuery(
     driveExplorer && choosing && candidates.length
       ? drive.bindings({
           environmentId,
-          input: {
-            fileIds: candidates.flatMap((link) =>
-              link.item.ref.type === "file" ? [link.item.ref.fileId] : [],
-            ),
-          },
+          input: { fileIds },
         })
       : null,
   );
-  const bindingsById = new Map(bindings.data?.bindings.map((value) => [value.file.id, value]));
+  const [lastBindings, setLastBindings] = useState(bindings.data);
+  if (bindings.data && bindings.data !== lastBindings) setLastBindings(bindings.data);
+  const currentBindings = bindings.data ?? lastBindings;
+  const bindingsById = new Map(currentBindings?.bindings.map((value) => [value.file.id, value]));
   const binding = driveExplorer
     ? {
         ...bindings,
-        data: bindings.data
+        data: currentBindings
           ? { binding: fileId ? bindingsById.get(fileId) : undefined }
           : undefined,
       }
@@ -265,6 +269,7 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
             <select
               ref={linkSelect}
               aria-label="Confirmed Drive link"
+              aria-busy={driveExplorer && bindings.isPending}
               className="w-full rounded-md border border-input bg-background p-2"
               value={selected ? linkId : ""}
               disabled={!canOperate || busy}
@@ -289,6 +294,19 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
               })}
             </select>
           </label>
+          {driveExplorer && bindings.error ? (
+            <div role="alert" className="break-words text-sm text-destructive">
+              <p>Could not check which linked items are folders.</p>
+              <Button type="button" size="sm" variant="outline" onClick={bindings.refresh}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          {driveExplorer && bindings.isPending ? (
+            <p className="text-xs text-muted-foreground">
+              Checking which linked items are folders...
+            </p>
+          ) : null}
           {selectedBinding ? (
             <p className="break-words text-xs text-muted-foreground">
               Drive connection: {accountLabel(selectedBinding.connectionId)}
@@ -352,7 +370,7 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
               >
                 Verify and bind linked item
               </Button>
-              {binding.error ? (
+              {!driveExplorer && binding.error ? (
                 <p role="alert" className="text-sm text-destructive">
                   {binding.error}
                 </p>

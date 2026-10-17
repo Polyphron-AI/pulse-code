@@ -21,6 +21,9 @@ import * as Service from "./DriveService.ts";
 import { makeFakeDrive } from "./testing/fakeDrive.ts";
 import * as Tools from "../workspace/WorkspaceTools.ts";
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+const decodeCursorRecord = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+);
 const testLayer = () =>
   Store.layer.pipe(
     Layer.provideMerge(SqlitePersistenceMemory),
@@ -93,6 +96,115 @@ const browseSetup = Effect.gen(function* () {
   return { ...context, root, input };
 });
 describe("project Drive folder browsing", () => {
+  it.effect.each(["search", "file", "read", "bind", "listChildren"] as const)(
+    "truncates long display strings on %s without losing the file",
+    (path) =>
+      Effect.gen(function* () {
+        const { service, api, fake, input } = yield* browseSetup;
+        yield* service.bindFile({ connectionId: input.connectionId, fileId: "long-file" });
+        const long = {
+          id: "long-file",
+          name: "n".repeat(400),
+          mimeType: "text/plain",
+          owners: [{ displayName: "o".repeat(400), emailAddress: "e".repeat(400), me: true }],
+        };
+        fake.state.metadata[long.id] = long;
+        fake.state.listRequests.push({ files: [long] });
+        const file =
+          path === "search"
+            ? (yield* service.search({ connectionId: input.connectionId, query: "long" })).files[0]
+            : path === "file"
+              ? yield* api.file("token", long.id)
+              : path === "read"
+                ? (yield* service.readFile({ fileId: long.id })).file
+                : path === "bind"
+                  ? (yield* service.bindFile({ connectionId: input.connectionId, fileId: long.id }))
+                      .file
+                  : (yield* service.listChildren(input)).files[0];
+        expect(file).toMatchObject({
+          id: long.id,
+          name: "n".repeat(300),
+          owner: "o".repeat(160),
+          owners: [{ displayName: "o".repeat(160), emailAddress: "e".repeat(256), me: true }],
+        });
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+
+  it.effect("isolates corrupt stored bindings from valid entries in the same batch", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      yield* service.bindFile({ connectionId: input.connectionId, fileId: "corrupt" });
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE drive_file_bindings SET file_json='invalid-json' WHERE file_id='corrupt'`;
+      const before = fake.calls.length;
+      expect(
+        (yield* service.getBindings({ fileIds: ["corrupt", "synkek-root"] })).bindings.map(
+          (binding) => binding.file.id,
+        ),
+      ).toEqual(["synkek-root"]);
+      yield* sql`UPDATE drive_file_bindings SET file_json='{}' WHERE file_id='corrupt'`;
+      expect(
+        (yield* service.getBindings({ fileIds: ["corrupt", "synkek-root"] })).bindings.map(
+          (binding) => binding.file.id,
+        ),
+      ).toEqual(["synkek-root"]);
+      expect(fake.calls).toHaveLength(before);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+
+  it.effect("reads path metadata four at a time and validates the original parent order", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      const path = Array.from({ length: 8 }, (_, index) => `folder-${index}`);
+      for (const [index, id] of path.entries()) {
+        fake.state.metadata[id] = {
+          id,
+          name: id,
+          mimeType: "application/vnd.google-apps.folder",
+          parents: [index === 0 ? "synkek-root" : path[index - 1]!],
+        };
+        fake.state.metadataGates[id] = {
+          entered: yield* Deferred.make<void>(),
+          release: yield* Deferred.make<void>(),
+        };
+      }
+      fake.state.listRequests.push({ files: [] }, { files: [] });
+      const pending = yield* service
+        .listChildren({ ...input, path, parentId: path.at(-1)! })
+        .pipe(Effect.forkChild);
+      yield* Effect.forEach(path.slice(0, 4), (id) =>
+        Deferred.await(fake.state.metadataGates[id]!.entered),
+      );
+      yield* Effect.yieldNow;
+      expect(fake.state.metadataStarted).toEqual(path.slice(0, 4));
+      expect(fake.state.metadataActive).toBe(4);
+      // Complete later entries first so completion order cannot validate the chain.
+      for (let index = 3; index >= 0; index--) {
+        yield* Deferred.succeed(fake.state.metadataGates[path[index]!]!.release, undefined);
+        yield* Deferred.await(fake.state.metadataGates[path[7 - index]!]!.entered);
+        expect(fake.state.metadataActive).toBe(4);
+      }
+      for (const id of path.slice(4).toReversed())
+        yield* Deferred.succeed(fake.state.metadataGates[id]!.release, undefined);
+      expect((yield* Fiber.join(pending)).files).toEqual([]);
+      expect(fake.state.metadataPeak).toBe(4);
+      expect(fake.state.metadataFinished.slice(0, 4)).toEqual(path.slice(0, 4).toReversed());
+      const before = fake.calls.length;
+      fake.state.metadata[path[4]!] = {
+        id: path[4],
+        name: "Outside",
+        mimeType: "application/vnd.google-apps.folder",
+        parents: ["outside"],
+      };
+      expect(
+        (yield* service.listChildren({ ...input, path, parentId: path.at(-1)! }).pipe(Effect.flip))
+          .kind,
+      ).toBe("invalid-input");
+      expect(fake.calls.slice(before).some((call) => call.url.pathname.endsWith("/files"))).toBe(
+        false,
+      );
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
   it.effect("rejects a provider token whose encoded cursor exceeds the wire bound", () =>
     Effect.gen(function* () {
       const { service, fake, input } = yield* browseSetup;
@@ -176,16 +288,23 @@ describe("project Drive folder browsing", () => {
         ...input,
         query: "  brief  ",
         modifiedAfter: "2026-10-10T02:00:00+02:00",
+        modifiedBefore: "2026-10-11T03:00:00+03:00",
       });
       expect(page.nextCursor!.length).toBeLessThanOrEqual(8192);
       yield* service.listChildren({
         ...input,
         query: "brief",
         modifiedAfter: "2026-10-10T00:00:00Z",
+        modifiedBefore: "2026-10-11T00:00:00Z",
         cursor: page.nextCursor!,
       });
       expect(fake.calls.at(-1)!.url.searchParams.get("pageToken")).toBe("x".repeat(4096));
       expect(fake.calls.at(-1)!.url.searchParams.has("cursor")).toBe(false);
+      const requests = fake.calls.filter((call) => call.url.pathname.endsWith("/files"));
+      const firstParams = new URLSearchParams(requests[0]!.url.search);
+      const secondParams = new URLSearchParams(requests[1]!.url.search);
+      secondParams.delete("pageToken");
+      expect(secondParams.toString()).toBe(firstParams.toString());
     }).pipe(Effect.scoped, Effect.provide(testLayer())),
   );
   it.effect("bounds batched local binding reads without Google access", () =>
@@ -233,7 +352,7 @@ describe("project Drive folder browsing", () => {
       expect(fake.calls).toHaveLength(before);
     }).pipe(Effect.scoped, Effect.provide(testLayer())),
   );
-  it.effect("rejects raw, tampered, expired and previous-server cursors before Google access", () =>
+  it.effect("rejects raw and previous-server cursors before Google access", () =>
     Effect.gen(function* () {
       const { service, fake, input, api, oauth } = yield* browseSetup;
       fake.state.listRequests.push({ files: [], nextPageToken: "provider-token" });
@@ -243,10 +362,6 @@ describe("project Drive folder browsing", () => {
         (yield* service.listChildren({ ...input, cursor: "provider-token" }).pipe(Effect.flip))
           .kind,
       ).toBe("invalid-input");
-      const tampered = `A${first.nextCursor!.slice(1)}`;
-      expect(
-        (yield* service.listChildren({ ...input, cursor: tampered }).pipe(Effect.flip)).kind,
-      ).toBe("conflict");
       const restarted = yield* Service.make.pipe(
         Effect.provideService(Api.DriveApi, api),
         Effect.provideService(OAuth.DriveOAuth, oauth),
@@ -255,7 +370,72 @@ describe("project Drive folder browsing", () => {
         (yield* restarted.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
           .kind,
       ).toBe("conflict");
-      yield* TestClock.adjust("10 minutes");
+      expect(fake.calls).toHaveLength(before);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each(["pageToken", "expiresAt", "signature"] as const)(
+    "rejects a well-formed cursor with a forged %s before Google access",
+    (field) =>
+      Effect.gen(function* () {
+        const { service, fake, input } = yield* browseSetup;
+        fake.state.listRequests.push({ files: [], nextPageToken: "provider-token" });
+        const first = yield* service.listChildren(input);
+        const [body, signature] = first.nextCursor!.split(".") as [string, string];
+        const decoded = yield* decodeCursorRecord(Buffer.from(body, "base64url").toString("utf8"));
+        const forgedBody =
+          field === "signature"
+            ? body
+            : Buffer.from(
+                encodeJson({
+                  ...decoded,
+                  [field]:
+                    field === "pageToken" ? "forged-provider-token" : Number.MAX_SAFE_INTEGER,
+                }),
+              ).toString("base64url");
+        const forgedSignature =
+          field === "signature"
+            ? `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`
+            : signature;
+        const before = fake.calls.length;
+        expect(
+          (yield* service
+            .listChildren({ ...input, cursor: `${forgedBody}.${forgedSignature}` })
+            .pipe(Effect.flip)).kind,
+        ).toBe("conflict");
+        expect(fake.calls).toHaveLength(before);
+      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("continues at 9m59s and rejects the same cursor at 10m00s", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      fake.state.listRequests.push({ files: [], nextPageToken: "next" }, { files: [] });
+      const first = yield* service.listChildren(input);
+      const before = fake.calls.length;
+      yield* TestClock.adjust("599 seconds");
+      expect((yield* service.listChildren({ ...input, cursor: first.nextCursor! })).files).toEqual(
+        [],
+      );
+      expect(fake.calls).toHaveLength(before + 2);
+      expect(
+        fake.calls.slice(before).filter((call) => call.url.pathname.endsWith("/files")),
+      ).toHaveLength(1);
+      yield* TestClock.adjust("1 second");
+      expect(
+        (yield* service.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
+          .kind,
+      ).toBe("conflict");
+      expect(fake.calls).toHaveLength(before + 2);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("rejects a cursor after a same-identity reconnect before Google access", () =>
+    Effect.gen(function* () {
+      const { service, fake, input, connection, store, oauth, signIn } = yield* browseSetup;
+      fake.state.listRequests.push({ files: [], nextPageToken: "next" });
+      const first = yield* service.listChildren(input);
+      yield* store.disconnect(connection.id);
+      const sign = yield* signIn;
+      yield* oauth.complete(sign.flow.flowId, sign.returned.href);
+      const before = fake.calls.length;
       expect(
         (yield* service.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
           .kind,
@@ -263,22 +443,55 @@ describe("project Drive folder browsing", () => {
       expect(fake.calls).toHaveLength(before);
     }).pipe(Effect.scoped, Effect.provide(testLayer())),
   );
-  it.effect(
-    "rejects a cursor after a same-identity reconnect and preserves current-generation health",
-    () =>
+  it.effect("keeps the new connection healthy when an old-generation 401 arrives", () =>
+    Effect.gen(function* () {
+      const { service, fake, input, store, connection, oauth, signIn } = yield* browseSetup;
+      const oldGeneration = (yield* store.get(connection.id)).generation;
+      const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
+      fake.state.listRequests.push({
+        status: 401,
+        body: { error: { message: "synthetic-access-secret" } },
+        gate,
+      });
+      const pending = yield* service.listChildren(input).pipe(Effect.flip, Effect.forkChild);
+      yield* Deferred.await(gate.entered);
+      yield* store.disconnect(connection.id);
+      const sign = yield* signIn;
+      yield* oauth.complete(sign.flow.flowId, sign.returned.href);
+      const reconnected = yield* store.get(connection.id);
+      expect(reconnected.connected).toBe(true);
+      expect(reconnected.generation).toBeGreaterThan(oldGeneration);
+      yield* Deferred.succeed(gate.release, undefined);
+      expect((yield* Fiber.join(pending)).kind).toBe("auth-required");
+      expect(yield* store.get(connection.id)).toEqual(reconnected);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect.each(["non-folder", "trashed"] as const)(
+    "retains the designation when the provider root becomes %s during its metadata request",
+    (change) =>
       Effect.gen(function* () {
-        const { service, fake, input, connection, store, oauth, signIn } = yield* browseSetup;
-        fake.state.listRequests.push({ files: [], nextPageToken: "next" });
-        const first = yield* service.listChildren(input);
-        yield* store.disconnect(connection.id);
-        const sign = yield* signIn;
-        yield* oauth.complete(sign.flow.flowId, sign.returned.href);
+        const { service, fake, input, root } = yield* browseSetup;
+        const gate = {
+          entered: yield* Deferred.make<void>(),
+          release: yield* Deferred.make<void>(),
+        };
+        fake.state.metadataGate = gate;
         const before = fake.calls.length;
-        expect(
-          (yield* service.listChildren({ ...input, cursor: first.nextCursor! }).pipe(Effect.flip))
-            .kind,
-        ).toBe("conflict");
-        expect(fake.calls).toHaveLength(before);
+        const pending = yield* service.listChildren(input).pipe(Effect.flip, Effect.forkChild);
+        yield* Deferred.await(gate.entered);
+        fake.state.metadata[root.fileId] = {
+          id: root.fileId,
+          name: "Changed root",
+          mimeType: change === "non-folder" ? "text/plain" : "application/vnd.google-apps.folder",
+          trashed: change === "trashed",
+        };
+        yield* Deferred.succeed(gate.release, undefined);
+        expect((yield* Fiber.join(pending)).kind).toBe(
+          change === "non-folder" ? "unavailable" : "not-found",
+        );
+        expect(fake.calls).toHaveLength(before + 1);
+        expect(fake.calls.at(-1)!.url.pathname).toBe("/drive/v3/files/synkek-root");
+        expect((yield* service.getProjectRoot({ projectId })).root).toEqual(root);
       }).pipe(Effect.scoped, Effect.provide(testLayer())),
   );
   it.effect.each(["unlinked", "binding-changed", "disconnected", "deleted", "corrupt"] as const)(
@@ -353,7 +566,10 @@ describe("project Drive folder browsing", () => {
     (status) =>
       Effect.gen(function* () {
         const { service, fake, input, store, connection } = yield* browseSetup;
-        fake.state.listRequests.push({ status });
+        fake.state.listRequests.push({
+          status,
+          body: { error: { message: "synthetic-access-secret leaked" } },
+        });
         const before = fake.calls.length;
         const error = yield* service.listChildren(input).pipe(Effect.flip);
         expect(error.kind).toBe(
@@ -503,8 +719,8 @@ describe("project Drive folder browsing", () => {
         expect(first.nextCursor).toBeTruthy();
         expect(first.nextCursor).not.toContain("provider-next");
         const second = yield* service.listChildren({ ...input, cursor: first.nextCursor! });
-        const collected = new Map([...first.files, ...second.files].map((file) => [file.id, file]));
-        expect([...collected.keys()]).toEqual([...firstFiles.map((file) => file.id), "shared"]);
+        expect(first.files.map((file) => file.id)).toEqual(firstFiles.map((file) => file.id));
+        expect(second.files.map((file) => file.id)).toEqual(["child-19", "shared"]);
         expect(second.files.at(-1)?.owners).toBeUndefined();
         expect(second.nextCursor).toBeUndefined();
         expect((yield* service.listChildren(input)).files).toEqual([]);
@@ -535,6 +751,14 @@ describe("project Drive folder browsing", () => {
         );
         expect(fake.calls).toHaveLength(readsBefore);
       }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  );
+  it.effect("removes duplicate identities within a provider page without dropping other rows", () =>
+    Effect.gen(function* () {
+      const { service, fake, input } = yield* browseSetup;
+      const a = { id: "a", name: "Same name", mimeType: "text/plain" };
+      fake.state.listRequests.push({ files: [a, a, { ...a, id: "b" }] });
+      expect((yield* service.listChildren(input)).files.map((file) => file.id)).toEqual(["a", "b"]);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
   );
   it.effect("rejects a continuation after root clear before any Google request", () =>
     Effect.gen(function* () {

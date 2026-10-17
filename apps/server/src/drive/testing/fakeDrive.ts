@@ -8,6 +8,7 @@ const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 type Gate = { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> };
 type ListScript = {
   status?: number;
+  body?: unknown;
   files?: readonly unknown[];
   nextPageToken?: string;
   incompleteSearch?: boolean;
@@ -26,6 +27,11 @@ export const makeFakeDrive = () => {
     tokenCalls: 0,
     listRequests: [] as ListScript[],
     metadata: {} as Record<string, unknown>,
+    metadataGates: {} as Record<string, Gate>,
+    metadataActive: 0,
+    metadataPeak: 0,
+    metadataStarted: [] as string[],
+    metadataFinished: [] as string[],
     metadataGate: undefined as
       | { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> }
       | undefined,
@@ -35,11 +41,17 @@ export const makeFakeDrive = () => {
       if (
         /\/files\/[^/]+$/.test(url.pathname) &&
         !url.searchParams.has("alt") &&
-        state.metadataGate
+        (state.metadataGate || state.metadataGates[url.pathname.split("/").pop()!])
       ) {
-        const gate = state.metadataGate;
+        const id = url.pathname.split("/").pop()!;
+        const gate = state.metadataGates[id] ?? state.metadataGate!;
+        state.metadataStarted.push(id);
+        state.metadataActive++;
+        state.metadataPeak = Math.max(state.metadataPeak, state.metadataActive);
         yield* Deferred.succeed(gate.entered, undefined);
         yield* Deferred.await(gate.release);
+        state.metadataActive--;
+        state.metadataFinished.push(id);
       }
       const body = new URLSearchParams(
         request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
@@ -76,16 +88,18 @@ export const makeFakeDrive = () => {
           yield* Deferred.await(script.gate.release);
         }
         status = script?.status ?? status;
-        result = script
-          ? {
-              files: script.files ?? [],
-              nextPageToken: script.nextPageToken,
-              incompleteSearch: script.incompleteSearch,
-            }
-          : {
-              files: [{ id: "file-one", name: "Launch brief", mimeType: state.mimeType }],
-              nextPageToken: "next",
-            };
+        result =
+          script?.body ??
+          (script
+            ? {
+                files: script.files ?? [],
+                nextPageToken: script.nextPageToken,
+                incompleteSearch: script.incompleteSearch,
+              }
+            : {
+                files: [{ id: "file-one", name: "Launch brief", mimeType: state.mimeType }],
+                nextPageToken: "next",
+              });
       } else
         result = state.metadata[url.pathname.split("/").pop()!] ?? {
           id: url.pathname.split("/").pop(),

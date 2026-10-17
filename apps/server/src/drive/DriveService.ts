@@ -9,6 +9,7 @@ import {
 import * as NodeCrypto from "node:crypto";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -17,6 +18,7 @@ import { sliceUtf8 } from "../mail/MailImapRead.ts";
 import { DriveApi, validateListInput } from "./DriveApi.ts";
 import { DriveOAuth } from "./DriveOAuth.ts";
 import { DriveStore } from "./DriveStore.ts";
+const CURSOR_TTL_MS = Duration.toMillis("10 minutes");
 const Cursor = Schema.Struct({
   version: Schema.Literal(1),
   pageToken: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
@@ -72,17 +74,8 @@ export const make = Effect.gen(function* () {
         ),
       );
       const filters = yield* validateListInput(decoded);
-      const { cursor: rawCursor, query, modifiedAfter, modifiedBefore, ...scope } = decoded;
-      const normalized = {
-        ...scope,
-        ...(query?.trim() ? { query: query.trim() } : {}),
-        ...(modifiedAfter
-          ? { modifiedAfter: DateTime.formatIso(DateTime.makeUnsafe(modifiedAfter)) }
-          : {}),
-        ...(modifiedBefore
-          ? { modifiedBefore: DateTime.formatIso(DateTime.makeUnsafe(modifiedBefore)) }
-          : {}),
-      };
+      const { cursor: rawCursor, ...scope } = decoded;
+      const normalized = { ...scope, ...filters, query: filters.query ?? "" };
       const fingerprint = NodeCrypto.createHash("sha256")
         .update(encodeInput(normalized))
         .digest("hex");
@@ -147,8 +140,8 @@ export const make = Effect.gen(function* () {
           "The project folder is no longer a folder. Open it in Google Drive.",
         );
       let parent = root.fileId;
-      for (const fileId of decoded.path) {
-        const file = yield* metadata(fileId);
+      const pathFiles = yield* Effect.forEach(decoded.path, metadata, { concurrency: 4 });
+      for (const file of pathFiles) {
         if (file.mimeType !== "application/vnd.google-apps.folder" || file.shortcutDetails)
           return yield* fail(
             "unsupported",
@@ -164,7 +157,7 @@ export const make = Effect.gen(function* () {
             "invalid-input",
             "This folder is outside the designated project folder path.",
           );
-        parent = fileId;
+        parent = file.id;
       }
       const page = yield* observe(
         root.connectionId,
@@ -195,7 +188,7 @@ export const make = Effect.gen(function* () {
           encodeCursor({
             version: 1,
             pageToken: page.nextPageToken,
-            expiresAt: now + 600000,
+            expiresAt: now + CURSOR_TTL_MS,
             generation: access.generation,
             rootKey,
             fingerprint,

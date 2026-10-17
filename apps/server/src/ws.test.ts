@@ -20,6 +20,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import {
+  serverPulseCapabilities,
   hasCompatibleOrchestrationProtocol,
   resolveAvailableEditorsForConfig,
   shouldUseBoundedThreadSnapshot,
@@ -234,3 +235,8 @@ it.effect("recovers a reveal kind whose real probe outlasts the config timeout",
     }
   }).pipe(Effect.scoped),
 );
+
+it("advertises the project Drive root and explorer read capabilities", () => {
+  assert.strictEqual(serverPulseCapabilities.driveProjectRoot, true);
+  assert.strictEqual(serverPulseCapabilities.driveExplorer, true);
+});

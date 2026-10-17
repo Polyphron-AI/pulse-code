@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import * as Cause from "effect/Cause";
-import { act } from "react";
+import { act, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
@@ -35,6 +35,8 @@ const state = vi.hoisted(() => ({
   bindRefresh: vi.fn(),
   bindingQueries: vi.fn(),
   batchQueries: vi.fn(),
+  batchPending: false,
+  batchError: null as string | null,
   setRoot: vi.fn(),
   bind: vi.fn(),
 }));
@@ -83,72 +85,98 @@ vi.mock("../../state/use-atom-command", () => ({
   useAtomCommand: (command: string) => (command === "set" ? state.setRoot : state.bind),
 }));
 vi.mock("../../state/query", () => ({
-  useEnvironmentQuery: (query: string | null) => ({
-    data:
-      query === "root"
-        ? state.root
-        : query === "links"
-          ? state.links
-          : query === "connections"
-            ? [
-                {
-                  id: "drv_00000000-0000-0000-0000-000000000001",
-                  nickname: "Work",
-                  connected: state.connectionConnected,
-                  identity: state.identity,
-                },
-              ]
+  useEnvironmentQuery: (query: string | null) =>
+    useMemo(
+      () => ({
+        data:
+          query === "root"
+            ? state.root
+            : query === "links"
+              ? state.links
+              : query === "connections"
+                ? [
+                    {
+                      id: "drv_00000000-0000-0000-0000-000000000001",
+                      nickname: "Work",
+                      connected: state.connectionConnected,
+                      identity: state.identity,
+                    },
+                  ]
+                : query?.startsWith("bindings:")
+                  ? state.batchPending || state.batchError
+                    ? null
+                    : {
+                        bindings: state.bound
+                          ? query
+                              .slice("bindings:".length)
+                              .split(",")
+                              .map((id) => ({
+                                connectionId,
+                                file: {
+                                  ...file,
+                                  id,
+                                  name: id === "other-folder" ? "Another folder" : "SynKEK",
+                                  mimeType:
+                                    state.folder && id !== "document"
+                                      ? "application/vnd.google-apps.folder"
+                                      : "text/plain",
+                                },
+                              }))
+                          : [],
+                      }
+                  : query?.startsWith("binding:")
+                    ? {
+                        binding: state.bound
+                          ? {
+                              connectionId: "drv_00000000-0000-0000-0000-000000000001",
+                              file: {
+                                id: query.slice("binding:".length),
+                                name:
+                                  query === "binding:other-folder" ? "Another folder" : "SynKEK",
+                                mimeType:
+                                  state.folder && query !== "binding:document"
+                                    ? "application/vnd.google-apps.folder"
+                                    : "text/plain",
+                              },
+                            }
+                          : undefined,
+                      }
+                    : null,
+        dataUpdatedAt: query === "links" ? state.linkVersion : 1,
+        error:
+          query === "root"
+            ? state.rootError
             : query?.startsWith("bindings:")
-              ? {
-                  bindings: state.bound
-                    ? query
-                        .slice("bindings:".length)
-                        .split(",")
-                        .map((id) => ({
-                          connectionId,
-                          file: {
-                            ...file,
-                            id,
-                            name: id === "other-folder" ? "Another folder" : "SynKEK",
-                            mimeType:
-                              state.folder && id !== "document"
-                                ? "application/vnd.google-apps.folder"
-                                : "text/plain",
-                          },
-                        }))
-                    : [],
-                }
-              : query?.startsWith("binding:")
-                ? {
-                    binding: state.bound
-                      ? {
-                          connectionId: "drv_00000000-0000-0000-0000-000000000001",
-                          file: {
-                            id: query.slice("binding:".length),
-                            name: query === "binding:other-folder" ? "Another folder" : "SynKEK",
-                            mimeType:
-                              state.folder && query !== "binding:document"
-                                ? "application/vnd.google-apps.folder"
-                                : "text/plain",
-                          },
-                        }
-                      : undefined,
-                  }
-                : null,
-    dataUpdatedAt: query === "links" ? state.linkVersion : 1,
-    error: query === "root" ? state.rootError : null,
-    failure:
-      query === "root" && state.rootError
-        ? new DriveError({
-            kind: state.rootError === "This project is unavailable." ? "not-found" : "unavailable",
-            message: state.rootError,
-          })
-        : null,
-    refresh:
-      query?.startsWith("binding:") || query?.startsWith("bindings:")
-        ? state.bindRefresh
-        : state.refresh,
-  }),
+              ? state.batchError
+              : null,
+        isPending: query?.startsWith("bindings:") ? state.batchPending : false,
+        failure:
+          query === "root" && state.rootError
+            ? new DriveError({
+                kind:
+                  state.rootError === "This project is unavailable." ? "not-found" : "unavailable",
+                message: state.rootError,
+              })
+            : null,
+        refresh:
+          query?.startsWith("binding:") || query?.startsWith("bindings:")
+            ? state.bindRefresh
+            : state.refresh,
+      }),
+      [
+        query,
+        state.root,
+        state.links,
+        state.connectionConnected,
+        state.identity,
+        state.bound,
+        state.folder,
+        state.batchPending,
+        state.batchError,
+        state.linkVersion,
+        state.rootError,
+      ],
+    ),
 }));
 vi.mock("./mail/LinkedSection", () => ({
   LinkedSection: () => <div>Existing Link to search</div>,
@@ -208,6 +236,8 @@ beforeEach(() => {
   state.root = { root: null, state: "unconfigured" };
   state.rootError = null;
   state.linkVersion = 1;
+  state.batchPending = false;
+  state.batchError = null;
   state.links = {
     linked: [
       {
@@ -265,6 +295,108 @@ it("keeps a root-only older server usable without calling unsupported batch read
   expect(state.batchQueries).not.toHaveBeenCalled();
   expect(state.bindingQueries).toHaveBeenCalledWith("folder");
   expect(button("Use as project folder").disabled).toBe(false);
+});
+it("sorts and deduplicates batch IDs across reordered links", async () => {
+  const candidate = state.links.linked[0]!;
+  const document = {
+    ...candidate,
+    id: "wl_00000000-0000-0000-0000-000000000002",
+    item: {
+      ref: { type: "file" as const, provider: "google-drive" as const, fileId: "document" },
+      title: "Document",
+    },
+  };
+  state.links = {
+    ...state.links,
+    linked: [candidate, document, { ...candidate, id: "wl_00000000-0000-0000-0000-000000000003" }],
+  };
+  await render();
+  await choose();
+  expect(state.batchQueries.mock.calls.at(-1)![0]).toEqual(["document", "folder"]);
+  state.links = { ...state.links, linked: state.links.linked.toReversed() };
+  state.linkVersion++;
+  await render();
+  expect(new Set(state.batchQueries.mock.calls.map(([ids]) => ids.join(",")))).toEqual(
+    new Set(["document,folder"]),
+  );
+});
+it("keeps known options, selected folder, Use state and focus while changed links reload", async () => {
+  const candidate = state.links.linked[0]!;
+  state.links = {
+    ...state.links,
+    linked: [
+      candidate,
+      {
+        ...candidate,
+        id: "wl_00000000-0000-0000-0000-000000000002",
+        item: {
+          ref: { type: "file", provider: "google-drive", fileId: "document" },
+          title: "Document",
+        },
+      },
+    ],
+  };
+  await render();
+  await choose();
+  const use = button("Use as project folder");
+  use.focus();
+  expect(document.activeElement).toBe(use);
+  state.links = {
+    ...state.links,
+    linked: state.links.linked.toReversed().concat({
+      ...candidate,
+      id: "wl_00000000-0000-0000-0000-000000000003",
+      item: {
+        ref: { type: "file", provider: "google-drive", fileId: "other-folder" },
+        title: "Another folder",
+      },
+    }),
+  };
+  state.linkVersion++;
+  state.batchPending = true;
+  await render();
+  expect(
+    Array.from(select("Confirmed Drive link").options, (option) => option.textContent),
+  ).toEqual(["Choose a linked item to verify", "SynKEK", "Another folder"]);
+  expect(select("Confirmed Drive link").value).toBe(linkId);
+  expect(node.textContent).toContain("Folder: SynKEK");
+  expect(node.textContent).toContain("Drive connection: Work (owner@example.test)");
+  expect(use.disabled).toBe(false);
+  expect(document.activeElement).toBe(use);
+  state.batchPending = false;
+  await render();
+  expect(use.disabled).toBe(false);
+  expect(document.activeElement).toBe(use);
+});
+it("announces a pending folder batch without disabling or blurring the dropdown", async () => {
+  state.batchPending = true;
+  await render();
+  await click("Choose folder");
+  const dropdown = select("Confirmed Drive link");
+  expect(dropdown.getAttribute("aria-busy")).toBe("true");
+  expect(dropdown.disabled).toBe(false);
+  expect(document.activeElement).toBe(dropdown);
+  expect(node.textContent).toContain("Checking which linked items are folders...");
+  state.batchPending = false;
+  await render();
+  expect(dropdown.getAttribute("aria-busy")).toBe("false");
+  expect(node.textContent).not.toContain("Checking which linked items are folders...");
+});
+it("shows a batch failure under the dropdown before selection and retries only that batch", async () => {
+  state.batchError = "Synthetic binding lookup failure";
+  await render();
+  await click("Choose folder");
+  const dropdown = select("Confirmed Drive link");
+  const alert = getByRole(node, "alert");
+  expect(dropdown.closest("label")!.nextElementSibling).toBe(alert);
+  expect(alert.textContent).toContain("Could not check which linked items are folders.");
+  const rootRefreshes = state.refresh.mock.calls.length;
+  state.batchError = null;
+  state.bindRefresh.mockImplementationOnce(() => domRoot.render(view()));
+  await click("Retry");
+  expect(state.bindRefresh).toHaveBeenCalledTimes(1);
+  expect(state.refresh).toHaveBeenCalledTimes(rootRefreshes);
+  expect(queryByRole(node, "alert")).toBeNull();
 });
 afterEach(async () => {
   await act(() => domRoot.unmount());

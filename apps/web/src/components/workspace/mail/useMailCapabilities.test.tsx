@@ -117,42 +117,36 @@ it.each([
   ["live", false, false],
   ["cached", true, false],
   ["live", true, true],
-] as const)("gates list requests on live driveExplorer: %s %s", async (source, flag, expected) => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  state.projection = {
-    source,
-    config: {
-      pulseCapabilities: {
-        workspaceTools: true,
-        ...(flag === undefined ? {} : { driveExplorer: flag }),
+] as const)(
+  "reads driveExplorer only from live configuration: %s %s",
+  async (source, flag, expected) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    state.projection = {
+      source,
+      config: {
+        pulseCapabilities: {
+          workspaceTools: true,
+          ...(flag === undefined ? {} : { driveExplorer: flag }),
+        },
+        settings: {},
       },
-      settings: {},
-    },
-  };
-  const list = vi.fn();
-  function View() {
-    const { driveExplorer } = useMailCapabilities(
-      EnvironmentId.make(`explorer-${source}-${String(flag)}`),
-    );
-    return (
-      <button
-        disabled={!driveExplorer}
-        onClick={() => {
-          if (driveExplorer) list();
-        }}
-      >
-        Browse
-      </button>
-    );
-  }
-  await act(() => {
-    renderer = create(<View />);
-  });
-  const button = renderer!.root.findByType("button");
-  expect(button.props.disabled).toBe(!expected);
-  await act(() => button.props.onClick());
-  expect(list).toHaveBeenCalledTimes(expected ? 1 : 0);
-});
+    };
+    function View() {
+      return (
+        <span>
+          {String(
+            useMailCapabilities(EnvironmentId.make(`explorer-${source}-${String(flag)}`))
+              .driveExplorer,
+          )}
+        </span>
+      );
+    }
+    await act(() => {
+      renderer = create(<View />);
+    });
+    expect(renderer!.root.findByType("span").children.join("")).toBe(String(expected));
+  },
+);
 it.each([
   ["live", undefined, false],
   ["live", false, false],
