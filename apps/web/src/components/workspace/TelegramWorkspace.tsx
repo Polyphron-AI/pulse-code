@@ -4,13 +4,18 @@ import {
   telegramResourceId,
   type TelegramMessage,
   type WorkspaceItemRef,
+  type WorkspaceLinkEndpoint,
   workspaceItemKey,
 } from "@t3tools/contracts";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { ConversationNavigation } from "./ConversationNavigation";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { displayDay, formatDay, formatEventTime } from "@t3tools/client-runtime/calendar/dates";
+import {
+  CommunicationStream,
+  CommunicationFileOpener,
+  type CommunicationRow,
+} from "./ChatCommunicationsWorkspace";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import { telegram } from "../../state/telegram";
 import { useEnvironmentQuery } from "../../state/query";
@@ -103,6 +108,23 @@ function TelegramReader({
     : undefined;
   const item =
     requested && connection ? refFor(connection.id, requested.chatId, requested.messageId) : null;
+  const [anchor, setAnchor] = useState<{ scope: string; endpoint: WorkspaceLinkEndpoint } | null>(
+    null,
+  );
+  const anchorScope = `${environmentId}/${connection?.id}/${requested?.chatId}/${requested?.messageId ?? ""}`;
+  const selectedEndpoint =
+    anchor?.scope === anchorScope
+      ? anchor.endpoint
+      : item
+        ? {
+            ref: item,
+            title: requested?.messageId
+              ? `Telegram message ${requested.messageId}`
+              : (chat?.title ?? "Telegram chat"),
+          }
+        : null;
+  const selectAnchor = (endpoint: WorkspaceLinkEndpoint) =>
+    setAnchor({ scope: anchorScope, endpoint });
   const title = requested?.messageId
     ? `Telegram message ${requested.messageId}`
     : (chat?.title ?? "Telegram chat");
@@ -266,9 +288,9 @@ function TelegramReader({
           ) : null}
         </div>
       }
-      resources={<WorkspaceProjectResources selectedItem={item ? { ref: item, title } : null} />}
+      resources={<WorkspaceProjectResources selectedItem={selectedEndpoint} />}
       linkedContext={{
-        item: item ? { ref: item, title } : null,
+        item: selectedEndpoint,
         render: (target) => (
           <WorkspaceLinkedContext environmentId={environmentId} item={target} onOpen={openItem} />
         ),
@@ -277,7 +299,7 @@ function TelegramReader({
       {!requested || !item ? (
         <MailNotice>Select a paired chat to read messages received by this bot.</MailNotice>
       ) : (
-        <div>
+        <div className="flex min-h-0 flex-1 flex-col">
           <header className="space-y-3 border-b border-border p-4">
             <p className="text-xs text-muted-foreground">
               Received messages only. Telegram bot replies are not enabled. Media contents are not
@@ -309,7 +331,7 @@ function TelegramReader({
             <WorkspaceItemActions
               shortcuts
               environmentId={environmentId}
-              item={{ ref: item, title }}
+              item={selectedEndpoint ?? { ref: item, title }}
             />
             {chat?.active ? (
               <RemoveChat
@@ -329,6 +351,7 @@ function TelegramReader({
               connectionId={connection.id}
               chatId={requested.chatId}
               messageId={requested.messageId}
+              onAnchor={selectAnchor}
             />
           ) : (
             <TelegramMessages
@@ -337,6 +360,7 @@ function TelegramReader({
               connectionId={connection.id}
               chatId={requested.chatId}
               onSelect={(messageId) => select(requested.chatId, messageId)}
+              onAnchor={selectAnchor}
             />
           )}
         </div>
@@ -373,33 +397,41 @@ function RemoveChat(props: { environmentId: EnvironmentId; connectionId: string;
     </div>
   );
 }
-function MessageBody({ message, timeZone }: { message: TelegramMessage; timeZone: string }) {
-  return (
-    <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">
-        {message.sender} /{" "}
-        {formatDay(displayDay(new Date(message.sentAt).toISOString(), timeZone), {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })}
-        , {formatEventTime(message.sentAt, timeZone)}
-        {message.edited ? " (edited)" : ""}
-      </p>
-      <pre className="whitespace-pre-wrap break-words font-sans text-sm">{message.text}</pre>
-      {message.truncated ? (
-        <p className="text-xs text-muted-foreground">This stored message is truncated.</p>
-      ) : null}
-    </div>
-  );
+function telegramRow(message: TelegramMessage): CommunicationRow {
+  return {
+    message: {
+      id: message.messageId,
+      accountId: message.connectionId,
+      conversationId: message.chatId,
+      author: message.sender,
+      date: new Date(message.sentAt).toISOString(),
+      text: message.text,
+    },
+    endpoint: {
+      ref: refFor(message.connectionId, message.chatId, message.messageId),
+      title: `${message.sender}: ${message.text.slice(0, 100)}`,
+    },
+    ...(message.truncated || message.edited
+      ? {
+          notice: [
+            message.edited ? "Edited message." : "",
+            message.truncated ? "This stored message is truncated." : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        }
+      : {}),
+    replyUnavailable: "Telegram bot replies are not enabled.",
+  };
 }
 function TelegramMessageDetail(props: {
   environmentId: EnvironmentId;
   connectionId: string;
   chatId: string;
   messageId: string;
+  onAnchor: (endpoint: WorkspaceLinkEndpoint) => void;
 }) {
-  const { environmentId, ...input } = props;
+  const { environmentId, onAnchor, ...input } = props;
   const timeZone =
     useEnvironmentSettings(environmentId, (settings) => settings.workspaceDisplayTimeZone) ?? "UTC";
   const result = useEnvironmentQuery(telegram.message({ environmentId, input }));
@@ -411,97 +443,121 @@ function TelegramMessageDetail(props: {
       <MailNotice>Loading message...</MailNotice>
     )
   ) : (
-    <div className="p-4">
-      <MessageBody message={result.data} timeZone={timeZone} />
-    </div>
+    <CommunicationFileOpener environmentId={environmentId} source={undefined} onSelect={onAnchor}>
+      {(onOpenFile) => (
+        <CommunicationStream
+          environmentId={environmentId}
+          rows={[telegramRow(result.data!)]}
+          timeZone={timeZone}
+          onOpenFile={onOpenFile}
+        />
+      )}
+    </CommunicationFileOpener>
   );
 }
+type TelegramPageData = {
+  readonly messages: readonly TelegramMessage[];
+  readonly nextCursor?: string;
+};
 function TelegramMessages(props: {
   environmentId: EnvironmentId;
   connectionId: string;
   chatId: string;
   onSelect: (messageId: string) => void;
+  onAnchor: (endpoint: WorkspaceLinkEndpoint) => void;
 }) {
-  const [cursors, setCursors] = useState<ReadonlyArray<string | undefined>>([undefined]);
+  const timeZone =
+    useEnvironmentSettings(props.environmentId, (settings) => settings.workspaceDisplayTimeZone) ??
+    "UTC";
+  const [cursors, setCursors] = useState<readonly (string | undefined)[]>([undefined]);
+  const [pages, setPages] = useState<ReadonlyMap<string | undefined, TelegramPageData>>(
+    () => new Map(),
+  );
+  const onPage = useCallback((cursor: string | undefined, data: TelegramPageData) => {
+    setPages((previous) => {
+      const bounded = { ...data, messages: data.messages.slice(0, 100) };
+      if (JSON.stringify(previous.get(cursor)) === JSON.stringify(bounded)) return previous;
+      return new Map(previous).set(cursor, bounded);
+    });
+  }, []);
+  const latest = pages.get(cursors.at(-1));
+  const rows = useMemo(() => {
+    const messages = new Map<string, TelegramMessage>();
+    // Newer stored pages take precedence across overlapping pages.
+    for (const page of [...pages.values()].toReversed())
+      for (const message of page.messages) {
+        if (message.connectionId === props.connectionId && message.chatId === props.chatId)
+          messages.set(message.messageId, message);
+      }
+    return [...messages.values()]
+      .sort((a, b) => a.sentAt - b.sentAt || Number(a.messageId) - Number(b.messageId))
+      .map(telegramRow);
+  }, [pages, props.connectionId, props.chatId]);
+  const next = latest?.nextCursor;
+  const more = !latest
+    ? cursors.at(-1)
+    : next && cursors.length < 10 && !cursors.includes(next)
+      ? next
+      : undefined;
   return (
-    <div>
-      {cursors.map((cursor, index) => (
-        <TelegramPage
-          key={cursor ?? "first"}
-          {...props}
-          cursor={cursor}
-          last={index === cursors.length - 1}
-          onMore={(next) =>
-            setCursors((current) => (current.includes(next) ? current : [...current, next]))
-          }
-        />
+    <>
+      {cursors.map((cursor) => (
+        <TelegramPage key={cursor ?? "first"} {...props} cursor={cursor} onPage={onPage} />
       ))}
-    </div>
+      <CommunicationFileOpener
+        environmentId={props.environmentId}
+        source={undefined}
+        onSelect={props.onAnchor}
+      >
+        {(onOpenFile) => (
+          <CommunicationStream
+            environmentId={props.environmentId}
+            rows={rows}
+            timeZone={timeZone}
+            onOpenFile={onOpenFile}
+            onSelect={(endpoint) => {
+              if (endpoint.ref.type === "provider-resource") {
+                const resource = parseTelegramResourceId(endpoint.ref.resourceId);
+                if (resource?.messageId) props.onSelect(resource.messageId);
+              }
+            }}
+            busy={!latest}
+            onLoadOlder={more ? () => setCursors((current) => [...current, more]) : undefined}
+          >
+            {pages.size > 0 && !rows.length ? (
+              <MailNotice>
+                No messages received yet. Bots cannot load older Telegram history.
+              </MailNotice>
+            ) : null}
+            {cursors.length >= 10 ? (
+              <MailNotice>
+                Showing up to 1,000 stored received messages. Bots cannot import older Telegram
+                history.
+              </MailNotice>
+            ) : null}
+          </CommunicationStream>
+        )}
+      </CommunicationFileOpener>
+    </>
   );
 }
 function TelegramPage(props: {
   environmentId: EnvironmentId;
   connectionId: string;
   chatId: string;
-  onSelect: (messageId: string) => void;
   cursor: string | undefined;
-  last: boolean;
-  onMore: (cursor: string) => void;
+  onPage: (cursor: string | undefined, data: TelegramPageData) => void;
 }) {
-  const timeZone =
-    useEnvironmentSettings(props.environmentId, (settings) => settings.workspaceDisplayTimeZone) ??
-    "UTC";
+  const { environmentId, connectionId, chatId, cursor, onPage } = props;
   const result = useEnvironmentQuery(
     telegram.messages({
-      environmentId: props.environmentId,
-      input: {
-        connectionId: props.connectionId,
-        chatId: props.chatId,
-        ...(props.cursor ? { cursor: props.cursor } : {}),
-      },
+      environmentId,
+      input: { connectionId, chatId, ...(cursor ? { cursor } : {}) },
     }),
   );
+  useEffect(() => {
+    if (result.data && !result.error) onPage(cursor, result.data);
+  }, [result.data, result.error, cursor, onPage]);
   if (result.error) return <MailError message={result.error} onRetry={result.refresh} />;
-  if (result.data === null)
-    return result.error ? (
-      <MailError message={result.error} onRetry={result.refresh} />
-    ) : (
-      <MailNotice>Loading messages...</MailNotice>
-    );
-  return (
-    <div>
-      {result.data.messages.length === 0 ? (
-        <MailNotice>No messages received yet. Bots cannot load older Telegram history.</MailNotice>
-      ) : (
-        result.data.messages.map((message) => (
-          <div key={message.messageId} className="border-b border-border p-4">
-            <WorkspaceItemMenu
-              environmentId={props.environmentId}
-              item={{
-                ref: refFor(props.connectionId, props.chatId, message.messageId),
-                title: `${message.sender}: ${message.text.slice(0, 100)}`,
-              }}
-            >
-              <div className="min-w-0 flex-1">
-                <MessageBody message={message} timeZone={timeZone} />
-                <Button size="sm" variant="ghost" onClick={() => props.onSelect(message.messageId)}>
-                  Open message
-                </Button>
-              </div>
-            </WorkspaceItemMenu>
-          </div>
-        ))
-      )}
-      {props.last && result.data.nextCursor ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="m-3"
-          onClick={() => props.onMore(result.data!.nextCursor!)}
-        >
-          Older received messages
-        </Button>
-      ) : null}
-    </div>
-  );
+  return result.data === null ? <MailNotice>Loading received messages...</MailNotice> : null;
 }

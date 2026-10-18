@@ -102,7 +102,15 @@ export function mergeChatMessages(
   );
   for (const message of incoming)
     rows.set(JSON.stringify([message.accountId, message.conversationId, message.id]), message);
-  return [...rows.values()].sort((left, right) => Date.parse(left.date) - Date.parse(right.date));
+  return [...rows.values()].sort((left, right) => {
+    const date = Date.parse(left.date) - Date.parse(right.date);
+    if (Number.isFinite(date) && date !== 0) return date;
+    return (
+      compareText(left.accountId, right.accountId) ||
+      compareText(left.conversationId, right.conversationId) ||
+      compareMessageIds(left.id, right.id)
+    );
+  });
 }
 
 export function createRequestQueue<Q, R>(invoke: (request: Q) => Promise<R>) {
@@ -211,4 +219,20 @@ export function legacySlackNotice(
   return provider === "slack" && resource.messageId && !resource.replyRootId
     ? "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source."
     : undefined;
+}
+
+const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
+/** Native timestamps and snowflakes can exceed Date and Number precision. */
+function compareMessageIds(left: string, right: string) {
+  if (/^\d+(?:\.\d+)?$/.test(left) && /^\d+(?:\.\d+)?$/.test(right)) {
+    const [leftWhole = "0", leftFraction = ""] = left.split(".");
+    const [rightWhole = "0", rightFraction = ""] = right.split(".");
+    const a = BigInt(leftWhole);
+    const b = BigInt(rightWhole);
+    if (a !== b) return a < b ? -1 : 1;
+    const width = Math.max(leftFraction.length, rightFraction.length);
+    const fraction = compareText(leftFraction.padEnd(width, "0"), rightFraction.padEnd(width, "0"));
+    if (fraction) return fraction;
+  }
+  return compareText(left, right);
 }

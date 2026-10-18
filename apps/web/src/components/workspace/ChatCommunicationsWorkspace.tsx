@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
   useMemo,
@@ -13,6 +14,8 @@ import {
   parseChatResourceId,
   chatResourceId,
   workspaceItemKey,
+  workspaceItemFromUrl,
+  type WorkspaceItemRef,
   type WorkspaceLinkEndpoint,
   type EnvironmentId,
   type ChatAccount,
@@ -20,7 +23,7 @@ import {
   type ChatMessage,
   type ProjectId,
 } from "@t3tools/contracts";
-import { BookmarkIcon, RefreshCwIcon, SendIcon, XIcon } from "lucide-react";
+import { BookmarkIcon, FileTextIcon, RefreshCwIcon, SendIcon, XIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { randomUUID } from "../../lib/utils";
@@ -33,6 +36,7 @@ import {
   mergeChatMessages,
   sendAttempt,
   conversationGroups,
+  conversationInitials,
   conversationSubtitle,
   legacySlackNotice,
   type ConversationRow,
@@ -40,10 +44,11 @@ import {
   type SavedChatReference,
 } from "./communicationsChat";
 import { ConversationNavigation } from "./ConversationNavigation";
-import { ConversationMessage } from "./ConversationMessage";
+import { useOpenFiles, type OpenFilesInput } from "./openFiles";
+import { useWorkspaceResources } from "./workspaceResourceState";
 import type { ChatSource } from "./CommunicationsWorkspace";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { displayDay, formatDay } from "@t3tools/client-runtime/calendar/dates";
+import { displayDay, formatDay, formatEventTime } from "@t3tools/client-runtime/calendar/dates";
 import { useConnectedEnvironmentIds } from "../../state/environments";
 import { useProjects } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
@@ -81,25 +86,35 @@ function ChatItemRow({
   endpoint,
   children,
   onSelect,
+  onMenu,
 }: {
   environmentId: EnvironmentId | null;
   endpoint?: WorkspaceLinkEndpoint | undefined;
   children: ReactNode;
   onSelect?: (() => void) | undefined;
+  onMenu?: (() => void) | undefined;
 }) {
   return (
     <div
       className="group/chatrow relative min-w-0"
-      onContextMenuCapture={onSelect}
+      onContextMenuCapture={() => {
+        onMenu?.();
+        onSelect?.();
+      }}
       onKeyDownCapture={(event) => {
-        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) onSelect?.();
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+          onMenu?.();
+          onSelect?.();
+        }
       }}
       onClickCapture={(event) => {
         if (
           event.target instanceof Element &&
           event.target.closest("[data-workspace-menu-trigger]")
-        )
+        ) {
+          onMenu?.();
           onSelect?.();
+        }
       }}
     >
       {endpoint && environmentId ? (
@@ -116,6 +131,337 @@ function ChatItemRow({
     </div>
   );
 }
+export interface CommunicationRow {
+  readonly message: ChatMessage;
+  readonly endpoint?: WorkspaceLinkEndpoint | undefined;
+  readonly links?: readonly {
+    readonly url: string;
+    readonly title?: string;
+    readonly path?: string;
+    readonly unavailableReason?: string;
+  }[];
+  readonly notice?: string;
+  readonly replyUnavailable?: string;
+}
+export interface CommunicationFile {
+  readonly ref: Extract<WorkspaceItemRef, { type: "file" }>;
+  readonly folder: boolean;
+  readonly title?: string | undefined;
+  readonly path?: string | undefined;
+  readonly unavailableReason?: string | undefined;
+}
+function messageFiles(row: CommunicationRow): readonly CommunicationFile[] {
+  const links = [
+    ...(row.links ?? []),
+    ...[...row.message.text.matchAll(/https?:\/\/[^\s<>"|]+/g)].map(([url]) => ({
+      url: url.replace(/[.,;!?)]+$/, ""),
+    })),
+  ];
+  const files = new Map<string, CommunicationFile>();
+  for (const link of links) {
+    const ref = workspaceItemFromUrl(link.url);
+    if (ref?.type !== "file" || new URL(link.url).protocol !== "https:") continue;
+    const key = workspaceItemKey(ref);
+    if (files.has(key)) continue;
+    files.set(key, {
+      ref,
+      folder: /^\/drive(?:\/u\/\d+)?\/folders\//.test(new URL(link.url).pathname),
+      ...link,
+    });
+  }
+  return [...files.values()];
+}
+/** Inert loaded content shared by desktop chat and received Telegram messages. */
+export function CommunicationStream({
+  environmentId,
+  rows,
+  timeZone,
+  selectedKey,
+  onSelect,
+  onOpenReply,
+  onOpenFile,
+  actions,
+  onLoadOlder,
+  busy = false,
+  children,
+}: {
+  readonly environmentId: EnvironmentId | null;
+  readonly rows: readonly CommunicationRow[];
+  readonly timeZone: string;
+  readonly selectedKey?: string | undefined;
+  readonly onSelect?: ((endpoint: WorkspaceLinkEndpoint) => void) | undefined;
+  readonly onOpenReply?: ((endpoint: WorkspaceLinkEndpoint) => void) | undefined;
+  readonly onOpenFile?:
+    | ((file: CommunicationFile, source: WorkspaceLinkEndpoint) => void)
+    | undefined;
+  readonly actions?: ((row: CommunicationRow) => ReactNode) | undefined;
+  readonly onLoadOlder?: (() => void) | undefined;
+  readonly busy?: boolean;
+  readonly children?: ReactNode;
+}) {
+  const scroll = useRef<HTMLDivElement>(null);
+  // Retain one captured menu through a channel change until the next menu replaces it.
+  const [heldMenu, setHeldMenu] = useState<{
+    environmentId: EnvironmentId | null;
+    row: CommunicationRow;
+  } | null>(null);
+  const rowKey = useCallback(
+    (row: CommunicationRow) =>
+      JSON.stringify([
+        environmentId,
+        row.message.accountId,
+        row.message.conversationId,
+        row.message.id,
+      ]),
+    [environmentId],
+  );
+  const held = heldMenu?.environmentId === environmentId ? heldMenu.row : undefined;
+  const rendered = useMemo(
+    () => (held && !rows.some((row) => rowKey(row) === rowKey(held)) ? [...rows, held] : rows),
+    [held, rows, rowKey],
+  );
+  const fileCards = useMemo(
+    () => new Map(rendered.map((row) => [rowKey(row), messageFiles(row)])),
+    [rendered, rowKey],
+  );
+  const anchor = useRef<{ node: HTMLElement; offset: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!rows.length) {
+      anchor.current = null;
+      return;
+    }
+    const held = anchor.current;
+    const container = scroll.current;
+    if (!held || !container || !held.node.isConnected) return;
+    container.scrollTop +=
+      held.node.getBoundingClientRect().top - container.getBoundingClientRect().top - held.offset;
+    anchor.current = null;
+  }, [rows]);
+  useEffect(() => {
+    if (!busy) anchor.current = null;
+  }, [busy]);
+  return (
+    <div
+      ref={scroll}
+      data-communications-stream=""
+      className="min-h-0 flex-1 overflow-y-auto pb-4"
+      style={{ overflowAnchor: "none" }}
+    >
+      {onLoadOlder ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            const container = scroll.current;
+            if (container) {
+              const top = container.getBoundingClientRect().top;
+              const node = [...container.querySelectorAll<HTMLElement>("article")].find(
+                (node) => !node.closest("[hidden]") && node.getBoundingClientRect().bottom > top,
+              );
+              if (node) anchor.current = { node, offset: node.getBoundingClientRect().top - top };
+            }
+            onLoadOlder();
+          }}
+        >
+          Load older
+        </Button>
+      ) : null}
+      {rendered.map((row, index) => {
+        const { message, endpoint } = row;
+        const key = rowKey(row);
+        const selected = endpoint && workspaceItemKey(endpoint.ref) === selectedKey;
+        const files = fileCards.get(key) ?? [];
+        const content = (
+          <article
+            data-communications-message=""
+            aria-label={`Message from ${message.author || "Unknown author"}`}
+            tabIndex={0}
+            aria-current={selected ? "true" : undefined}
+            style={{
+              gap: 9,
+              paddingTop:
+                index === 0 ? 16 : fileCards.get(rowKey(rendered[index - 1]!))?.length ? 15 : 13,
+            }}
+            onClick={() => {
+              if (endpoint) onSelect?.(endpoint);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && event.target === event.currentTarget && endpoint)
+                onSelect?.(endpoint);
+            }}
+          >
+            <span aria-hidden="true" data-communications-avatar="">
+              {conversationInitials(message.author)}
+            </span>
+            <div data-communications-message-copy="">
+              <div data-communications-author="">
+                <strong>{message.author || "Unknown author"}</strong>
+                <time dateTime={message.date}>{formatEventTime(message.date, timeZone)}</time>
+              </div>
+              <p>{message.text || "Open the source app to view this media."}</p>
+              {row.notice ? <p>{row.notice}</p> : null}
+              {files.map((file) => (
+                <div key={workspaceItemKey(file.ref)}>
+                  <button
+                    type="button"
+                    data-communications-document=""
+                    style={{ marginTop: 7 }}
+                    aria-label={`Open ${file.title || "Drive file"}`}
+                    disabled={!endpoint || !onOpenFile || !!file.unavailableReason}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (endpoint) onOpenFile?.(file, endpoint);
+                    }}
+                  >
+                    <FileTextIcon aria-hidden="true" />
+                    <span className="min-w-0">
+                      <strong className="truncate">{file.title || "Drive file"}</strong>
+                      <small className="truncate">{file.path || "Google Drive"}</small>
+                    </span>
+                  </button>
+                  {file.unavailableReason ? (
+                    <p role="status" className="text-xs text-muted-foreground">
+                      {file.unavailableReason}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+              {onOpenReply && endpoint ? (
+                <button
+                  type="button"
+                  data-communications-reply=""
+                  className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenReply(endpoint);
+                  }}
+                >
+                  {message.replyCount === undefined || message.replyCount === 0
+                    ? "Reply"
+                    : `${message.replyCount} ${message.replyCount === 1 ? "reply" : "replies"}`}
+                </button>
+              ) : null}
+              {row.replyUnavailable ? (
+                <p className="text-xs text-muted-foreground">{row.replyUnavailable}</p>
+              ) : null}
+              {actions?.(row)}
+            </div>
+          </article>
+        );
+        return (
+          <div key={key} hidden={index >= rows.length}>
+            {index === 0 ||
+            displayDay(message.date, timeZone) !==
+              displayDay(rows[index - 1]!.message.date, timeZone) ? (
+              <div data-communications-date="">
+                {formatDay(displayDay(message.date, timeZone), {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
+              </div>
+            ) : null}
+            <ChatItemRow
+              environmentId={environmentId}
+              endpoint={endpoint}
+              onMenu={() => setHeldMenu({ environmentId, row })}
+              onSelect={() => {
+                if (endpoint) onSelect?.(endpoint);
+              }}
+            >
+              {content}
+            </ChatItemRow>
+          </div>
+        );
+      })}
+      {children}
+    </div>
+  );
+}
+
+/** Uses the shell's current project; opening content never binds an account or creates a link. */
+export function CommunicationFileOpener({
+  environmentId,
+  source,
+  onSelect,
+  children,
+}: {
+  environmentId: EnvironmentId | null;
+  source: WorkspaceLinkEndpoint | undefined;
+  onSelect: (endpoint: WorkspaceLinkEndpoint) => void;
+  children: (open: (file: CommunicationFile, endpoint: WorkspaceLinkEndpoint) => void) => ReactNode;
+}) {
+  const resources = useWorkspaceResources();
+  const openFiles = useOpenFiles();
+  const projects = useProjects().filter((project) => project.environmentId === environmentId);
+  const [pending, setPending] = useState<{
+    file: CommunicationFile;
+    endpoint: WorkspaceLinkEndpoint;
+    environmentId: EnvironmentId;
+  } | null>(null);
+  const [error, setError] = useState<string>();
+  const pendingHere = pending?.environmentId === environmentId ? pending : null;
+  function open(file: CommunicationFile, endpoint: WorkspaceLinkEndpoint, projectId: ProjectId) {
+    if (!environmentId || resources.environmentId !== environmentId) return;
+    if (!projects.some((project) => project.id === projectId)) {
+      setError("This resource project is unavailable. Choose another project in Resources.");
+      return;
+    }
+    onSelect(endpoint);
+    if (file.folder) {
+      const input: OpenFilesInput = { environmentId, projectId, folderId: file.ref.fileId };
+      openFiles(input);
+    } else resources.openResource({ tab: "docs", projectId, request: file.ref });
+    setPending(null);
+    setError(undefined);
+  }
+  return (
+    <>
+      {children((file, endpoint) => {
+        if (!environmentId || resources.environmentId !== environmentId) {
+          setError("Choose an environment to open this file.");
+          return;
+        }
+        onSelect(endpoint);
+        if (resources.projectId) open(file, endpoint, resources.projectId);
+        else setPending({ file, endpoint, environmentId });
+      })}
+      {pendingHere ? (
+        <div role="dialog" aria-label="Choose file resource project" className="p-3 text-xs">
+          <p>Choose a resource project to open this file.</p>
+          {projects.map((project) => (
+            <Button
+              key={project.id}
+              size="sm"
+              variant="ghost"
+              onClick={() => open(pendingHere.file, pendingHere.endpoint, project.id)}
+            >
+              {project.title}
+            </Button>
+          ))}
+          {!projects.length ? <p>No projects are available in this environment.</p> : null}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setPending(null);
+              if (source) onSelect(source);
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      {error ? (
+        <p role="status" className="p-3 text-xs">
+          {error}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 function ChatComposer({
   account,
   conversation,
@@ -568,6 +914,7 @@ function ChatWorkspace({
     [navigate, search, environmentId],
   );
   async function loadMessages(selected: ChatConversation, cursor?: string) {
+    if (busy || (cursor && messages.length >= 1000)) return;
     const current = generation.current;
     const result = await run({
       operation: "messages.list",
@@ -585,20 +932,31 @@ function ChatWorkspace({
     setMessages((previous) =>
       mergeChatMessages(
         cursor ? previous : [],
-        (result.messages ?? []).filter(
-          (message) => message.accountId === account.id && message.conversationId === selected.id,
-        ),
-      ),
+        (result.messages ?? [])
+          .filter(
+            (message) => message.accountId === account.id && message.conversationId === selected.id,
+          )
+          .slice(0, 100),
+      ).slice(-1000),
     );
-    setMessageCursor(result.nextCursor);
+    setMessageCursor(
+      cursor && messages.length + (result.messages?.length ?? 0) >= 1000
+        ? undefined
+        : result.nextCursor === cursor
+          ? undefined
+          : result.nextCursor,
+    );
   }
   async function loadThread(message: ChatMessage, cursor?: string) {
-    if (!conversation || busy) return;
+    if (!conversation || busy || (cursor && threadMessages.length >= 1000)) return;
     const current = ++threadGeneration.current;
     const parent = generation.current;
     const threadId = message.threadId ?? message.id;
     setThread(message);
-    if (!cursor) setThreadMessages([]);
+    if (!cursor) {
+      setThreadMessages([]);
+      setThreadCursor(undefined);
+    }
     const result = await run({
       operation: "messages.list",
       accountId: account.id,
@@ -614,9 +972,24 @@ function ChatWorkspace({
     )
       return;
     setThreadMessages((previous) =>
-      mergeChatMessages(cursor ? previous : [], result.messages ?? []),
+      mergeChatMessages(
+        cursor ? previous : [],
+        (result.messages ?? [])
+          .filter(
+            (row) =>
+              row.accountId === account.id &&
+              row.conversationId === (account.provider === "discord" ? threadId : conversation.id),
+          )
+          .slice(0, 100),
+      ).slice(-1000),
     );
-    setThreadCursor(result.nextCursor);
+    setThreadCursor(
+      cursor && threadMessages.length + (result.messages?.length ?? 0) >= 1000
+        ? undefined
+        : result.nextCursor === cursor
+          ? undefined
+          : result.nextCursor,
+    );
   }
   function reference(message: ChatMessage, endpoint?: WorkspaceLinkEndpoint) {
     return {
@@ -713,6 +1086,21 @@ function ChatWorkspace({
       })),
     [account, threadConversation, threadMessages],
   );
+  const replyRows = useMemo(() => {
+    if (!thread || !conversation) return [];
+    const identity = (message: ChatMessage) =>
+      JSON.stringify([message.accountId, message.conversationId, message.id]);
+    const rows = new Map(
+      [
+        { message: thread, endpoint: chatEndpoint(account, conversation, thread) },
+        ...threadRows,
+      ].map((row) => [identity(row.message), row]),
+    );
+    return mergeChatMessages(
+      [],
+      [...rows.values()].map((row) => row.message),
+    ).map((message) => rows.get(identity(message))!);
+  }, [thread, conversation, account, threadRows]);
   function acknowledge(message: ChatMessage, inThread = false) {
     if (message.conversationId !== (inThread ? threadConversation?.id : destination.current))
       return;
@@ -809,61 +1197,39 @@ function ChatWorkspace({
     ),
     [environmentId],
   );
-  const selectedResource =
-    selectedMessage?.ref.type === "provider-resource"
-      ? parseChatResourceId(selectedMessage.ref.resourceId)
-      : undefined;
-  function renderMessage(
-    { message, endpoint }: { message: ChatMessage; endpoint?: WorkspaceLinkEndpoint | undefined },
-    inThread = false,
-  ) {
-    const selected =
-      selectedResource?.connectionId === message.accountId &&
-      selectedResource.conversationId === message.conversationId &&
-      selectedResource.messageId === message.id;
+  function messageActions({ message, endpoint }: CommunicationRow) {
+    const isSaved = savedMessage(message, endpoint);
     return (
-      <ChatItemRow
-        key={message.id}
-        environmentId={environmentId}
-        endpoint={endpoint}
-        onSelect={() => setSelectedMessage(endpoint)}
-      >
-        <ConversationMessage
-          message={message}
-          timeZone={timeZone}
-          selected={selected}
-          actions={
-            <Button
-              size="icon-xs"
-              variant={savedMessage(message, endpoint) ? "secondary" : "ghost-muted"}
-              aria-label={savedMessage(message, endpoint) ? "Remove from Later" : "Save for Later"}
-              aria-pressed={savedMessage(message, endpoint)}
-              disabled={!endpoint || !environmentId || !writable}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (endpoint) toggleSaved(message, endpoint);
-              }}
-            >
-              <BookmarkIcon />
-            </Button>
-          }
-          onSelect={() => {
-            if (endpoint) {
-              setSelectedMessage(endpoint);
-              selectEndpoint(endpoint);
-            }
+      <span className="absolute right-8 top-1 opacity-0 group-hover/chatrow:opacity-100 group-focus-within/chatrow:opacity-100 pointer-coarse:opacity-100">
+        <Button
+          size="icon-xs"
+          variant={isSaved ? "secondary" : "ghost-muted"}
+          aria-label={isSaved ? "Remove from Later" : "Save for Later"}
+          aria-pressed={isSaved}
+          disabled={!endpoint || !environmentId || !writable}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (endpoint) toggleSaved(message, endpoint);
           }}
-          onReply={
-            !inThread && (account.provider === "slack" || message.threadId || conversation?.canSend)
-              ? () => {
-                  if (account.provider === "slack" || message.threadId) void loadThread(message);
-                  else setReplyTo(message);
-                }
-              : undefined
-          }
-        />
-      </ChatItemRow>
+        >
+          <BookmarkIcon />
+        </Button>
+      </span>
     );
+  }
+  function openReply(endpoint: WorkspaceLinkEndpoint) {
+    if (endpoint.ref.type !== "provider-resource" || !conversation) return;
+    const resource = parseChatResourceId(endpoint.ref.resourceId);
+    const message = messages.find(
+      (row) =>
+        row.accountId === resource?.connectionId &&
+        row.conversationId === resource.conversationId &&
+        row.id === resource.messageId,
+    );
+    if (!message) return;
+    setSelectedMessage(endpoint);
+    if (account.provider === "slack" || message.threadId) void loadThread(message);
+    else setReplyTo(message);
   }
   const listReasons = environmentId
     ? [...new Set(conversations.map((item) => chatItem(account, item).reason).filter(Boolean))]
@@ -886,9 +1252,16 @@ function ChatWorkspace({
         space="communications"
         layout="split"
         header={header}
-        resources={<WorkspaceProjectResources />}
+        resources={<WorkspaceProjectResources selectedItem={selectedEndpoint ?? null} />}
         selected={conversation !== undefined && search.view !== "later" && search.view !== "unread"}
-        onBack={backToList}
+        onBack={
+          thread
+            ? () => {
+                threadGeneration.current++;
+                setThread(undefined);
+              }
+            : backToList
+        }
         {...(environmentId
           ? {
               linkedContext: {
@@ -1019,7 +1392,11 @@ function ChatWorkspace({
         }
       >
         <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <section aria-label="Chat history" data-communications-history="">
+          <section
+            aria-label="Chat history"
+            data-communications-history=""
+            style={{ display: thread ? "none" : undefined }}
+          >
             <div data-communications-center-actions="" data-selected={Boolean(selectedMessage)}>
               <Button
                 size="icon-sm"
@@ -1061,49 +1438,50 @@ function ChatWorkspace({
                 Refresh failed. Showing previously loaded messages. {error}
               </p>
             ) : null}
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {!conversation ? (
-                <p className="p-6 text-sm text-muted-foreground">
-                  Choose a channel or direct message to load its history.
-                </p>
-              ) : (
-                <>
-                  {messageCursor && search.view !== "later" ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => void loadMessages(conversation, messageCursor)}
-                    >
-                      Load earlier messages
-                    </Button>
-                  ) : null}
-                  {visibleMessages.map((row, index) => (
-                    <div key={row.message.id}>
-                      {index === 0 ||
-                      displayDay(row.message.date, timeZone) !==
-                        displayDay(visibleMessages[index - 1]!.message.date, timeZone) ? (
-                        <div data-communications-date="">
-                          {formatDay(displayDay(row.message.date, timeZone), {
-                            weekday: "long",
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })}
-                        </div>
-                      ) : null}
-                      {renderMessage(row)}
-                    </div>
-                  ))}
-                  {!visibleMessages.length && !busy ? (
+            <CommunicationFileOpener
+              environmentId={environmentId}
+              source={selectedEndpoint}
+              onSelect={setSelectedMessage}
+            >
+              {(onOpenFile) => (
+                <CommunicationStream
+                  environmentId={environmentId}
+                  rows={visibleMessages}
+                  timeZone={timeZone}
+                  selectedKey={selectedMessage ? workspaceItemKey(selectedMessage.ref) : undefined}
+                  onSelect={(endpoint) => {
+                    setSelectedMessage(endpoint);
+                  }}
+                  onOpenReply={openReply}
+                  onOpenFile={onOpenFile}
+                  actions={messageActions}
+                  busy={busy}
+                  onLoadOlder={
+                    conversation && messageCursor && search.view !== "later"
+                      ? () => {
+                          void loadMessages(conversation, messageCursor);
+                        }
+                      : undefined
+                  }
+                >
+                  {!conversation ? (
+                    <p className="p-6 text-sm text-muted-foreground">
+                      Choose a channel or direct message to load its history.
+                    </p>
+                  ) : !visibleMessages.length && !busy ? (
                     <p className="p-6 text-sm text-muted-foreground">
                       No messages in the loaded history for this view.
                     </p>
                   ) : null}
+                  {messages.length >= 1000 ? (
+                    <p className="p-3 text-xs">
+                      Showing 1,000 loaded messages. Open the source app for more history.
+                    </p>
+                  ) : null}
                   <div ref={historyEnd} />
-                </>
+                </CommunicationStream>
               )}
-            </div>
+            </CommunicationFileOpener>
             {conversation && search.view !== "later" ? (
               conversation.canSend && writable ? (
                 <ChatComposer
@@ -1132,14 +1510,14 @@ function ChatWorkspace({
           {thread && conversation ? (
             <aside
               aria-label="Message thread"
-              className="absolute inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-border bg-background xl:static xl:w-80"
+              className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
             >
               <header className="flex items-center justify-between p-3">
-                <h2>Thread</h2>
+                <h2>Replies</h2>
                 <Button
                   size="icon-sm"
                   variant="ghost"
-                  aria-label="Close thread"
+                  aria-label="Back to conversation"
                   onClick={() => {
                     threadGeneration.current++;
                     setThread(undefined);
@@ -1156,23 +1534,47 @@ function ChatWorkspace({
               >
                 Refresh thread
               </Button>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <p className="p-4 text-sm">{thread.text}</p>
-                {threadRows
-                  .filter((row) => row.message.id !== thread.id)
-                  .map((row) => renderMessage(row, true))}
-                {threadCursor ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => void loadThread(thread, threadCursor)}
+              {error ? (
+                <p role="status" className="px-4 py-2 text-xs">
+                  Replies are unavailable for this connection. {error} Open the source app to read
+                  them.
+                </p>
+              ) : null}
+              {account.provider === "discord" && !threadConversation ? (
+                <p role="status" className="px-4 py-2 text-xs">
+                  This native Discord thread is unavailable in the loaded conversations. Open it in
+                  Discord.
+                </p>
+              ) : null}
+              <CommunicationFileOpener
+                environmentId={environmentId}
+                source={selectedEndpoint}
+                onSelect={setSelectedMessage}
+              >
+                {(onOpenFile) => (
+                  <CommunicationStream
+                    environmentId={environmentId}
+                    rows={replyRows}
+                    timeZone={timeZone}
+                    selectedKey={
+                      selectedMessage ? workspaceItemKey(selectedMessage.ref) : undefined
+                    }
+                    onSelect={setSelectedMessage}
+                    onOpenFile={onOpenFile}
+                    actions={messageActions}
+                    busy={busy}
+                    onLoadOlder={
+                      threadCursor
+                        ? () => {
+                            void loadThread(thread, threadCursor);
+                          }
+                        : undefined
+                    }
                   >
-                    Load more replies
-                  </Button>
-                ) : null}
-                <div ref={threadEnd} />
-              </div>
+                    <div ref={threadEnd} />
+                  </CommunicationStream>
+                )}
+              </CommunicationFileOpener>
               {threadConversation && writable ? (
                 <ChatComposer
                   key={`${threadConversation.id}:${thread.id}`}

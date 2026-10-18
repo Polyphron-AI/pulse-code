@@ -132,3 +132,25 @@ it.each([
     ).toBe(expected);
   },
 );
+
+it("replaces equal-stamp edits without colliding across conversations or accounts", () => {
+  const first = message("1760343120.000001", "2026-10-13T07:12:00Z", "old");
+  const other = { ...first, conversationId: "second", text: "other" };
+  const account = { ...first, accountId: "second", text: "account" };
+  expect(
+    mergeChatMessages([first, other, account], [{ ...first, text: "edited" }]).map(
+      (row) => row.text,
+    ),
+  ).toEqual(["edited", "other", "account"]);
+});
+it.each([
+  ["1760343120.000010", "1760343120.000002"],
+  ["90071992547409930", "9007199254740992"],
+])("orders equal-date native IDs %s and %s without number precision loss", (later, earlier) => {
+  expect(
+    mergeChatMessages(
+      [message(later, "2026-10-13", "later")],
+      [message(earlier, "2026-10-13", "earlier")],
+    ).map((row) => row.text),
+  ).toEqual(["earlier", "later"]);
+});
