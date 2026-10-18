@@ -106,6 +106,7 @@ import {
   type TerminalMetadataStreamEvent,
   type PullRequestRef,
   PulseLinksRpcs,
+  PulseWorkspaceSavedItemsRpcs,
   PulseLinkSuggestionRpcs,
   PulseMailRpcs,
   PulseTelegramRpcs,
@@ -227,6 +228,7 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration-v2/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
+import { WorkspaceSavedItems } from "./workspace/WorkspaceSavedItems.ts";
 import { projectHub, WorkspaceLinks } from "./workspace/WorkspaceLinks.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
@@ -319,6 +321,7 @@ export const serverPulseCapabilities = {
   mailConversations: true,
   mailReply: true,
   workspaceLinks: true,
+  workspaceSavedItems: true,
   workspaceItemContext: true,
   mcpCreateOnly: true,
   mcpDiscovery: true,
@@ -626,8 +629,10 @@ const MailWsRpcGroup = RpcGroup.make(
   ...PulseMailConversationRpcs,
   ...PulseMailReplyRpcs,
 );
+const SavedItemsWsRpcGroup = RpcGroup.make(...PulseWorkspaceSavedItemsRpcs);
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseWorkspaceSavedItemsRpcs.map((rpc) => rpc._tag),
   ...PulseCalendarRpcs.map((rpc) => rpc._tag),
   ...PulseNotesRpcs.map((rpc) => rpc._tag),
   ...PulseWorkspaceToolsRpcs.map((rpc) => rpc._tag),
@@ -1482,6 +1487,18 @@ const mailWsRpcLayer = MailWsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.pulseMailReadMessage, pulseMail.readMessage(input), {
           "rpc.aggregate": "pulse.mail",
         }),
+    });
+  }),
+);
+
+const savedItemsWsRpcLayer = SavedItemsWsRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const saved = yield* WorkspaceSavedItems;
+    return SavedItemsWsRpcGroup.of({
+      [WS_METHODS.workspaceSavedItemsAdd]: ({ ref }) => saved.add(ref),
+      [WS_METHODS.workspaceSavedItemsRemove]: ({ key }) => saved.remove(key),
+      [WS_METHODS.workspaceSavedItemsList]: saved.list,
+      [WS_METHODS.workspaceSavedItemsSubscribeChanges]: () => saved.changes,
     });
   }),
 );
@@ -4352,6 +4369,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               Layer.merge(suggestionWsRpcLayer),
               Layer.merge(mailWsRpcLayer.pipe(Layer.provide(layerFromProviderInstanceRegistry))),
               Layer.merge(linksWsRpcLayer),
+              Layer.merge(savedItemsWsRpcLayer),
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(ManagedSkills, managedSkills)),
               Layer.provide(

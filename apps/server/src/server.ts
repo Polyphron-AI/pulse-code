@@ -111,6 +111,7 @@ import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolve
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
+import * as WorkspaceSavedItems from "./workspace/WorkspaceSavedItems.ts";
 import { WorkspaceLinksLive } from "./workspace/WorkspaceLinks.ts";
 import * as WorkspaceSuggestions from "./workspace/WorkspaceSuggestions.ts";
 import * as WorkspaceSuggestionCandidates from "./workspace/WorkspaceSuggestionCandidates.ts";
@@ -561,7 +562,7 @@ const RuntimeCoreDependenciesBaseLive = Layer.mergeAll(
 ).pipe(
   // Core Services
   Layer.provideMerge(OrchestrationApplicationLayerLive),
-  Layer.provideMerge(WorkspaceLinksLive),
+  Layer.provideMerge(Layer.merge(WorkspaceLinksLive, WorkspaceSavedItems.layer)),
   Layer.provideMerge(OrchestrationEventInfrastructureLayerLive),
   Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
   Layer.provideMerge(ServerSettingsLayerLive),

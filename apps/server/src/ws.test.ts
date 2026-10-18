@@ -240,4 +240,5 @@ it("advertises the project Drive root and explorer read capabilities", () => {
   assert.strictEqual(serverPulseCapabilities.driveProjectRoot, true);
   assert.strictEqual(serverPulseCapabilities.driveExplorer, true);
   assert.strictEqual(serverPulseCapabilities.workspaceProjectOverview, true);
+  assert.strictEqual(serverPulseCapabilities.workspaceSavedItems, true);
 });

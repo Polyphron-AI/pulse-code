@@ -4,6 +4,7 @@ import { vi } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import * as Calendar from "../../../workspace/WorkspaceCalendar.ts";
 import { WorkspaceLinksError as importedLinksError, CalendarError } from "@t3tools/contracts";
+import * as Saved from "../../../workspace/WorkspaceSavedItems.ts";
 import * as WorkspaceTools from "../../../workspace/WorkspaceTools.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { DriveService } from "../../../drive/DriveService.ts";
@@ -205,10 +206,8 @@ describe("workspace MCP toolkit", () => {
       });
       const links = yield* WorkspaceLinks;
       const ref: WorkspaceItemRef = { type: "task", taskId: task.id };
-      yield* links.link({
-        a: { ref: { type: "thread", threadId } },
-        b: { ref, title: task.title },
-      });
+      const saved = yield* Saved.WorkspaceSavedItems;
+      yield* saved.add(ref);
       const context = yield* Layer.build(
         McpServer.toolkit(WorkspaceToolkit).pipe(
           Layer.provide(WorkspaceHandlers.layer()),
@@ -231,6 +230,15 @@ describe("workspace MCP toolkit", () => {
             Effect.provideService(McpSchema.McpServerClient, client),
           );
       expect(errorText(yield* read({ type: "task", taskId: sibling.id }))).toContain("not linked");
+      expect(
+        Option.isNone(yield* links.resolveLinked({ threadId, projectId }, workspaceItemKey(ref))),
+      ).toBe(true);
+      expect(errorText(yield* read(ref))).toContain("not linked");
+      yield* links.link({
+        a: { ref: { type: "thread", threadId } },
+        b: { ref, title: task.title },
+      });
+      expect(errorText(yield* read({ type: "task", taskId: sibling.id }))).toContain("not linked");
       const result = yield* read(ref);
       expect(result.isError).not.toBe(true);
       expect(result.content[0]?.type === "text" && result.content[0].text).toContain("Launch task");
@@ -240,7 +248,7 @@ describe("workspace MCP toolkit", () => {
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        Layer.mergeAll(WorkspaceLinksLive, WorkspaceTools.layer).pipe(
+        Layer.mergeAll(WorkspaceLinksLive, WorkspaceTools.layer, Saved.layer).pipe(
           Layer.provideMerge(
             Layer.succeed(
               ServerEnvironmentIdentity,

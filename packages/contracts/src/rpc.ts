@@ -21,6 +21,10 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { PULSE_SKILLS_METHODS, PulseSkillsRpcs } from "./pulseSkills.ts";
+import {
+  PULSE_WORKSPACE_SAVED_ITEMS_METHODS,
+  PulseWorkspaceSavedItemsRpcs,
+} from "./pulseWorkspaceSavedItems.ts";
 import { PULSE_LINKS_METHODS, PulseLinksRpcs, PulseLinkSuggestionRpcs } from "./pulseLinks.ts";
 import {
   PULSE_MAIL_METHODS,
@@ -357,6 +361,7 @@ import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
+  ...PULSE_WORKSPACE_SAVED_ITEMS_METHODS,
   ...PULSE_CALENDAR_METHODS,
   ...PULSE_NOTES_METHODS,
   ...PULSE_WORKSPACE_TOOLS_METHODS,
@@ -1770,6 +1775,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  ...PulseWorkspaceSavedItemsRpcs,
   ...PulseCalendarRpcs,
   ...PulseWorkspaceToolsRpcs,
   ...PulseNotesRpcs,

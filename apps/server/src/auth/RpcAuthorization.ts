@@ -27,6 +27,10 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
  * runtime failure.
  */
 export const RPC_REQUIRED_SCOPES = {
+  [WS_METHODS.workspaceSavedItemsAdd]: AuthOrchestrationOperateScope,
+  [WS_METHODS.workspaceSavedItemsRemove]: AuthOrchestrationOperateScope,
+  [WS_METHODS.workspaceSavedItemsList]: AuthOrchestrationReadScope,
+  [WS_METHODS.workspaceSavedItemsSubscribeChanges]: AuthOrchestrationReadScope,
   [WS_METHODS.calendarListRange]: AuthOrchestrationReadScope,
   [WS_METHODS.calendarGet]: AuthOrchestrationReadScope,
   [WS_METHODS.calendarSubscribeChanges]: AuthOrchestrationReadScope,
