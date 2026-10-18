@@ -1,4 +1,6 @@
 import {
+  DRIVE_CONTENT_LIMIT,
+  isDriveReadableMime,
   type DriveFile,
   type DriveBinding,
   type DriveReadResult,
@@ -25,6 +27,7 @@ import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { useConnectedEnvironmentIds } from "../../state/environments";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
+// Defer the menu to break its import cycle through Mail's linked-file reader.
 const DriveItemMenu = lazy(() =>
   import("./WorkspaceItemActions").then((module) => ({ default: module.WorkspaceItemMenu })),
 );
@@ -217,7 +220,12 @@ export function DriveFileAccess({
 interface DriveReaderProps {
   readonly environmentId: EnvironmentId;
   readonly fileId: string;
-  readonly renderContent?: (result: DriveReadResult, text: string) => ReactNode;
+  /** Inline views place the supplied menu in their reading card's overflow slot. */
+  readonly renderContent?: (
+    result: DriveReadResult,
+    text: string,
+    overflowAction: ReactNode,
+  ) => ReactNode;
   readonly actions?: ReactNode;
   readonly confirmed?: readonly WorkspaceLinkEndpoint[];
 }
@@ -252,18 +260,16 @@ function AvailableDriveReader({ environmentId, fileId, ...props }: DriveReaderPr
   const { connections, canOperate } = useDriveAccess(environmentId);
   const changes = useEnvironmentQuery(drive.changes({ environmentId, input: {} }));
   const connectionId = binding.data?.binding?.connectionId;
+  const connection = connections.data?.find((value) => value.id === connectionId);
   return (
     <DriveReaderContent
       key={JSON.stringify([
         environmentId,
         fileId,
         connectionId,
-        changes.data,
-        changes.error,
-        binding.error,
-        connections.error,
-        connections.data?.find((value) => value.id === connectionId),
-        binding.data?.binding?.file,
+        connection?.connected,
+        connection?.identity?.id,
+        binding.data?.binding?.file?.id,
       ])}
       {...props}
       environmentId={environmentId}
@@ -272,7 +278,6 @@ function AvailableDriveReader({ environmentId, fileId, ...props }: DriveReaderPr
       binding={binding}
       connections={connections}
       canOperate={canOperate}
-      subscriptionReady={changes.data !== null && !changes.error}
       subscriptionError={changes.error}
       onRetry={() => {
         binding.refresh();
@@ -282,15 +287,6 @@ function AvailableDriveReader({ environmentId, fileId, ...props }: DriveReaderPr
     />
   );
 }
-const supportedDocument = (mimeType: string) =>
-  mimeType.startsWith("text/") ||
-  [
-    "application/json",
-    "application/xml",
-    "application/vnd.google-apps.document",
-    "application/vnd.google-apps.presentation",
-    "application/vnd.google-apps.spreadsheet",
-  ].includes(mimeType);
 function DriveReaderContent({
   environmentId,
   fileId,
@@ -301,7 +297,6 @@ function DriveReaderContent({
   renderContent,
   actions,
   confirmed,
-  subscriptionReady,
   subscriptionError,
   onRetry,
 }: DriveReaderProps & {
@@ -309,7 +304,6 @@ function DriveReaderContent({
   binding: EnvironmentQueryView<{ readonly binding?: DriveBinding }>;
   connections: ReturnType<typeof useDriveAccess>["connections"];
   canOperate: boolean;
-  subscriptionReady: boolean;
   subscriptionError: string | null;
   onRetry: () => void;
 }) {
@@ -329,14 +323,14 @@ function DriveReaderContent({
     };
   }, []);
   const metadata = result?.file ?? binding.data?.binding?.file;
-  const unsupported = metadata?.mimeType && !supportedDocument(metadata.mimeType);
+  const unsupported = metadata?.mimeType && !isDriveReadableMime(metadata.mimeType);
   const current = connections.data?.find((value) => value.id === savedConnectionId);
   const readable =
     !!savedConnectionId &&
-    current?.connected !== false &&
+    current?.connected === true &&
     !binding.error &&
     !connections.error &&
-    subscriptionReady &&
+    !subscriptionError &&
     !unsupported;
   const load = async (offset = 0) => {
     if (!active.current || inFlight.current || !readable) return;
@@ -360,7 +354,7 @@ function DriveReaderContent({
       response.value.body.nextOffset !== undefined &&
       (!Number.isSafeInteger(response.value.body.nextOffset) ||
         response.value.body.nextOffset <= offset ||
-        response.value.body.nextOffset > 256 * 1024)
+        response.value.body.nextOffset > DRIVE_CONTENT_LIMIT)
     ) {
       setResult(null);
       setText("");
@@ -384,33 +378,34 @@ function DriveReaderContent({
   );
   const inline = renderContent !== undefined;
   const menu = inline ? (
-    <div className="absolute top-0 right-0">
-      <Suspense fallback={null}>
-        <DriveItemMenu
-          environmentId={environmentId}
-          item={{
-            ref: { type: "file", provider: "google-drive", fileId },
-            ...(metadata?.name ? { title: metadata.name } : {}),
-          }}
-          {...(confirmed ? { confirmed } : {})}
-          triggerClassName="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
-          actions={
-            <div className="flex flex-col gap-2">
-              {providerAction}
-              {actions}
-            </div>
-          }
-        >
-          {null}
-        </DriveItemMenu>
-      </Suspense>
-    </div>
+    <Suspense fallback={null}>
+      <DriveItemMenu
+        environmentId={environmentId}
+        item={{
+          ref: { type: "file", provider: "google-drive", fileId },
+          ...(metadata?.name ? { title: metadata.name } : {}),
+        }}
+        {...(confirmed ? { confirmed } : {})}
+        triggerClassName="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
+        actions={
+          <div className="flex flex-col gap-2">
+            {providerAction}
+            {actions}
+          </div>
+        }
+      >
+        {null}
+      </DriveItemMenu>
+    </Suspense>
   ) : null;
   return (
-    <div className="relative space-y-3 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
+    <div className="space-y-3 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
       {!inline || !result ? (
         <>
-          {!inline ? providerAction : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {providerAction}
+            {inline ? actions : null}
+          </div>
           {binding.data?.binding ? (
             <p className="text-xs text-muted-foreground">
               Chosen connection: {current?.nickname ?? "Unavailable connection"}
@@ -500,7 +495,7 @@ function DriveReaderContent({
         <>
           {!inline ? <h3 className="text-sm font-medium">{result.file.name}</h3> : null}
           {renderContent ? (
-            renderContent(result, text)
+            renderContent(result, text, menu)
           ) : (
             <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm">
               {text}
@@ -513,7 +508,7 @@ function DriveReaderContent({
             <Button
               size="sm"
               variant="outline"
-              disabled={busy}
+              disabled={busy || !readable}
               onClick={() => load(result.body.nextOffset)}
             >
               Read more
@@ -525,7 +520,6 @@ function DriveReaderContent({
           ) : null}
         </>
       ) : null}
-      {menu}
     </div>
   );
 }

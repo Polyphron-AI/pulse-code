@@ -214,6 +214,7 @@ vi.mock("../../../state/environments", () => ({
   useEnvironment: () => ({ label: "Fixture" }),
 }));
 vi.mock("../../../state/entities", () => ({
+  useProject: () => null,
   useProjects: () => [
     { id: "fixture-synkek", environmentId: "fixture-environment", title: "SynKEK" },
     { id: "chosen", environmentId: "fixture-environment", title: "Chosen project" },

@@ -37,9 +37,6 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
   const writable = canOperate && !pending;
   return (
     <section aria-label="Workspace note" className="flex min-w-0 flex-col gap-4 p-4">
-      <p className="text-xs text-muted-foreground">
-        Note preview. Formatted Docs view is not available yet.
-      </p>
       {props.error ? (
         <p role="alert" className="text-sm">
           {props.error}
@@ -114,13 +111,14 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
         <>
           <WorkspaceDocsReadingView
             title={note.title}
-            caption="Environment access"
+            caption="Available to readers of this environment"
             content={
-              <p className="whitespace-pre-wrap break-words text-3xs leading-5 text-muted-foreground">
-                {note.body}
-              </p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{note.body}</p>
             }
           />
+          <p className="text-xs text-muted-foreground">
+            Note preview. Formatted Docs view is not available yet.
+          </p>
           <div className="flex flex-nowrap gap-2">
             <Button
               size="xs"

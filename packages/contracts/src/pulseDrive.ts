@@ -6,6 +6,17 @@ import { WorkspaceLinkId } from "./pulseLinks.ts";
 
 export const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
 export const DRIVE_SHORTCUT_MIME = "application/vnd.google-apps.shortcut";
+export const DRIVE_CONTENT_LIMIT = 256 * 1024;
+
+export const isDriveReadableMime = (mimeType: string) =>
+  mimeType.startsWith("text/") ||
+  [
+    "application/json",
+    "application/xml",
+    "application/vnd.google-apps.document",
+    "application/vnd.google-apps.presentation",
+    "application/vnd.google-apps.spreadsheet",
+  ].includes(mimeType);
 
 export const DriveConnectionId = Schema.String.check(Schema.isPattern(/^drv_[a-f0-9-]{36}$/));
 export const DriveFileId = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,256}$/));

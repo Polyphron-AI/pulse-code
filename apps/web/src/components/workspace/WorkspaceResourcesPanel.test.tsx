@@ -86,7 +86,11 @@ vi.mock("./WorkspaceBrowser", () => ({
   },
 }));
 vi.mock("./ProjectTasksResource", () => ({ ProjectTasksResource: () => <Body name="Tasks" /> }));
-vi.mock("../../state/entities", () => ({ useThreadShells: () => [], useProjects: () => [] }));
+vi.mock("../../state/entities", () => ({
+  useThreadShells: () => [],
+  useProjects: () => [],
+  useProject: () => null,
+}));
 vi.mock("../../state/workspaceLinks", () => ({
   workspaceLinks: { list: () => "links", projectHub: () => "hub" },
 }));

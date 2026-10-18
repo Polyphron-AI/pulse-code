@@ -1,5 +1,7 @@
 import {
+  DRIVE_CONTENT_LIMIT,
   DRIVE_FOLDER_MIME,
+  isDriveReadableMime,
   DriveBrowseInput,
   DriveError,
   DriveFile,
@@ -131,7 +133,6 @@ const metadata = (value: typeof Metadata.Type): DriveFile => ({
   ...(value.driveId ? { driveId: value.driveId } : {}),
   ...(value.shortcutDetails ? { shortcutDetails: value.shortcutDetails } : {}),
 });
-export const DRIVE_CONTENT_LIMIT = 262144;
 export const make = Effect.gen(function* () {
   const http = yield* HttpClient.HttpClient;
   const request = (token: string, path: string, params: Record<string, string> = {}) =>
@@ -290,11 +291,7 @@ export const make = Effect.gen(function* () {
           "application/vnd.google-apps.spreadsheet": "text/csv",
         };
         const exported = native[info.mimeType];
-        if (
-          !exported &&
-          !info.mimeType.startsWith("text/") &&
-          !["application/json", "application/xml"].includes(info.mimeType)
-        )
+        if (!isDriveReadableMime(info.mimeType))
           return yield* fail(
             "unsupported",
             "This file type cannot be read here. Open it in Google Drive.",

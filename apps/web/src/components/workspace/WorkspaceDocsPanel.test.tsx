@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   menus: vi.fn(),
   mimeType: "text/plain",
+  discoveryAvailable: true,
+  refreshBinding: vi.fn(),
   threads: [] as { id: string; projectId: string; environmentId: string }[],
 }));
 vi.mock("../../state/entities", () => ({ useThreadShells: () => mocks.threads }));
@@ -35,7 +37,7 @@ vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
     driveRead: mocks.capable,
     workspaceLinks: true,
-    workspaceItemContext: true,
+    workspaceItemContext: mocks.discoveryAvailable,
   }),
 }));
 vi.mock("./mail/useMailLinks", () => ({
@@ -79,7 +81,7 @@ vi.mock("../../state/query", () => ({
                   : null,
       error: null,
       isPending: false,
-      refresh: vi.fn(),
+      refresh: query?.kind === "binding" ? mocks.refreshBinding : vi.fn(),
     };
   },
 }));
@@ -129,6 +131,7 @@ afterEach(async () => {
   mocks.capable = true;
   mocks.connected = true;
   mocks.mimeType = "text/plain";
+  mocks.discoveryAvailable = true;
   mocks.threads = [];
   mocks.read.mockReset();
   mocks.bind.mockReset();
@@ -149,6 +152,7 @@ function Harness({
     <WorkspaceDocsPanel
       environmentId={env}
       projectId={project}
+      projectTitle="Project Alpha"
       selected={selected}
       onSelect={onSelect}
     />
@@ -199,6 +203,9 @@ it("lists confirmed documents separately from one-hop discovery without reading 
   expect(mocks.bind).not.toHaveBeenCalled();
   expect(mocks.link).not.toHaveBeenCalled();
   expect(button("Back to documents")).toBeUndefined();
+  expect(mocks.menus.mock.calls.find(([props]) => props.item === document)![0].confirmed).toEqual([
+    { ref: { type: "project", projectId }, title: "Project Alpha" },
+  ]);
 });
 it("opens one selected reader explicitly, renders one h1 and safely keeps plain text inert", async () => {
   mocks.linked = [direct()];
@@ -219,10 +226,18 @@ it("opens one selected reader explicitly, renders one h1 and safely keeps plain 
   await act(() => button("Brief").props.onClick());
   expect(mocks.read).not.toHaveBeenCalled();
   expect(mocks.link).not.toHaveBeenCalled();
+  expect(
+    renderer!.root
+      .findAllByType("a")
+      .some((node) => node.children.join("") === "Open in Google Drive"),
+  ).toBe(true);
   await act(() => button("Read file").props.onClick());
   expect(renderer!.root.findByType("h1").children).toEqual(["Brief"]);
   expect(renderer!.root.findAllByType("img")).toHaveLength(0);
   expect(text()).toContain("Sharing information unavailable");
+  expect(text()).toContain("Project Alpha");
+  const card = renderer!.root.findByType("article");
+  expect(card.findAllByType("details")).toHaveLength(0);
   await act(() => button("Back to documents").props.onClick());
   expect(renderer!.root.findAllByType("h1")).toHaveLength(0);
   expect(button("Brief")).toBeDefined();
@@ -238,8 +253,29 @@ it("keeps discovery outside confirmed context and requires a separate explicit p
   await act(() => button("Brief").props.onClick());
   expect(mocks.link).not.toHaveBeenCalled();
   expect(mocks.menus.mock.calls.every(([props]) => !props.confirmed?.length)).toBe(true);
+  mocks.read.mockResolvedValueOnce({
+    _tag: "Success",
+    value: {
+      connectionId: "chosen",
+      file: {
+        ...document.ref,
+        id: "file",
+        name: "Brief",
+        mimeType: "text/plain",
+        url: "https://drive.google.com/file/d/file/view",
+      },
+      body: { text: "Discovery body", truncated: false },
+    },
+  });
+  await act(() => button("Read file").props.onClick());
+  expect(text()).toContain("Not linked to this project");
+  expect(text()).not.toContain("Project Alpha");
+  expect(mocks.menus.mock.calls.every(([props]) => !props.confirmed?.length)).toBe(true);
   await act(() => button("Link to project").props.onClick());
-  expect(mocks.link).toHaveBeenCalledWith(document, { ref: { type: "project", projectId } });
+  expect(mocks.link).toHaveBeenCalledWith(document, {
+    ref: { type: "project", projectId },
+    title: "Project Alpha",
+  });
 });
 it("retains an unavailable selected document after its project edge is removed remotely", async () => {
   mocks.linked = [direct()];
@@ -248,10 +284,15 @@ it("retains an unavailable selected document after its project edge is removed r
   mocks.linked = [];
   await act(() => renderer!.update(<Harness />));
   expect(text()).toContain("no longer linked to this project");
-  expect(text()).toContain("link has been kept");
+  expect(text()).toContain("Link it again to keep reading it here");
+  expect(text()).not.toContain("link has been kept");
   expect(button("Read file")).toBeUndefined();
   expect(mocks.unlink).not.toHaveBeenCalled();
   await act(() => button("Link to project").props.onClick());
+  expect(mocks.link).toHaveBeenCalledWith(document, {
+    ref: { type: "project", projectId },
+    title: "Project Alpha",
+  });
   mocks.linked = [direct()];
   await act(() => renderer!.update(<Harness />));
   expect(button("Read file")).toBeDefined();
@@ -289,6 +330,16 @@ it.each(["application/pdf", "application/vnd.google-apps.folder"])(
     await mount();
     await act(() => button("Brief").props.onClick());
     expect(text()).toContain("Unsupported document type");
+    expect(button("Read file").props.disabled).toBe(true);
+    await act(() => button("Read file").props.onClick());
+    expect(
+      renderer!.root
+        .findAllByType("a")
+        .some(
+          (node) =>
+            node.children.join("") === "Open in Google Drive" && node.parent?.type !== "details",
+        ),
+    ).toBe(true);
     expect(mocks.read).not.toHaveBeenCalled();
     mocks.capable = false;
     mocks.query.mockClear();
@@ -323,6 +374,96 @@ it("unlinks only the chosen project edge, retains other loaded documents and sup
   await act(() => button("Back to documents").props.onClick());
   expect(button("Other brief")).toBeDefined();
   expect(button("Brief")).toBeUndefined();
+});
+it("suppresses a late binding success after the resource project changes", async () => {
+  mocks.linked = [direct()];
+  let finish!: (value: unknown) => void;
+  mocks.bind.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await mount();
+  await act(() => button("Brief").props.onClick());
+  await act(() =>
+    renderer!.root.findByType("select").props.onChange({ target: { value: "chosen" } }),
+  );
+  await act(() => {
+    button("Use this connection").props.onClick();
+  });
+  await act(() => renderer!.update(<Harness project={ProjectId.make("other-project")} />));
+  await act(() =>
+    finish({ _tag: "Success", value: { connectionId: "chosen", file: { id: "file" } } }),
+  );
+  expect(mocks.refreshBinding).not.toHaveBeenCalled();
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(button("Read file")).toBeUndefined();
+  await act(() => renderer!.update(<Harness />));
+  expect(renderer!.root.findByType("select").props.value).toBe("");
+});
+it.each(["environment", "project"])(
+  "suppresses Read more after the resource %s changes",
+  async (change) => {
+    mocks.linked = [direct()];
+    mocks.read.mockResolvedValueOnce({
+      _tag: "Success",
+      value: {
+        connectionId: "chosen",
+        file: { id: "file", name: "Brief", mimeType: "text/plain" },
+        body: { text: "First page", nextOffset: 10, truncated: true },
+      },
+    });
+    await mount();
+    await act(() => button("Brief").props.onClick());
+    await act(() => button("Read file").props.onClick());
+    let finish!: (value: unknown) => void;
+    mocks.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(() => {
+      button("Read more").props.onClick();
+    });
+    await act(() =>
+      renderer!.update(
+        <Harness
+          {...(change === "project"
+            ? { project: ProjectId.make("other-project") }
+            : { env: EnvironmentId.make("other") })}
+        />,
+      ),
+    );
+    await act(() =>
+      finish({
+        _tag: "Success",
+        value: {
+          connectionId: "chosen",
+          file: { id: "file", name: "Brief", mimeType: "text/plain" },
+          body: { text: "Stale continuation", truncated: false },
+        },
+      }),
+    );
+    expect(text()).not.toContain("First page");
+    expect(text()).not.toContain("Stale continuation");
+    await act(() => renderer!.update(<Harness />));
+    expect(button("Read file")).toBeDefined();
+    expect(button("Read more")).toBeUndefined();
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+  },
+);
+it("does not claim an incomplete discovery list when discovery is unavailable", async () => {
+  mocks.discoveryAvailable = false;
+  mocks.threads = Array.from({ length: 31 }, (_, index) => ({
+    id: `thread-${index}`,
+    environmentId,
+    projectId,
+  }));
+  await mount();
+  expect(mocks.query.mock.calls.some(([query]) => query.kind === "hub")).toBe(false);
+  expect(text()).not.toContain("may be incomplete");
 });
 it("suppresses a late body after the resource project changes and restores only an unread matching selection", async () => {
   mocks.linked = [direct()];

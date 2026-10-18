@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import {
+  isDriveReadableMime,
   DriveConnectionInput,
   DriveFileId,
   PulseDriveRpcs,
@@ -10,6 +11,20 @@ import {
   DriveBrowsePage,
   DriveFile,
 } from "./pulseDrive.ts";
+it.each([
+  ["text/plain", true],
+  ["text/csv", true],
+  ["application/json", true],
+  ["application/xml", true],
+  ["application/vnd.google-apps.document", true],
+  ["application/vnd.google-apps.presentation", true],
+  ["application/vnd.google-apps.spreadsheet", true],
+  ["application/pdf", false],
+  ["application/vnd.google-apps.folder", false],
+  ["application/vnd.google-apps.shortcut", false],
+])("classifies readable MIME %s as %s", (mimeType, readable) => {
+  expect(isDriveReadableMime(mimeType)).toBe(readable);
+});
 const isFileId = Schema.is(DriveFileId);
 const isConnectionInput = Schema.is(DriveConnectionInput);
 const decodeFile = Schema.decodeSync(DriveFile);

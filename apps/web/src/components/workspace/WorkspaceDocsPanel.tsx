@@ -8,7 +8,8 @@ import {
   type WorkspaceLinkView,
 } from "@t3tools/contracts";
 import { useContext, useState, type ReactNode } from "react";
-import { useProjects, useThreadShells } from "../../state/entities";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { useProject, useThreadShells } from "../../state/entities";
 import { useConnectedEnvironmentIds } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
@@ -21,7 +22,7 @@ import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { isWorkspaceNote } from "./meetings/meetingNotes";
 import { workspaceEndpointTitle } from "./mail/linkedItems";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
-import { useMailLinks } from "./mail/useMailLinks";
+import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 
 export type WorkspaceDocRef =
@@ -52,9 +53,7 @@ function isDocument(endpoint: WorkspaceLinkEndpoint): endpoint is DocumentEndpoi
 export function WorkspaceDocsResource(
   props: WorkspaceResourceBodyProps & Pick<Entrances, "renderNative">,
 ) {
-  const projectTitle = useProjects().find(
-    (project) => project.environmentId === props.environmentId && project.id === props.projectId,
-  )?.title;
+  const projectTitle = useProject(scopeProjectRef(props.environmentId, props.projectId))?.title;
   const requested = props.request ? { ref: props.request } : props.selectedItem;
   const document = requested && isDocument(requested) ? requested : null;
   const intent = props.request ?? (document ? workspaceItemKey(document.ref) : null);
@@ -95,7 +94,7 @@ export function WorkspaceDocsPanel(props: WorkspaceDocsPanelProps & Entrances) {
       ? props.selected
       : null;
   if (hidden) return null;
-  // Keep the admitted native-note controller and its revision-safe edit session until T3b.
+  // Native notes keep their revision-safe editor; only Drive files use the shared reader.
   if (selected && isWorkspaceNote(selected.document.ref) && props.renderNative)
     return (
       <section
@@ -149,11 +148,13 @@ function Documents(
       : null,
   );
   const direct = (links.data?.linked ?? []).filter(
-    (link) => link.status === "confirmed" && isDocument(link.item),
+    (link): link is WorkspaceLinkView & { item: DocumentEndpoint } =>
+      link.status === "confirmed" && isDocument(link.item),
   );
   const directKeys = new Set(direct.map((link) => workspaceItemKey(link.item.ref)));
   const discovery = (related.data?.related ?? []).filter(
-    (row) => isDocument(row.item) && !directKeys.has(workspaceItemKey(row.item.ref)),
+    (row): row is { item: DocumentEndpoint; via: WorkspaceLinkEndpoint } =>
+      isDocument(row.item) && !directKeys.has(workspaceItemKey(row.item.ref)),
   );
   const project: WorkspaceLinkEndpoint = {
     ref: { type: "project", projectId },
@@ -161,7 +162,10 @@ function Documents(
   };
   const select = (document: DocumentEndpoint) =>
     props.onSelect({ environmentId, projectId, document });
-  const incomplete = !!links.data?.truncated || !!related.data?.truncated || threads.length > 30;
+  const incomplete =
+    !!links.data?.truncated ||
+    !!related.data?.truncated ||
+    (props.linksAvailable && props.discoveryAvailable && threads.length > 30);
   const refresh = () => {
     links.refresh();
     related.refresh();
@@ -209,20 +213,21 @@ function Documents(
       ) : null}
       <section aria-label="Linked to project">
         <h3 className="text-xs font-medium">Linked to project</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Document type is checked when opened. Folders and unsupported files open in Google Drive.
+        </p>
         <ul className="mt-2 space-y-2">
-          {direct.map((link) =>
-            isDocument(link.item) ? (
-              <li key={link.id}>
-                <DocumentRow
-                  {...props}
-                  document={link.item}
-                  project={project}
-                  link={link}
-                  onOpen={() => select(link.item as DocumentEndpoint)}
-                />
-              </li>
-            ) : null,
-          )}
+          {direct.map((link) => (
+            <li key={link.id}>
+              <DocumentRow
+                {...props}
+                document={link.item}
+                project={project}
+                link={link}
+                onOpen={() => select(link.item)}
+              />
+            </li>
+          ))}
         </ul>
       </section>
       {links.data && direct.length === 0 ? (
@@ -236,19 +241,17 @@ function Documents(
             directly.
           </p>
           <ul className="mt-2 space-y-2">
-            {discovery.map((row) =>
-              isDocument(row.item) ? (
-                <li key={`${workspaceItemKey(row.item.ref)}:${workspaceItemKey(row.via.ref)}`}>
-                  <DocumentRow
-                    {...props}
-                    document={row.item}
-                    project={project}
-                    via={row.via}
-                    onOpen={() => select(row.item as DocumentEndpoint)}
-                  />
-                </li>
-              ) : null,
-            )}
+            {discovery.map((row) => (
+              <li key={`${workspaceItemKey(row.item.ref)}:${workspaceItemKey(row.via.ref)}`}>
+                <DocumentRow
+                  {...props}
+                  document={row.item}
+                  project={project}
+                  via={row.via}
+                  onOpen={() => select(row.item)}
+                />
+              </li>
+            ))}
           </ul>
         </section>
       ) : null}
@@ -292,11 +295,9 @@ function DocumentRow(
         <p className="text-xs text-muted-foreground">
           {props.via ? `Via ${workspaceEndpointTitle(props.via)}` : "Confirmed project link"}
         </p>
-        <p className="text-xs text-muted-foreground">
-          {props.document.ref.type === "file"
-            ? "Document type is checked when opened. Folders and unsupported files open in Google Drive."
-            : "Workspace note"}
-        </p>
+        {props.document.ref.type !== "file" ? (
+          <p className="text-xs text-muted-foreground">Workspace note</p>
+        ) : null}
       </div>
     </WorkspaceItemMenu>
   );
@@ -320,6 +321,7 @@ function SelectedDocument(
   );
   const [originalLink, setOriginalLink] = useState<WorkspaceLinkId | null | undefined>(undefined);
   if (originalLink === undefined && props.linksLoaded) setOriginalLink(link?.id ?? null);
+  // Only a complete page proves an edge was removed; the edge does not authorize Drive access.
   const removed = originalLink && props.linksComplete && !link;
   const actions = (
     <>
@@ -340,7 +342,7 @@ function SelectedDocument(
           <h2 className="break-words text-sm font-semibold">{title}</h2>
           <p role="status" className="text-sm text-muted-foreground">
             {props.linksError ??
-              "This document is no longer linked to this project. This document is unavailable. Its link has been kept."}
+              "This document is no longer linked to this project. Link it again to keep reading it here."}
           </p>
           {actions}
           <Button size="sm" variant="outline" onClick={props.refresh}>
@@ -353,14 +355,17 @@ function SelectedDocument(
           fileId={document.ref.fileId}
           actions={actions}
           confirmed={link ? [props.project] : []}
-          renderContent={(result, text) => (
+          renderContent={(result, text, overflowAction) => (
             <WorkspaceDocsReadingView
               title={result.file.name}
-              caption={`${props.projectTitle ?? "Project"} · Sharing information unavailable`}
+              caption={
+                link
+                  ? `${props.projectTitle ?? "Linked to this project"} · Sharing information unavailable`
+                  : "Not linked to this project · Sharing information unavailable"
+              }
+              overflowAction={overflowAction}
               content={
-                <p className="whitespace-pre-wrap break-words text-3xs leading-5 text-muted-foreground">
-                  {text}
-                </p>
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>
               }
             />
           )}
@@ -400,7 +405,7 @@ function DocumentLinkActions(
     try {
       await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The document link could not be changed.");
+      setError(linkErrorText(cause));
     } finally {
       setBusy(false);
     }

@@ -109,6 +109,7 @@ vi.mock("../mail/useMailLinks", () => ({ useMailLinks: () => ({}) }));
 vi.mock("../../../state/entities", () => ({
   useAllEnvironmentProjectSnapshotsReady: () => true,
   useThreadShell: () => null,
+  useProject: () => null,
   useProjects: () => [
     { environmentId: TARGET.environmentId, id: "project-a", title: "Project A" },
     { environmentId: TARGET.environmentId, id: "project-b", title: "Project B" },

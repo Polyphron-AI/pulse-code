@@ -10,6 +10,82 @@ const input = {
   limit: 20,
 };
 it.effect.each([
+  ["text/plain", undefined],
+  ["application/json", undefined],
+  ["application/xml", undefined],
+  ["application/vnd.google-apps.document", "text/plain"],
+  ["application/vnd.google-apps.presentation", "text/plain"],
+  ["application/vnd.google-apps.spreadsheet", "text/csv"],
+] as const)(
+  "reads supported %s content using its provider representation",
+  ([mimeType, exported]) =>
+    Effect.gen(function* () {
+      const fake = makeFakeDrive();
+      const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+      const result = yield* api.content("token", {
+        id: "file",
+        name: "Brief",
+        mimeType,
+        url: "https://drive.google.com/file/d/file/view",
+      });
+      expect(new TextDecoder().decode(result.bytes)).toBe("Synthetic launch brief");
+      expect(fake.calls[0]!.url.pathname).toBe(`/drive/v3/files/file${exported ? "/export" : ""}`);
+      expect(fake.calls[0]!.url.searchParams.get(exported ? "mimeType" : "alt")).toBe(
+        exported ?? "media",
+      );
+    }),
+);
+it.effect.each([
+  "application/pdf",
+  "application/vnd.google-apps.folder",
+  "application/vnd.google-apps.shortcut",
+])("rejects unsupported %s content before requesting a body", (mimeType) =>
+  Effect.gen(function* () {
+    const fake = makeFakeDrive();
+    const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+    const error = yield* api
+      .content("token", {
+        id: "file",
+        name: "Brief",
+        mimeType,
+        url: "https://drive.google.com/file/d/file/view",
+      })
+      .pipe(Effect.flip);
+    expect(error.kind).toBe("unsupported");
+    expect(fake.calls).toHaveLength(0);
+  }),
+);
+it.effect.each([262143, 262144, 262145])("bounds a %s-byte body to 256 KiB", (size) =>
+  Effect.gen(function* () {
+    const fake = makeFakeDrive();
+    fake.state.content = "a".repeat(size);
+    const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+    const result = yield* api.content("token", {
+      id: "file",
+      name: "Brief",
+      mimeType: "text/plain",
+      url: "https://drive.google.com/file/d/file/view",
+    });
+    expect(result.bytes.length).toBe(Math.min(size, 262144));
+    expect(result.truncated).toBe(size > 262144);
+  }),
+);
+it.effect("keeps a multibyte character whole at the content limit", () =>
+  Effect.gen(function* () {
+    const fake = makeFakeDrive();
+    fake.state.content = "a".repeat(262143) + "€";
+    const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+    const result = yield* api.content("token", {
+      id: "file",
+      name: "Brief",
+      mimeType: "text/plain",
+      url: "https://drive.google.com/file/d/file/view",
+    });
+    expect(new TextDecoder("utf-8", { fatal: true }).decode(result.bytes)).toBe("a".repeat(262143));
+    expect(result.truncated).toBe(true);
+  }),
+);
+it.effect.each([
   ["mimeType", 161],
   ["modifiedTime", 65],
   ["size", 31],
