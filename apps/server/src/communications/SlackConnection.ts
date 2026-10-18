@@ -41,6 +41,11 @@ const decodeAuth = Schema.decodeEffect(Schema.fromJsonString(AuthResponse));
 const fail = (kind: CommunicationsError["kind"], message: string) =>
   new CommunicationsError({ kind, message });
 const unavailable = () => fail("unavailable", "Slack could not complete this connection request.");
+const credentialStorage = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.tapError(() => Effect.logWarning("Slack credential storage operation failed.")),
+    Effect.mapError(unavailable),
+  );
 const rateLimited = (retry: string | undefined) =>
   new CommunicationsError({
     kind: "rate-limit",
@@ -49,6 +54,8 @@ const rateLimited = (retry: string | undefined) =>
   });
 const changed = () =>
   fail("not-found", "This Slack connection changed or was disconnected. Reload its connections.");
+const credentialWarning = "Slack credential storage needs attention. Reconnect this reader.";
+const removalWarning = "Slack is disconnected, but its token could not be removed.";
 const secretKey = (id: string) => `slack-token-${id}`;
 const decode = <S extends Schema.Top>(schema: S, input: unknown) =>
   Schema.decodeUnknownEffect(schema)(input).pipe(
@@ -59,7 +66,7 @@ const publicConnection = (account: CommunicationConnection): CommunicationConnec
   provider: "slack",
   identity: account.identity,
   label: account.label,
-  connected: account.connected,
+  connected: account.connected && account.error === undefined,
   generation: account.generation,
   ...(account.error === undefined ? {} : { error: account.error }),
 });
@@ -97,6 +104,8 @@ export const make = Effect.gen(function* () {
   const lock = yield* Semaphore.make(1);
   const leases = new Map<string, { generation: number; cancel: Deferred.Deferred<void> }>();
   const disconnectedAt = new Map<string, number>();
+  // This process-local guard denies leases when durable repair fails; it cannot survive a restart.
+  const failedCredentials = new Map<string, string>();
   let revision = 0;
   const invalidate = Effect.fnUntraced(function* (id: string) {
     const lease = leases.get(id);
@@ -201,11 +210,11 @@ export const make = Effect.gen(function* () {
       const id =
         previous?.id ?? `slack_${yield* crypto.randomUUIDv4.pipe(Effect.mapError(unavailable))}`;
       const key = secretKey(id);
-      const oldToken = yield* secrets.get(key).pipe(Effect.mapError(unavailable));
+      const oldToken = yield* secrets.get(key).pipe(credentialStorage);
       const restore = Option.match(oldToken, {
         onNone: () => secrets.remove(key),
         onSome: (bytes) => secrets.set(key, bytes),
-      });
+      }).pipe(credentialStorage);
       const account = {
         id,
         provider: "slack" as const,
@@ -221,22 +230,35 @@ export const make = Effect.gen(function* () {
       yield* Effect.gen(function* () {
         yield* secrets
           .set(key, new TextEncoder().encode(Redacted.value(token)))
-          .pipe(Effect.mapError(unavailable));
+          .pipe(credentialStorage);
         yield* store.save(account);
       }).pipe(
         Effect.catch((error) =>
           restore.pipe(
             Effect.catch(() =>
               Effect.gen(function* () {
-                // Failed compensation must close any prior reader before returning a safe error.
+                failedCredentials.set(id, credentialWarning);
+                disconnectedAt.set(id, ++revision);
+                yield* invalidate(id);
+                const removed = yield* secrets
+                  .remove(key)
+                  .pipe(
+                    credentialStorage,
+                    Effect.match({ onSuccess: () => true, onFailure: () => false }),
+                  );
+                const message = removed ? credentialWarning : removalWarning;
+                failedCredentials.set(id, message);
                 if (previous) {
-                  yield* store.disconnect(id);
-                  yield* invalidate(id);
+                  yield* store.disconnect(id).pipe(Effect.ignore);
+                  yield* store.setError(id, message).pipe(Effect.ignore);
+                } else if (!removed) {
+                  yield* store
+                    .save({ ...account, connected: false, error: message })
+                    .pipe(Effect.ignore);
+                } else {
+                  failedCredentials.delete(id);
                 }
-                return yield* fail(
-                  "unavailable",
-                  "Slack credential storage needs attention. Reconnect this reader.",
-                );
+                return yield* fail("unavailable", message);
               }),
             ),
             Effect.andThen(Effect.fail(error)),
@@ -244,6 +266,7 @@ export const make = Effect.gen(function* () {
         ),
       );
       yield* invalidate(id);
+      failedCredentials.delete(id);
       return publicConnection(account);
     }).pipe(mutate);
   });
@@ -257,14 +280,16 @@ export const make = Effect.gen(function* () {
       disconnectedAt.set(connectionId, ++revision);
       yield* invalidate(connectionId);
       yield* secrets.remove(secretKey(connectionId)).pipe(
+        credentialStorage,
         Effect.catch(() =>
           Effect.gen(function* () {
-            const message = "Slack is disconnected, but its token could not be removed.";
+            const message = removalWarning;
             yield* store.setError(connectionId, message);
             return yield* fail("unavailable", message);
           }),
         ),
       );
+      failedCredentials.delete(connectionId);
     }).pipe(mutate);
   });
   const authorize = Effect.fn("SlackConnection.authorize")(function* (
@@ -272,9 +297,11 @@ export const make = Effect.gen(function* () {
   ) {
     const { connectionId, workspaceId } = yield* decode(AuthorizeInput, input);
     return yield* Effect.gen(function* () {
+      if (failedCredentials.has(connectionId)) return yield* changed();
       const account = yield* store.get(connectionId);
-      if (!account?.connected || account.workspaceId !== workspaceId) return yield* changed();
-      const secret = yield* secrets.get(secretKey(connectionId)).pipe(Effect.mapError(unavailable));
+      if (!account?.connected || account.error !== undefined || account.workspaceId !== workspaceId)
+        return yield* changed();
+      const secret = yield* secrets.get(secretKey(connectionId)).pipe(credentialStorage);
       if (Option.isNone(secret))
         return yield* fail("unavailable", "Reconnect Slack to restore its reader credential.");
       const token = yield* decode(SlackConnectInput, {
@@ -298,7 +325,10 @@ export const make = Effect.gen(function* () {
           .get(connectionId)
           .pipe(
             Effect.flatMap((current) =>
-              current?.connected && current.generation === account.generation
+              !failedCredentials.has(connectionId) &&
+              current?.connected &&
+              current.error === undefined &&
+              current.generation === account.generation
                 ? Effect.void
                 : Effect.fail(changed()),
             ),
@@ -308,7 +338,16 @@ export const make = Effect.gen(function* () {
   });
   return SlackConnection.of({
     connect,
-    list: store.list.pipe(Effect.map((accounts) => accounts.map(publicConnection))),
+    list: store.list.pipe(
+      Effect.map((accounts) =>
+        accounts.map((account) => {
+          const error = failedCredentials.get(account.id);
+          return publicConnection(
+            error === undefined ? account : { ...account, connected: false, error },
+          );
+        }),
+      ),
+    ),
     disconnect,
     authorize,
   });

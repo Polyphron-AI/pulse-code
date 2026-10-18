@@ -56,7 +56,7 @@ it.effect(
       }).pipe(Effect.provide(storage));
       yield* Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        expect(yield* runMigrations()).toEqual([]);
+        expect(yield* runMigrations({ toMigrationInclusive: 75 })).toEqual([]);
         expect(
           yield* sql`SELECT id,workspace_id,subject_id,connected,generation FROM slack_connections`,
         ).toEqual([

@@ -44,6 +44,11 @@ const unavailable = () =>
     kind: "unavailable",
     message: "Slack connection storage is unavailable.",
   });
+const safe = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.tapError(() => Effect.logWarning("Slack connection storage operation failed.")),
+    Effect.mapError(unavailable),
+  );
 
 /** Metadata only. Credentials belong to ServerSecretStore. */
 export class SlackAccountStore extends Context.Service<
@@ -68,38 +73,35 @@ export const layer = Layer.effect(
     return SlackAccountStore.of({
       list: sql<Row>`SELECT * FROM slack_connections ORDER BY id`.pipe(
         Effect.flatMap((rows) => Effect.forEach(rows, account)),
-        Effect.mapError(unavailable),
+        safe,
       ),
       get: (id) =>
         sql<Row>`SELECT * FROM slack_connections WHERE id=${id}`.pipe(
           Effect.flatMap((rows) =>
             rows[0] === undefined ? Effect.succeed(undefined) : account(rows[0]),
           ),
-          Effect.mapError(unavailable),
+          safe,
         ),
       find: (workspaceId, subjectId) =>
         sql<Row>`SELECT * FROM slack_connections WHERE workspace_id=${workspaceId} AND subject_id=${subjectId}`.pipe(
           Effect.flatMap((rows) =>
             rows[0] === undefined ? Effect.succeed(undefined) : account(rows[0]),
           ),
-          Effect.mapError(unavailable),
+          safe,
         ),
       save: Effect.fnUntraced(function* (value) {
         const scopes = yield* encodeScopes(value.scopes);
         yield* sql`INSERT INTO slack_connections(id,workspace_id,subject_id,identity,label,connected,generation,error,scopes_json,is_bot)
           VALUES(${value.id},${value.workspaceId},${value.subjectId},${value.identity},${value.label},${value.connected ? 1 : 0},${value.generation},${value.error ?? null},${scopes},${value.isBot ? 1 : 0})
           ON CONFLICT(id) DO UPDATE SET identity=excluded.identity,label=excluded.label,connected=excluded.connected,generation=excluded.generation,error=excluded.error,scopes_json=excluded.scopes_json,is_bot=excluded.is_bot`;
-      }, Effect.mapError(unavailable)),
+      }, safe),
       disconnect: (id) =>
         sql`UPDATE slack_connections SET connected=0,generation=generation+1,error=NULL WHERE id=${id}`.pipe(
           Effect.asVoid,
-          Effect.mapError(unavailable),
+          safe,
         ),
       setError: (id, message) =>
-        sql`UPDATE slack_connections SET error=${message} WHERE id=${id}`.pipe(
-          Effect.asVoid,
-          Effect.mapError(unavailable),
-        ),
+        sql`UPDATE slack_connections SET error=${message} WHERE id=${id}`.pipe(Effect.asVoid, safe),
     });
   }),
 );

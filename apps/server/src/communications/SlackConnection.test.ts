@@ -3,7 +3,18 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import { CommunicationsError } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Layer, Logger, Option, Path, Redacted } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  Logger,
+  Option,
+  Path,
+  Redacted,
+} from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
@@ -31,6 +42,7 @@ const fixture = (respond: (index: number) => Response = () => Response.json(auth
 const rows = Effect.flatMap(SqlClient.SqlClient, (sql) => sql`SELECT * FROM slack_connections`);
 const safeError = (error: CommunicationsError) => {
   expect(JSON.stringify(error)).not.toContain(token);
+  expect(JSON.stringify(error)).not.toContain("replacement_token");
   expect(String(error)).not.toContain(token);
   expect(error).not.toHaveProperty("cause");
 };
@@ -42,6 +54,227 @@ const testLayer = () =>
       Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "slack-connection-test-" })),
     ),
   ).pipe(Layer.provideMerge(NodeServices.layer));
+
+it.effect.each([
+  { existing: true, cleanupFails: false, sqlFails: false },
+  { existing: true, cleanupFails: true, sqlFails: false },
+  { existing: true, cleanupFails: false, sqlFails: true },
+  { existing: true, cleanupFails: true, sqlFails: true },
+  { existing: true, cleanupFails: false, sqlFails: "disconnect" },
+  { existing: true, cleanupFails: true, sqlFails: "disconnect" },
+  { existing: true, cleanupFails: false, sqlFails: "save" },
+  { existing: true, cleanupFails: true, sqlFails: "save" },
+  { existing: false, cleanupFails: false, sqlFails: "save" },
+  { existing: false, cleanupFails: true, sqlFails: "save" },
+  { existing: false, cleanupFails: false, sqlFails: false },
+  { existing: false, cleanupFails: true, sqlFails: false },
+])(
+  "recovers failed compensation existing=$existing cleanupFails=$cleanupFails sqlFails=$sqlFails",
+  ({ existing, cleanupFails, sqlFails }) => {
+    const fake = fixture((index) =>
+      index === (existing ? 2 : 1)
+        ? Response.json(
+            { ...auth, bot_id: "B123" },
+            { headers: { "x-oauth-scopes": "groups:read,groups:history,chat:write" } },
+          )
+        : Response.json(auth, { headers }),
+    );
+    const warnings: unknown[] = [];
+    return Effect.gen(function* () {
+      const original = yield* Secrets.ServerSecretStore;
+      let replacing = false;
+      let removals = 0;
+      const service = yield* Slack.make.pipe(
+        Effect.provideService(Secrets.ServerSecretStore, {
+          ...original,
+          set: (name, bytes) => {
+            if (!replacing) return original.set(name, bytes);
+            const failure = Effect.fail(
+              new Secrets.SecretStorePersistError({ resource: token, cause: token }),
+            );
+            return new TextDecoder().decode(bytes) === token
+              ? failure
+              : sqlFails === "save"
+                ? original.set(name, bytes)
+                : original.set(name, bytes).pipe(Effect.andThen(failure));
+          },
+          remove: (name) =>
+            Effect.suspend(() => {
+              removals++;
+              return cleanupFails || (!existing && removals === 1)
+                ? Effect.fail(new Secrets.SecretStoreRemoveError({ resource: token, cause: token }))
+                : original.remove(name);
+            }),
+        }),
+      );
+      const prior = existing ? yield* service.connect({ token }) : undefined;
+      const lease = prior
+        ? yield* service.authorize({ connectionId: prior.id, workspaceId: "T123" })
+        : undefined;
+      const sql = yield* SqlClient.SqlClient;
+      if (sqlFails === "save")
+        yield* sql`CREATE TRIGGER slack_disconnect_failure BEFORE INSERT ON slack_connections BEGIN SELECT RAISE(ABORT, 'synthetic_slack_token'); END`;
+      else if (sqlFails === "disconnect")
+        yield* sql`CREATE TRIGGER slack_disconnect_failure BEFORE UPDATE OF connected ON slack_connections BEGIN SELECT RAISE(ABORT, 'synthetic_slack_token'); END`;
+      else if (sqlFails)
+        yield* sql`CREATE TRIGGER slack_disconnect_failure BEFORE UPDATE ON slack_connections BEGIN SELECT RAISE(ABORT, 'synthetic_slack_token'); END`;
+      replacing = true;
+      const error = yield* service.connect({ token: "replacement_token" }).pipe(Effect.flip);
+      safeError(error);
+      if (lease && prior) {
+        const checked = yield* lease.check.pipe(Effect.exit);
+        const authorized = yield* service
+          .authorize({ connectionId: prior.id, workspaceId: "T123" })
+          .pipe(Effect.exit);
+        expect({ check: checked._tag, authorize: authorized._tag }).toEqual({
+          check: "Failure",
+          authorize: "Failure",
+        });
+        expect((yield* lease.cancelled.pipe(Effect.flip)).kind).toBe("not-found");
+      }
+      expect(error.message).toBe(
+        cleanupFails
+          ? "Slack is disconnected, but its token could not be removed."
+          : "Slack credential storage needs attention. Reconnect this reader.",
+      );
+      expect(removals).toBe(existing ? 1 : 2);
+      const fs = yield* FileSystem.FileSystem;
+      expect((yield* fs.readDirectory(original.directory!)).length).toBe(cleanupFails ? 1 : 0);
+      if (prior) {
+        const remaining = yield* original.get(`slack-token-${prior.id}`);
+        if (cleanupFails) {
+          expect(Option.isSome(remaining)).toBe(true);
+          if (Option.isSome(remaining))
+            expect(new TextDecoder().decode(remaining.value)).toBe("replacement_token");
+        } else {
+          expect(Option.isNone(remaining)).toBe(true);
+        }
+        expect((yield* rows)[0]).toMatchObject({
+          scopes_json: JSON.stringify(["channels:read", "channels:history"]),
+          is_bot: 0,
+        });
+      }
+      const connections = yield* service.list;
+      const retained = existing || (cleanupFails && sqlFails !== "save");
+      if (retained) {
+        expect(connections).toHaveLength(1);
+        expect(connections[0]).toMatchObject({ connected: false, error: error.message });
+      } else {
+        expect(connections).toEqual([]);
+      }
+      if (sqlFails !== true && retained) {
+        const restarted = yield* Slack.make;
+        expect((yield* restarted.list)[0]).toMatchObject({
+          connected: false,
+          error: error.message,
+        });
+        expect(
+          (yield* restarted
+            .authorize({ connectionId: connections[0]!.id, workspaceId: "T123" })
+            .pipe(Effect.exit))._tag,
+        ).toBe("Failure");
+      }
+      if (sqlFails) yield* sql`DROP TRIGGER slack_disconnect_failure`;
+      replacing = false;
+      const repaired = yield* service.connect({ token });
+      expect(repaired.connected).toBe(true);
+      expect(repaired.error).toBeUndefined();
+      expect(
+        Redacted.value(
+          (yield* service.authorize({ connectionId: repaired.id, workspaceId: "T123" })).token,
+        ),
+      ).toBe(token);
+      expect(fake.calls).toHaveLength(existing ? 3 : 2);
+      expect(warnings.length).toBeGreaterThan(0);
+      for (const warning of warnings) {
+        expect([
+          { message: ["Slack connection storage operation failed."], cause: Cause.empty },
+          { message: ["Slack credential storage operation failed."], cause: Cause.empty },
+        ]).toContainEqual(warning);
+      }
+    }).pipe(
+      Effect.provide(testLayer()),
+      Effect.provideService(HttpClient.HttpClient, fake.client),
+      Effect.provide(
+        Logger.layer([
+          Logger.make((options) => {
+            if (options.logLevel === "Warn")
+              warnings.push({ message: options.message, cause: options.cause });
+          }),
+        ]),
+      ),
+    );
+  },
+);
+
+it.effect.each(["sql", "read", "write", "remove"] as const)(
+  "emits fixed safe warnings for %s storage failures",
+  (operation) => {
+    const fake = fixture();
+    const warnings: unknown[] = [];
+    return Effect.gen(function* () {
+      const original = yield* Secrets.ServerSecretStore;
+      const initial = yield* Slack.make;
+      const account = yield* initial.connect({ token });
+      const failing = yield* Slack.make.pipe(
+        Effect.provideService(Secrets.ServerSecretStore, {
+          ...original,
+          get:
+            operation === "read"
+              ? () =>
+                  Effect.fail(new Secrets.SecretStoreReadError({ resource: token, cause: token }))
+              : original.get,
+          set:
+            operation === "write"
+              ? () =>
+                  Effect.fail(
+                    new Secrets.SecretStorePersistError({ resource: token, cause: token }),
+                  )
+              : original.set,
+          remove:
+            operation === "remove"
+              ? () =>
+                  Effect.fail(new Secrets.SecretStoreRemoveError({ resource: token, cause: token }))
+              : original.remove,
+        }),
+      );
+      const sql = yield* SqlClient.SqlClient;
+      if (operation === "sql") yield* sql`DROP TABLE slack_connections`;
+      const error = yield* (
+        operation === "sql"
+          ? failing.list
+          : operation === "read"
+            ? failing.authorize({ connectionId: account.id, workspaceId: "T123" })
+            : operation === "write"
+              ? failing.connect({ token: "replacement_token" })
+              : failing.disconnect({ connectionId: account.id })
+      ).pipe(Effect.flip);
+      safeError(error);
+      expect(warnings.length).toBeGreaterThan(0);
+      for (const warning of warnings) {
+        expect(warning).toEqual({
+          message: [
+            operation === "sql"
+              ? "Slack connection storage operation failed."
+              : "Slack credential storage operation failed.",
+          ],
+          cause: Cause.empty,
+        });
+      }
+    }).pipe(
+      Effect.provide(testLayer()),
+      Effect.provideService(HttpClient.HttpClient, fake.client),
+      Effect.provide(
+        Logger.layer([
+          Logger.make((options) => {
+            if (options.logLevel === "Warn")
+              warnings.push({ message: options.message, cause: options.cause });
+          }),
+        ]),
+      ),
+    );
+  },
+);
 
 it.effect("persists identity, redacts secrets and disconnects after restart", () => {
   const calls: string[] = [];
@@ -519,7 +752,13 @@ it.effect(
       rejectRestore = true;
       const error = yield* service.connect({ token: "replacement_token" }).pipe(Effect.flip);
       safeError(error);
-      expect((yield* service.list)[0]).toMatchObject({ connected: false, generation: 2 });
+      expect((yield* service.list)[0]).toMatchObject({
+        connected: false,
+        generation: 2,
+        error: error.message,
+      });
+      const fs = yield* FileSystem.FileSystem;
+      expect(yield* fs.readDirectory(original.directory!)).toEqual([]);
       expect((yield* lease.cancelled.pipe(Effect.flip)).kind).toBe("not-found");
       expect(
         (yield* service
@@ -529,6 +768,59 @@ it.effect(
     }).pipe(Effect.provide(testLayer()), Effect.provideService(HttpClient.HttpClient, fake.client));
   },
 );
+
+it.effect("cancels a prior lease before failed compensation cleanup completes", () => {
+  const fake = fixture();
+  return Effect.gen(function* () {
+    const original = yield* Secrets.ServerSecretStore;
+    const removing = yield* Deferred.make<void>();
+    const removeAllowed = yield* Deferred.make<void>();
+    const cancelled = yield* Deferred.make<void>();
+    const started = yield* Deferred.make<void>();
+    let replacing = false;
+    const service = yield* Slack.make.pipe(
+      Effect.provideService(Secrets.ServerSecretStore, {
+        ...original,
+        set: (name, bytes) => {
+          if (!replacing) return original.set(name, bytes);
+          const failure = Effect.fail(
+            new Secrets.SecretStorePersistError({ resource: token, cause: token }),
+          );
+          return new TextDecoder().decode(bytes) === token
+            ? failure
+            : original.set(name, bytes).pipe(Effect.andThen(failure));
+        },
+        remove: (name) =>
+          Deferred.succeed(removing, undefined).pipe(
+            Effect.andThen(Deferred.await(removeAllowed)),
+            Effect.andThen(original.remove(name)),
+          ),
+      }),
+    );
+    const account = yield* service.connect({ token });
+    const lease = yield* service.authorize({ connectionId: account.id, workspaceId: "T123" });
+    const read = yield* Effect.raceFirst(
+      Deferred.succeed(started, undefined).pipe(
+        Effect.andThen(Effect.never),
+        Effect.ensuring(Deferred.succeed(cancelled, undefined)),
+      ),
+      lease.cancelled,
+    ).pipe(Effect.forkChild);
+    yield* Deferred.await(started);
+    replacing = true;
+    const reconnect = yield* service.connect({ token: "replacement_token" }).pipe(Effect.forkChild);
+    yield* Deferred.await(removing);
+    yield* Deferred.await(cancelled);
+    expect((yield* Fiber.join(read).pipe(Effect.flip)).kind).toBe("not-found");
+    expect((yield* lease.check.pipe(Effect.flip)).kind).toBe("not-found");
+    expect((yield* service.list)[0]).toMatchObject({
+      connected: false,
+      error: "Slack credential storage needs attention. Reconnect this reader.",
+    });
+    yield* Deferred.succeed(removeAllowed, undefined);
+    safeError(yield* Fiber.join(reconnect).pipe(Effect.flip));
+  }).pipe(Effect.provide(testLayer()), Effect.provideService(HttpClient.HttpClient, fake.client));
+});
 
 it.effect(
   "keeps the prior connection intact on a secret read failure and on failed disconnect storage",
