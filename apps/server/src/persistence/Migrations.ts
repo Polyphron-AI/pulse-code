@@ -1,3 +1,4 @@
+import M075 from "./Migrations/075_SlackConnections.ts";
 import M074 from "./Migrations/074_WorkspaceSavedItems.ts";
 import M073 from "./Migrations/073_WorkspaceProjectDescription.ts";
 import M072 from "./Migrations/072_WorkspaceDriveRoot.ts";
@@ -176,6 +177,7 @@ export const migrationEntries = [
   [72, "WorkspaceDriveRoot", M072],
   [73, "WorkspaceProjectDescription", M073],
   [74, "WorkspaceSavedItems", M074],
+  [75, "SlackConnections", M075],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

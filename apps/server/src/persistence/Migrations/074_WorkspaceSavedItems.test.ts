@@ -36,7 +36,7 @@ it.effect("upgrades 073 without losing existing rows and retains saved refs when
     }).pipe(Effect.provide(storage));
     yield* Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      expect(yield* runMigrations()).toEqual([]);
+      expect(yield* runMigrations({ toMigrationInclusive: 74 })).toEqual([]);
       expect(yield* sql`SELECT item_key,ref_json,saved_at FROM workspace_saved_items`).toEqual([
         {
           item_key: "task:missing",

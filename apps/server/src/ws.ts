@@ -107,6 +107,7 @@ import {
   type PullRequestRef,
   PulseLinksRpcs,
   PulseWorkspaceSavedItemsRpcs,
+  PulseCommunicationsRpcs,
   PulseLinkSuggestionRpcs,
   PulseMailRpcs,
   PulseTelegramRpcs,
@@ -229,6 +230,7 @@ import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration-v2/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import { WorkspaceSavedItems } from "./workspace/WorkspaceSavedItems.ts";
+import { SlackConnection } from "./communications/SlackConnection.ts";
 import { projectHub, WorkspaceLinks } from "./workspace/WorkspaceLinks.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
@@ -309,6 +311,7 @@ export const serverPulseCapabilities = {
   mailManagement: true,
   mailRead: true,
   telegramRead: true,
+  communicationsSlackRead: true,
   workspaceSuggestions: true,
   driveRead: true,
   driveProjectRoot: true,
@@ -630,8 +633,10 @@ const MailWsRpcGroup = RpcGroup.make(
   ...PulseMailReplyRpcs,
 );
 const SavedItemsWsRpcGroup = RpcGroup.make(...PulseWorkspaceSavedItemsRpcs);
+const CommunicationsWsRpcGroup = RpcGroup.make(...PulseCommunicationsRpcs);
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseCommunicationsRpcs.map((rpc) => rpc._tag),
   ...PulseWorkspaceSavedItemsRpcs.map((rpc) => rpc._tag),
   ...PulseCalendarRpcs.map((rpc) => rpc._tag),
   ...PulseNotesRpcs.map((rpc) => rpc._tag),
@@ -1499,6 +1504,17 @@ const savedItemsWsRpcLayer = SavedItemsWsRpcGroup.toLayer(
       [WS_METHODS.workspaceSavedItemsRemove]: ({ key }) => saved.remove(key),
       [WS_METHODS.workspaceSavedItemsList]: saved.list,
       [WS_METHODS.workspaceSavedItemsSubscribeChanges]: () => saved.changes,
+    });
+  }),
+);
+
+const communicationsWsRpcLayer = CommunicationsWsRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const slack = yield* SlackConnection;
+    return CommunicationsWsRpcGroup.of({
+      [WS_METHODS.slackConnect]: slack.connect,
+      [WS_METHODS.slackListConnections]: () => slack.list,
+      [WS_METHODS.slackDisconnect]: slack.disconnect,
     });
   }),
 );
@@ -4301,6 +4317,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       Context.add(MailOAuth, yield* MailOAuth),
       Context.add(MailSendService, yield* MailSendService),
       Context.add(TelegramService, yield* TelegramService),
+      Context.add(SlackConnection, yield* SlackConnection),
       Context.add(DriveService, yield* DriveService),
       Context.add(WorkspaceTools, yield* WorkspaceTools),
       Context.add(WorkspaceNotes, yield* WorkspaceNotes),
@@ -4370,6 +4387,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               Layer.merge(mailWsRpcLayer.pipe(Layer.provide(layerFromProviderInstanceRegistry))),
               Layer.merge(linksWsRpcLayer),
               Layer.merge(savedItemsWsRpcLayer),
+              Layer.merge(communicationsWsRpcLayer),
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(ManagedSkills, managedSkills)),
               Layer.provide(

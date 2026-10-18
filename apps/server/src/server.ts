@@ -76,6 +76,8 @@ import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as TelegramService from "./telegram/TelegramService.ts";
 import * as TelegramStore from "./telegram/TelegramStore.ts";
 import * as TelegramBotApi from "./telegram/TelegramBotApi.ts";
+import * as SlackConnection from "./communications/SlackConnection.ts";
+import * as SlackAccountStore from "./communications/SlackAccountStore.ts";
 import * as MailConfigService from "./mail/MailConfigService.ts";
 import * as MailOAuth from "./mail/MailOAuth.ts";
 import * as MailSendService from "./mail/MailSendService.ts";
@@ -673,6 +675,8 @@ const TelegramLayerLive = TelegramService.layer().pipe(
   Layer.provide(TelegramBotApi.layer),
 );
 
+const SlackConnectionLayerLive = SlackConnection.layer.pipe(Layer.provide(SlackAccountStore.layer));
+
 const SuggestionsLayerLive = WorkspaceSuggestions.layer.pipe(
   Layer.provide(WorkspaceSuggestionCandidates.layer()),
   Layer.provide(WorkspaceLinksRepository.layer),
@@ -723,6 +727,7 @@ const makeRoutesLayer = Layer.mergeAll(
   Layer.provide(WorkspaceToolsLayerLive),
   Layer.provide(MailLayerLive),
   Layer.provide(TelegramLayerLive),
+  Layer.provide(SlackConnectionLayerLive),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(DesktopAppUpdateLayerLive))),
   Layer.provide(commandReadinessLayer),

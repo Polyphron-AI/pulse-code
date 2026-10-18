@@ -612,6 +612,7 @@ export const ServerConfig = Schema.Struct({
       mcpManagement: Schema.optionalKey(Schema.Boolean),
       mailManagement: Schema.optionalKey(Schema.Boolean),
       telegramRead: Schema.optionalKey(Schema.Boolean),
+      communicationsSlackRead: Schema.optionalKey(Schema.Boolean),
       workspaceSuggestions: Schema.optionalKey(Schema.Boolean),
       driveRead: Schema.optionalKey(Schema.Boolean),
       driveProjectRoot: Schema.optionalKey(Schema.Boolean),

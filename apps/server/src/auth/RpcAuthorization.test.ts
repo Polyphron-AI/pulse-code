@@ -11,6 +11,8 @@ import {
   AuthRelayWriteScope,
   ProjectId,
   DEFAULT_SERVER_SETTINGS,
+  PulseCommunicationsRpcs,
+  RpcScopeAuthorization,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -18,6 +20,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import {
   RPC_REQUIRED_SCOPES,
@@ -27,6 +30,15 @@ import {
 } from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("requires read for Slack lists and operate for explicit connection changes", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.slackListConnections)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.slackConnect)).toBe(AuthOrchestrationOperateScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.slackDisconnect)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
   it("allows user-side suggestion discovery with read access and requires operate access for confirmation", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.pulseLinksSuggest)).toBe(
       AuthOrchestrationReadScope,
@@ -149,6 +161,61 @@ describe("RPC authorization scopes", () => {
     }
   });
 });
+
+it.effect("denies Slack connection mutations before invoking handlers in a read-only session", () =>
+  Effect.gen(function* () {
+    const group = RpcGroup.make(...PulseCommunicationsRpcs).middleware(RpcScopeAuthorization);
+    const calls: string[] = [];
+    const account = {
+      id: "slack_test",
+      provider: "slack" as const,
+      identity: "Asha",
+      label: "Team",
+      connected: true,
+      generation: 1,
+    };
+    const handlers = group.toLayer({
+      [WS_METHODS.slackConnect]: () =>
+        Effect.sync(() => {
+          calls.push("connect");
+          return account;
+        }),
+      [WS_METHODS.slackListConnections]: () =>
+        Effect.sync(() => {
+          calls.push("list");
+          return [account];
+        }),
+      [WS_METHODS.slackDisconnect]: () =>
+        Effect.sync(() => {
+          calls.push("disconnect");
+        }),
+    });
+    const read = yield* RpcTest.makeClient(group).pipe(
+      Effect.provide(
+        Layer.merge(handlers, rpcScopeAuthorizationLayer([AuthOrchestrationReadScope])),
+      ),
+    );
+    expect(
+      yield* read[WS_METHODS.slackConnect]({ token: "synthetic" }).pipe(Effect.flip),
+    ).toMatchObject({ requiredScope: AuthOrchestrationOperateScope });
+    expect(
+      yield* read[WS_METHODS.slackDisconnect]({ connectionId: account.id }).pipe(Effect.flip),
+    ).toMatchObject({ requiredScope: AuthOrchestrationOperateScope });
+    expect(yield* read[WS_METHODS.slackListConnections]({})).toEqual([account]);
+    expect(calls).toEqual(["list"]);
+    const operate = yield* RpcTest.makeClient(group).pipe(
+      Effect.provide(
+        Layer.merge(handlers, rpcScopeAuthorizationLayer([AuthOrchestrationOperateScope])),
+      ),
+    );
+    yield* operate[WS_METHODS.slackConnect]({ token: "synthetic" });
+    yield* operate[WS_METHODS.slackDisconnect]({ connectionId: account.id });
+    expect(yield* operate[WS_METHODS.slackListConnections]({}).pipe(Effect.flip)).toMatchObject({
+      requiredScope: AuthOrchestrationReadScope,
+    });
+    expect(calls).toEqual(["list", "connect", "disconnect"]);
+  }).pipe(Effect.scoped),
+);
 
 it("requires operate permission for host retry while preserving read-only listing", () => {
   expect(requiredScopeForDeviceList({})).toBe(AuthOrchestrationReadScope);

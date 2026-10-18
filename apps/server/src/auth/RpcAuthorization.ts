@@ -27,6 +27,9 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
  * runtime failure.
  */
 export const RPC_REQUIRED_SCOPES = {
+  [WS_METHODS.slackConnect]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackListConnections]: AuthOrchestrationReadScope,
+  [WS_METHODS.slackDisconnect]: AuthOrchestrationOperateScope,
   [WS_METHODS.workspaceSavedItemsAdd]: AuthOrchestrationOperateScope,
   [WS_METHODS.workspaceSavedItemsRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.workspaceSavedItemsList]: AuthOrchestrationReadScope,
