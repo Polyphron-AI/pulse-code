@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
       pulseCapabilities: {
         workspaceTools: boolean;
         workspaceTasksV2?: boolean;
+        workspaceProjectOverview?: boolean;
         driveProjectRoot?: boolean;
         driveExplorer?: boolean;
       };
@@ -182,3 +183,90 @@ it.each([
     expect(renderer!.root.findByType("span").children.join("")).toBe(String(expected));
   },
 );
+
+it.each([
+  ["live", undefined, false],
+  ["live", false, false],
+  ["cached", true, false],
+  ["live", true, true],
+] as const)(
+  "trusts project overview only from live config: %s %s",
+  async (source, flag, expected) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    state.projection = {
+      source,
+      config: {
+        pulseCapabilities: {
+          workspaceTools: true,
+          ...(flag === undefined ? {} : { workspaceProjectOverview: flag }),
+        },
+        settings: {},
+      },
+    };
+    function View() {
+      return (
+        <span>
+          {String(
+            useMailCapabilities(EnvironmentId.make(`overview-${source}-${flag}`))
+              .workspaceProjectOverview,
+          )}
+        </span>
+      );
+    }
+    await act(() => {
+      renderer = create(<View />);
+    });
+    expect(renderer!.root.findByType("span").children.join("")).toBe(String(expected));
+  },
+);
+it("revokes project overview on environment switch and live downgrade", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.projection = {
+    source: "live",
+    config: {
+      pulseCapabilities: { workspaceTools: true, workspaceProjectOverview: true },
+      settings: {},
+    },
+  };
+  const registry = AtomRegistry.make();
+  const a = EnvironmentId.make("overview-switch-a"),
+    b = EnvironmentId.make("overview-switch-b");
+  const stops = [registry.mount(projections(a)), registry.mount(projections(b))];
+  registry.set(projections(a), AsyncResult.success(state.projection));
+  registry.set(projections(b), AsyncResult.success({ ...state.projection, source: "cached" }));
+  function View({ id }: { id: EnvironmentId }) {
+    return <span>{String(useMailCapabilities(id).workspaceProjectOverview)}</span>;
+  }
+  const render = (id: EnvironmentId) =>
+    act(() => {
+      const element = (
+        <RegistryContext value={registry}>
+          <View id={id} />
+        </RegistryContext>
+      );
+      if (renderer) renderer.update(element);
+      else renderer = create(element);
+    });
+  try {
+    await render(a);
+    expect(renderer!.root.findByType("span").children.join("")).toBe("true");
+    await render(b);
+    expect(renderer!.root.findByType("span").children.join("")).toBe("false");
+    await render(a);
+    await act(() =>
+      registry.set(
+        projections(a),
+        AsyncResult.success({
+          ...state.projection,
+          config: { ...state.projection.config, pulseCapabilities: { workspaceTools: true } },
+        }),
+      ),
+    );
+    expect(renderer!.root.findByType("span").children.join("")).toBe("false");
+  } finally {
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    stops.forEach((stop) => stop());
+    registry.dispose();
+  }
+});

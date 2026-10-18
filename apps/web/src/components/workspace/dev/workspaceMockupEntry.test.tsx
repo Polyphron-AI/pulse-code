@@ -362,17 +362,20 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
     expect(mount.firstElementChild).toHaveProperty("style.flexDirection", "column");
     expect(document.body.textContent).toContain("Design preview · sample data");
     expect(document.body.textContent).toContain(
-      id === "03"
-        ? "Project tasks"
-        : id === "07" || id === "08"
-          ? "Marketing stand-up"
-          : id === "02" || id === "05" || id === "06"
-            ? "# marketing"
-            : `Recipe ${id}`,
+      id === "04"
+        ? "Your projects"
+        : id === "03"
+          ? "Project tasks"
+          : id === "07" || id === "08"
+            ? "Marketing stand-up"
+            : id === "02" || id === "05" || id === "06"
+              ? "# marketing"
+              : `Recipe ${id}`,
     );
     expect(result.incompleteRegions).not.toContain("shell.engagement");
     expect(result.incompleteRegions).not.toContain("shell.resources");
     if (id === "08") expect(result.incompleteRegions).not.toContain("08.tasks.resource");
+    if (id === "04") expect(result.incompleteRegions).not.toContain("04.projects.center");
     expect(getByRole(document.body, "combobox", { name: "Choose project" }).textContent).toContain(
       "SynKEK",
     );

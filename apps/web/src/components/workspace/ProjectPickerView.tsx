@@ -38,6 +38,11 @@ export function ProjectPickerView({
 }: ProjectPickerViewProps): ReactNode {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [previousProjectId, setPreviousProjectId] = useState(selectedProjectId);
+  if (previousProjectId !== selectedProjectId) {
+    setPreviousProjectId(selectedProjectId);
+    setQuery("");
+  }
   const items: {
     readonly id: ProjectId | null;
     readonly title: string;

@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
@@ -714,6 +715,21 @@ const overviewClient = (
         ? SubscriptionRef.changes(counters.drive).pipe(Stream.filter((n) => n > 0))
         : Stream.never,
   }) as unknown as WsRpcProtocolClient;
+const makeOverviewFeed = Effect.fn("makeOverviewFeed")(function* () {
+  const queue = yield* Queue.unbounded<{ value: number; consumed: Latch.Latch }>();
+  return {
+    stream: Stream.fromQueue(queue).pipe(
+      Stream.flatMap(({ value, consumed }) =>
+        Stream.make(value).pipe(Stream.concat(Stream.fromEffect(consumed.open).pipe(Stream.drain))),
+      ),
+    ),
+    send: Effect.fnUntraced(function* (value: number) {
+      const consumed = Latch.makeUnsafe();
+      yield* Queue.offer(queue, { value, consumed });
+      yield* consumed.await;
+    }),
+  };
+});
 it.effect(
   "shares one overview RPC for 50 cards and keys all normalized filters and environment",
   () =>
@@ -858,6 +874,18 @@ it.effect(
           ),
         );
         expect(last.projects.map((p) => p.projectId)).toEqual(["p50"]);
+        for (const drive of ["linked", "unlinked"] as const) {
+          const filtered = AsyncResult.getOrThrow(
+            yield* Effect.promise(() =>
+              executeAtomQuery(
+                registry,
+                atoms.overview({ environmentId: TARGET.environmentId, input: { drive } }),
+              ),
+            ),
+          );
+          expect(filtered.projects).toEqual([]);
+          expect(filtered.incomplete).toBe(true);
+        }
         expect(calls).toBe(0);
       }),
     ),
@@ -908,7 +936,7 @@ it.effect.each(["local", "direct", "relay", "tunnel"])(
     ),
 );
 
-it.effect("clears stale cursor overview rows during event refresh and failure", () =>
+it.effect("keeps loaded cursor overview rows during event refresh and failure", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const counters = {
@@ -944,18 +972,517 @@ it.effect("clears stale cursor overview rows during event refresh and failure", 
       yield* Effect.promise(() => executeAtomQuery(registry, query));
       const cleared = Latch.makeUnsafe();
       const unsub = registry.subscribe(query, (result) => {
-        if (result.waiting && Option.isNone(AsyncResult.value(result))) cleared.openUnsafe();
+        if (result.waiting && Option.isSome(AsyncResult.value(result))) cleared.openUnsafe();
       });
       yield* Effect.addFinalizer(() => Effect.sync(unsub));
       changed = true;
       yield* SubscriptionRef.update(counters.links, (n) => n + 1);
       yield* began.await;
       yield* cleared.await;
-      expect(Option.isNone(AsyncResult.value(registry.get(query)))).toBe(true);
+      expect(Option.isSome(AsyncResult.value(registry.get(query)))).toBe(true);
       finish.openUnsafe();
       const failed = yield* Effect.promise(() => executeAtomQuery(registry, query));
       expect(AsyncResult.isFailure(failed)).toBe(true);
       expect(Option.isNone(AsyncResult.value(failed))).toBe(true);
     }),
   ),
+);
+
+it.effect(
+  "coalesces first mount, event bursts and reconnect when counters arrive synchronously",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const counters = {
+          workspace: yield* SubscriptionRef.make(1),
+          links: yield* SubscriptionRef.make(1),
+          drive: yield* SubscriptionRef.make(1),
+        };
+        let reads = 0;
+        const client = overviewClient(
+          () => Effect.sync(() => overviewPage(`read-${++reads}`)),
+          counters,
+        );
+        const { atoms, registry, supervisor } = yield* makeTestRuntime(client);
+        const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        expect(reads).toBe(1);
+        const waitForRead = () => {
+          const expectedTitle = `read-${reads + 1}`;
+          const seen = Latch.makeUnsafe();
+          const unsubscribe = registry.subscribe(query, (r) => {
+            if (
+              AsyncResult.isSuccess(r) &&
+              !r.waiting &&
+              r.value.projects[0]?.title === expectedTitle
+            )
+              seen.openUnsafe();
+          });
+          return { seen, unsubscribe };
+        };
+        let next = waitForRead();
+        yield* SubscriptionRef.set(counters.workspace, 2);
+        yield* SubscriptionRef.set(counters.links, 2);
+        yield* SubscriptionRef.set(counters.drive, 2);
+        yield* next.seen.await;
+        next.unsubscribe();
+        expect(reads).toBe(2);
+        next = waitForRead();
+        yield* SubscriptionRef.set(supervisor.session, Option.none());
+        yield* SubscriptionRef.set(supervisor.session, Option.some(session(client)));
+        yield* next.seen.await;
+        next.unsubscribe();
+        expect(reads).toBe(3);
+        // A new host starts counters at zero. Its first write may repeat an old count.
+        yield* SubscriptionRef.set(counters.workspace, 0);
+        yield* SubscriptionRef.set(supervisor.session, Option.none());
+        next = waitForRead();
+        yield* SubscriptionRef.set(supervisor.session, Option.some(session(client)));
+        yield* next.seen.await;
+        next.unsubscribe();
+        expect(reads).toBe(4);
+        next = waitForRead();
+        yield* SubscriptionRef.set(counters.workspace, 2);
+        yield* next.seen.await;
+        next.unsubscribe();
+        expect(reads).toBe(5);
+        yield* SubscriptionRef.set(counters.workspace, 0);
+        yield* SubscriptionRef.set(supervisor.session, Option.none());
+        next = waitForRead();
+        yield* SubscriptionRef.set(supervisor.session, Option.some(session(client)));
+        yield* next.seen.await;
+        next.unsubscribe();
+        next = waitForRead();
+        yield* SubscriptionRef.set(counters.workspace, 1);
+        yield* next.seen.await;
+        next.unsubscribe();
+        expect(reads).toBe(7);
+        const settled = yield* Effect.promise(() => executeAtomQuery(registry, query));
+        expect(AsyncResult.getOrThrow(settled).projects[0]?.title).toBe("read-7");
+        expect(reads).toBe(7);
+      }),
+    ),
+);
+it.effect("ignores identical project snapshots while an overview read is in flight", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const began = Latch.makeUnsafe();
+      const finish = Latch.makeUnsafe();
+      let reads = 0;
+      const client = overviewClient(() =>
+        Effect.gen(function* () {
+          reads++;
+          began.openUnsafe();
+          yield* finish.await;
+          return overviewPage();
+        }),
+      );
+      const { atoms, registry, projects } = yield* makeTestRuntime(client);
+      registry.set(projects, [{ id: importProjectId.make("p"), title: "Project" }]);
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* began.await;
+      registry.set(projects, [{ id: importProjectId.make("p"), title: "Project" }]);
+      finish.openUnsafe();
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      expect(reads).toBe(1);
+    }),
+  ),
+);
+it.effect("keeps overview pending without a reconnect failure while connecting", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { atoms, registry, supervisor } = yield* makeTestRuntime(
+        overviewClient(() => Effect.succeed(overviewPage())),
+      );
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      const pending = Latch.makeUnsafe();
+      const unsubscribe = registry.subscribe(query, (result) => {
+        if (result.waiting) pending.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      yield* SubscriptionRef.update(supervisor.state, (state) => ({
+        ...state,
+        phase: "connecting" as const,
+      }));
+      yield* pending.await;
+      expect(AsyncResult.isFailure(registry.get(query))).toBe(false);
+      expect(registry.get(query).waiting).toBe(true);
+    }),
+  ),
+);
+it.effect("finishes active overview reads and queues one refresh for a distinct burst", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const workspace = yield* makeOverviewFeed();
+      const links = yield* makeOverviewFeed();
+      const drive = yield* makeOverviewFeed();
+      const began = [Latch.makeUnsafe(), Latch.makeUnsafe()];
+      const finish = [Latch.makeUnsafe(), Latch.makeUnsafe()];
+      let reads = 0;
+      let interrupted = 0;
+      const client = {
+        ...overviewClient(() =>
+          Effect.gen(function* () {
+            const read = ++reads;
+            if (read > 1 && read < 4) {
+              began[read - 2]!.openUnsafe();
+              yield* finish[read - 2]!.await;
+            }
+            return overviewPage(`read-${read}`);
+          }).pipe(Effect.onInterrupt(() => Effect.sync(() => interrupted++))),
+        ),
+        [WS_METHODS.workspaceSubscribeChanges]: () => workspace.stream,
+        [WS_METHODS.pulseLinksSubscribeChanges]: () => links.stream,
+        [WS_METHODS.driveSubscribeChanges]: () => drive.stream,
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      expect(reads).toBe(1);
+      const completed: string[] = [];
+      const unsubscribe = registry.subscribe(query, (result) => {
+        if (AsyncResult.isSuccess(result) && !result.waiting)
+          completed.push(result.value.projects[0]!.title);
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      yield* workspace.send(1);
+      yield* began[0]!.await;
+      yield* workspace.send(2);
+      yield* workspace.send(3);
+      yield* links.send(1);
+      yield* drive.send(1);
+      yield* drive.send(1);
+      expect(reads).toBe(2);
+      expect(interrupted).toBe(0);
+      finish[0]!.openUnsafe();
+      yield* began[1]!.await;
+      expect(completed).toContain("read-2");
+      expect(reads).toBe(3);
+      finish[1]!.openUnsafe();
+      const result = AsyncResult.getOrThrow(
+        yield* Effect.promise(() => executeAtomQuery(registry, query)),
+      );
+      expect(result.projects[0]!.title).toBe("read-3");
+      expect(reads).toBe(3);
+      expect(interrupted).toBe(0);
+    }),
+  ),
+);
+it.effect("reconnects once with an unchanged project list and no failure flash", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counters = {
+        workspace: yield* SubscriptionRef.make(1),
+        links: yield* SubscriptionRef.make(1),
+        drive: yield* SubscriptionRef.make(1),
+      };
+      let reads = 0;
+      const client = overviewClient(
+        () => Effect.sync(() => overviewPage(`read-${++reads}`)),
+        counters,
+      );
+      const { atoms, registry, supervisor, projects } = yield* makeTestRuntime(client);
+      const sameProjects = () => [{ id: importProjectId.make("p"), title: "Project" }];
+      registry.set(projects, sameProjects());
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      const pending = Latch.makeUnsafe();
+      let failures = 0;
+      const unsubscribe = registry.subscribe(query, (result) => {
+        if (result.waiting) pending.openUnsafe();
+        if (AsyncResult.isFailure(result)) failures++;
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      yield* SubscriptionRef.update(supervisor.state, (state) => ({
+        ...state,
+        phase: "connecting" as const,
+      }));
+      yield* pending.await;
+      yield* SubscriptionRef.set(supervisor.session, Option.none());
+      registry.set(projects, sameProjects());
+      registry.set(projects, sameProjects());
+      yield* SubscriptionRef.update(supervisor.state, (state) => ({
+        ...state,
+        phase: "backoff" as const,
+      }));
+      expect(registry.get(query).waiting).toBe(true);
+      expect(reads).toBe(1);
+      yield* SubscriptionRef.set(supervisor.session, Option.some(session(client)));
+      yield* SubscriptionRef.update(supervisor.state, (state) => ({
+        ...state,
+        phase: "connected" as const,
+        generation: state.generation + 1,
+      }));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      registry.set(projects, sameProjects());
+      expect(reads).toBe(2);
+      expect(failures).toBe(0);
+    }),
+  ),
+);
+it.effect("retains an unseeded remote counter replay as one conservative trailing read", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const remote = yield* makeOverviewFeed();
+      const began = Latch.makeUnsafe();
+      const finish = Latch.makeUnsafe();
+      let reads = 0;
+      const client = {
+        ...overviewClient(() =>
+          Effect.gen(function* () {
+            const read = ++reads;
+            if (read === 1) {
+              began.openUnsafe();
+              yield* finish.await;
+            }
+            return overviewPage(`read-${read}`);
+          }),
+        ),
+        [WS_METHODS.workspaceSubscribeChanges]: () => remote.stream,
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* began.await;
+      yield* remote.send(1);
+      finish.openUnsafe();
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      expect(reads).toBe(2);
+      yield* remote.send(1);
+      expect(reads).toBe(2);
+    }),
+  ),
+);
+it.effect(
+  "surfaces a failed overview subscription before the first read and recovers on reconnect",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const problem = new WorkspaceToolsError({
+          kind: "unavailable",
+          message: "Subscription failed",
+        });
+        let failed = true;
+        const client = {
+          ...overviewClient(() => Effect.succeed(overviewPage("Recovered"))),
+          [WS_METHODS.workspaceSubscribeChanges]: () =>
+            failed ? Stream.fail(problem) : Stream.never,
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry, supervisor } = yield* makeTestRuntime(client);
+        const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        const result = yield* Effect.promise(() =>
+          executeAtomQuery(registry, query, { reportFailure: false }),
+        );
+        expect(AsyncResult.isFailure(result) && Cause.squash(result.cause)).toBe(problem);
+        failed = false;
+        const seen = Latch.makeUnsafe();
+        const unsubscribe = registry.subscribe(query, (value) => {
+          if (AsyncResult.isSuccess(value) && !value.waiting) seen.openUnsafe();
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+        yield* SubscriptionRef.set(supervisor.session, Option.none());
+        yield* SubscriptionRef.set(supervisor.session, Option.some(session(client)));
+        yield* seen.await;
+        const recovered = AsyncResult.getOrThrow(
+          yield* Effect.promise(() => executeAtomQuery(registry, query)),
+        );
+        expect(recovered.projects[0]!.title).toBe("Recovered");
+      }),
+    ),
+);
+it.effect("retries a failed overview subscription through the observable query refresh", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const problem = new WorkspaceToolsError({
+        kind: "unavailable",
+        message: "Subscription failed",
+      });
+      let failed = true;
+      let subscriptions = 0;
+      const client = {
+        ...overviewClient(() => Effect.succeed(overviewPage("Retried"))),
+        [WS_METHODS.workspaceSubscribeChanges]: () => {
+          subscriptions++;
+          return failed ? Stream.fail(problem) : Stream.never;
+        },
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      const result = yield* Effect.promise(() =>
+        executeAtomQuery(registry, query, { reportFailure: false }),
+      );
+      expect(AsyncResult.isFailure(result)).toBe(true);
+      const beforeRetry = subscriptions;
+      failed = false;
+      registry.refresh(query);
+      const recovered = AsyncResult.getOrThrow(
+        yield* Effect.promise(() => executeAtomQuery(registry, query)),
+      );
+      expect(recovered.projects[0]!.title).toBe("Retried");
+      expect(subscriptions).toBe(beforeRetry + 1);
+    }),
+  ),
+);
+it.effect(
+  "chains refreshed appended pages from the new boundary while keeping loaded rows visible",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const counters = {
+          workspace: yield* SubscriptionRef.make(0),
+          links: yield* SubscriptionRef.make(0),
+          drive: yield* SubscriptionRef.make(0),
+        };
+        let inserted = false;
+        const began = Latch.makeUnsafe(),
+          finish = Latch.makeUnsafe();
+        const cursors: (string | undefined)[] = [];
+        const client = overviewClient(
+          (input) =>
+            Effect.gen(function* () {
+              cursors.push(input.cursor);
+              if (inserted && !input.cursor) {
+                began.openUnsafe();
+                yield* finish.await;
+              }
+              const titles = inserted ? ["A", "B", "C", "D", "E"] : ["B", "C", "D", "E"];
+              const start = input.cursor ? titles.indexOf(input.cursor) + 1 : 0;
+              const rows = titles.slice(start, start + 2);
+              return {
+                projects: rows.map((title) => ({
+                  ...overviewPage(title).projects[0]!,
+                  projectId: importProjectId.make(title),
+                })),
+                incomplete: false,
+                ...(start + 2 < titles.length ? { nextCursor: rows.at(-1)! } : {}),
+              };
+            }),
+          counters,
+        );
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const query = atoms.overview({
+          environmentId: TARGET.environmentId,
+          input: { limit: 2 },
+          pages: 2,
+        });
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        const before = AsyncResult.getOrThrow(
+          yield* Effect.promise(() => executeAtomQuery(registry, query)),
+        );
+        expect(before.projects.map((p) => p.title)).toEqual(["B", "C", "D", "E"]);
+        inserted = true;
+        yield* SubscriptionRef.set(counters.links, 1);
+        yield* began.await;
+        expect(
+          Option.getOrThrow(AsyncResult.value(registry.get(query))).projects.map((p) => p.title),
+        ).toEqual(["B", "C", "D", "E"]);
+        const refreshed = Latch.makeUnsafe();
+        const unsubscribe = registry.subscribe(query, (r) => {
+          if (AsyncResult.isSuccess(r) && !r.waiting && r.value.projects[0]?.title === "A")
+            refreshed.openUnsafe();
+        });
+        finish.openUnsafe();
+        yield* refreshed.await;
+        unsubscribe();
+        const after = AsyncResult.getOrThrow(registry.get(query));
+        expect(after.projects.map((p) => p.title)).toEqual(["A", "B", "C", "D"]);
+        expect(cursors).toEqual([undefined, "C", undefined, "B"]);
+      }),
+    ),
+);
+
+it.effect("stops overview subscriptions after the last mounted page is hidden", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counters = {
+        workspace: yield* SubscriptionRef.make(0),
+        links: yield* SubscriptionRef.make(0),
+        drive: yield* SubscriptionRef.make(0),
+      };
+      let reads = 0,
+        ended = 0;
+      const closed = Latch.makeUnsafe();
+      const base = overviewClient(
+        () =>
+          Effect.sync(() => {
+            reads++;
+            return overviewPage();
+          }),
+        counters,
+      );
+      const client = { ...base } as unknown as Record<string, unknown>;
+      for (const tag of [
+        WS_METHODS.workspaceSubscribeChanges,
+        WS_METHODS.pulseLinksSubscribeChanges,
+        WS_METHODS.driveSubscribeChanges,
+      ] as const) {
+        client[tag] = () =>
+          base[tag]({}).pipe(
+            Stream.ensuring(
+              Effect.sync(() => {
+                if (++ended === 3) closed.openUnsafe();
+              }),
+            ),
+          );
+      }
+      const { atoms, registry } = yield* makeTestRuntime(client as unknown as WsRpcProtocolClient);
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      expect(reads).toBe(1);
+      stop();
+      yield* closed.await;
+      yield* SubscriptionRef.set(counters.links, 1);
+      yield* SubscriptionRef.set(counters.drive, 1);
+      expect(reads).toBe(1);
+    }),
+  ),
+);
+
+it.effect(
+  "uses title fallback with zero RPCs or subscriptions after a live capability downgrade",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let calls = 0;
+        const client = new Proxy({} as WsRpcProtocolClient, {
+          get: (_target, tag) => () => {
+            calls++;
+            return tag === WS_METHODS.workspaceListProjectOverview
+              ? Effect.succeed(overviewPage())
+              : Stream.never;
+          },
+        });
+        const { atoms, registry, projects } = yield* makeTestRuntime(client);
+        registry.set(projects, [{ id: importProjectId.make("p"), title: "Project" }]);
+        const query = atoms.overview({
+          environmentId: TARGET.environmentId,
+          input: {},
+          metadataAvailable: false,
+        });
+        const page = AsyncResult.getOrThrow(
+          yield* Effect.promise(() => executeAtomQuery(registry, query)),
+        );
+        expect(page.projects[0]?.driveRoot).toBe("unavailable");
+        expect(page.projects[0]?.title).toBe("Project");
+        expect(calls).toBe(0);
+      }),
+    ),
 );

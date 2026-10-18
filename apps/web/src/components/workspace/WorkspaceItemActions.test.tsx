@@ -21,6 +21,7 @@ import {
 import { useComposerDraftStore, type DraftId } from "../../composerDraftStore";
 import { newDraftId } from "../../lib/utils";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { ProjectsOverviewView } from "./ProjectsOverviewView";
 import { projectMenuItems } from "./mail/linkedItems";
 import { buildWorkspaceActionItems } from "../CommandPalette.logic";
 
@@ -976,3 +977,72 @@ it("keeps an event and its environment captured across delayed project selection
     await act(() => view.unmount());
   }
 });
+
+it.each(["right-click", "keyboard", "long-press"])(
+  "opens shared project actions from an overview card: %s",
+  async (gesture) => {
+    vi.useFakeTimers();
+    let view!: ReactTestRenderer;
+    const select = vi.fn();
+    const id = ProjectId.make("project-a");
+    const item = { ref: { type: "project" as const, projectId: id }, title: "A project" };
+    try {
+      await act(() => {
+        view = create(
+          <ProjectsOverviewView
+            projects={[
+              {
+                projectId: id,
+                title: "A project",
+                description: null,
+                driveRoot: "none",
+                channels: { count: 0, complete: true, providers: [] },
+              },
+            ]}
+            selectedProjectId={id}
+            query=""
+            driveFilter="all"
+            pending={false}
+            error={null}
+            hasMore={false}
+            roster={[]}
+            onQueryChange={() => {}}
+            onSearch={() => {}}
+            onDriveFilterChange={() => {}}
+            onSelect={select}
+            onCreate={() => {}}
+            onMore={() => {}}
+            onRetry={() => {}}
+            createButtonRef={null}
+            renderProjectActions={(_id, row) => (
+              <WorkspaceItemMenu environmentId={environmentId} item={item}>
+                {row}
+              </WorkspaceItemMenu>
+            )}
+          />,
+        );
+      });
+      const row = view.root.findByProps({ draggable: true });
+      if (gesture === "right-click")
+        await act(() => row.props.onContextMenu({ preventDefault() {} }));
+      if (gesture === "keyboard")
+        await act(() => row.props.onKeyDown({ key: "F10", shiftKey: true, preventDefault() {} }));
+      if (gesture === "long-press") {
+        await act(() => row.props.onPointerDown({ pointerType: "touch", clientX: 0, clientY: 0 }));
+        await act(() => vi.advanceTimersByTime(500));
+      }
+      const actions = view.root.findByType(WorkspaceItemActions);
+      expect(actions.props.item).toEqual(item);
+      expect(actions.props.environmentId).toBe(environmentId);
+      expect(
+        view.root.findByProps({ "aria-label": "Select A project" }).findAllByType("button"),
+      ).toHaveLength(1);
+      expect(select).not.toHaveBeenCalled();
+      expect(mocks.linkToProject).not.toHaveBeenCalled();
+      expect(mocks.startThread).not.toHaveBeenCalled();
+    } finally {
+      if (view) await act(() => view.unmount());
+      vi.useRealTimers();
+    }
+  },
+);

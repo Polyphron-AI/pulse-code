@@ -434,7 +434,7 @@ it.effect("returns an explicit error instead of truncating an oversized title cu
     const tools = yield* Tools.WorkspaceTools;
     for (let i = 0; i < 2; i++)
       expect(yield* tools.overview({ limit: 1 }).pipe(Effect.flip)).toMatchObject({
-        kind: "unavailable",
+        kind: "invalid-input",
         message: "Project title exceeds the 2048-byte project overview cursor limit.",
       });
     const page = yield* tools.overview({ limit: 2 });
@@ -444,6 +444,26 @@ it.effect("returns an explicit error instead of truncating an oversized title cu
     ]);
     expect(page.nextCursor).toBeUndefined();
   }).pipe(Effect.provide(layer)),
+);
+
+it.effect(
+  "rejects oversized overview metadata as invalid input and allows a smaller result set",
+  () =>
+    Effect.gen(function* () {
+      yield* seed([
+        ...Array.from({ length: 49 }, (_, i) => `Project ${i} ${"x".repeat(3000)}`),
+        "Short",
+      ]);
+      const tools = yield* Tools.WorkspaceTools;
+      for (let i = 0; i < 2; i++)
+        expect(yield* tools.overview({}).pipe(Effect.flip)).toMatchObject({
+          kind: "invalid-input",
+          message: "Project summary metadata exceeds the bounded overview response.",
+        });
+      const page = yield* tools.overview({ filter: "Short" });
+      expect(page.projects.map((project) => project.title)).toEqual(["Short"]);
+      expect(page.nextCursor).toBeUndefined();
+    }).pipe(Effect.provide(layer)),
 );
 
 it.effect("treats a root with corrupt shared Drive metadata as unavailable", () =>

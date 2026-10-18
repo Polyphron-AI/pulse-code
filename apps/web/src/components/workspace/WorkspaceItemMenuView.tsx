@@ -30,6 +30,7 @@ export function WorkspaceItemMenuView({
     <Popover open={open} onOpenChange={onOpenChange}>
       <div
         className="flex min-w-0 items-center gap-1"
+        data-workspace-menu-row
         data-workspace-menu-open={open ? "true" : undefined}
         {...props}
       >

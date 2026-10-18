@@ -440,16 +440,17 @@ export const make = Effect.gen(function* () {
                   ).toString("base64url")
                 : undefined;
             // Titles have no write-time cap. Truncation would change the keyset boundary.
+            // Over-limit pages are invalid-input so clients know a retry needs a narrower request.
             if (nextCursor && nextCursor.length > 2048)
               return yield* fail(
-                "unavailable",
+                "invalid-input",
                 "Project title exceeds the 2048-byte project overview cursor limit.",
               );
             const page = { projects, ...(nextCursor ? { nextCursor } : {}), incomplete: false };
             // Reject the whole page when metadata exceeds the 128 KiB response budget.
             if (Buffer.byteLength(encodeOverviewPage(page), "utf8") > 128 * 1024)
               return yield* fail(
-                "unavailable",
+                "invalid-input",
                 "Project summary metadata exceeds the bounded overview response.",
               );
             return page;

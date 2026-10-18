@@ -106,6 +106,7 @@ export type MockupMutation =
   | "schedule"
   | "join"
   | "open-thread"
+  | "menu"
   | "navigate";
 export interface WorkspaceMockupRecipe {
   readonly id: WorkspaceMockupId;
