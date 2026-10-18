@@ -1,4 +1,7 @@
 import {
+  parseChatResourceId,
+  SlackListMessagesInput,
+  SlackMessageId,
   WorkspaceItemContextRecord,
   type OrchestrationMessageContext,
   type WorkspaceItemRef,
@@ -34,6 +37,8 @@ const UNTITLED: Record<WorkspaceItemRef["type"], string> = {
 
 const encoder = new TextEncoder();
 const byteLength = (text: string) => encoder.encode(text).length;
+const isSlackEndpoint = Schema.is(SlackListMessagesInput);
+const isSlackMessageId = Schema.is(SlackMessageId);
 
 /**
  * A link title as one line of inert text: control characters and line separators become
@@ -69,8 +74,23 @@ export const renderLinkedItems = (context: WorkspaceContext): string => {
   const lines: Array<string> = [];
   let used = 0;
   for (const { key, item } of context.items.slice(0, LINKED_ITEMS_MAX)) {
-    const label =
-      item.ref.type === "provider-resource" && item.ref.provider === "workspace-calendar"
+    const resource =
+      item.ref.type === "provider-resource" && item.ref.provider === "slack"
+        ? parseChatResourceId(item.ref.resourceId)
+        : undefined;
+    const slack =
+      resource &&
+      isSlackEndpoint(resource) &&
+      (resource.messageId === undefined
+        ? resource.replyRootId === undefined
+        : isSlackMessageId(resource.messageId))
+        ? resource
+        : undefined;
+    const label = slack
+      ? slack.messageId
+        ? "Slack message"
+        : "Slack conversation"
+      : item.ref.type === "provider-resource" && item.ref.provider === "workspace-calendar"
         ? "calendar-event"
         : item.ref.type === "provider-resource" && item.ref.provider === "workspace-note"
           ? "workspace-note"
@@ -80,7 +100,9 @@ export const renderLinkedItems = (context: WorkspaceContext): string => {
         ? "Calendar event"
         : label === "workspace-note"
           ? "Workspace note"
-          : UNTITLED[item.ref.type];
+          : slack
+            ? label
+            : UNTITLED[item.ref.type];
     const title = sanitizeLinkTitle(item.title ?? "") || fallback;
     const line = `- ${label} "${title}" (key: ${key})\n`;
     const size = byteLength(line);

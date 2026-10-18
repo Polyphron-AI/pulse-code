@@ -3,11 +3,19 @@ import { WorkspaceTools } from "../../../workspace/WorkspaceTools.ts";
 import { DriveService } from "../../../drive/DriveService.ts";
 import { WorkspaceCalendar } from "../../../workspace/WorkspaceCalendar.ts";
 import * as Schema from "effect/Schema";
-import { CalendarError, WorkspaceLinksError, WorkspaceNotesError } from "@t3tools/contracts";
+import {
+  CalendarError,
+  WorkspaceLinksError,
+  WorkspaceNotesError,
+  parseChatResourceId,
+  SlackListMessagesInput,
+  SlackMessageId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
 import { TelegramService } from "../../../telegram/TelegramService.ts";
+import * as SlackReader from "../../../communications/SlackReader.ts";
 import { MailConfigService } from "../../../mail/MailConfigService.ts";
 import type { MailConnectionOptions } from "../../../mail/MailConnection.ts";
 import * as MailImapRead from "../../../mail/MailImapRead.ts";
@@ -21,6 +29,8 @@ import { WorkspaceToolkit } from "./tools.ts";
 const isNotesError = Schema.is(WorkspaceNotesError);
 
 const isCalendarError = Schema.is(CalendarError);
+const isSlackEndpoint = Schema.is(SlackListMessagesInput);
+const isSlackMessageId = Schema.is(SlackMessageId);
 
 const byteSize = (value: unknown) =>
   // @effect-diagnostics preferSchemaOverJson:off -- measures the payload McpServer will serialize
@@ -47,6 +57,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
     const calendar = yield* Effect.serviceOption(WorkspaceCalendar);
     const notes = yield* Effect.serviceOption(WorkspaceNotes);
     const telegram = yield* Effect.serviceOption(TelegramService);
+    const slack = yield* Effect.serviceOption(SlackReader.SlackReader);
     const orchestrator = yield* Orchestrator.OrchestratorV2;
     const config = yield* MailConfigService;
     const oauth = yield* MailOAuth;
@@ -105,6 +116,31 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
               return yield* bounded({ key, type: "mail", ...message });
             }
             case "provider-resource":
+              if (ref.provider === "slack") {
+                const resource = parseChatResourceId(ref.resourceId);
+                if (
+                  resource?.transport === "server" &&
+                  resource.messageId &&
+                  isSlackEndpoint(resource) &&
+                  isSlackMessageId(resource.messageId) &&
+                  Option.isSome(slack)
+                )
+                  return yield* slack.value
+                    .readMessage({
+                      resourceId: ref.resourceId,
+                      ...(offset !== undefined ? { offset } : {}),
+                    })
+                    .pipe(
+                      Effect.flatMap((message) =>
+                        bounded({ key, type: "slack-message", ...message }),
+                      ),
+                    );
+                return yield* new WorkspaceLinksError({
+                  kind: "unsupported",
+                  message:
+                    "Only exact linked server Slack messages can be read here. Conversations and desktop references grant no message bodies.",
+                });
+              }
               if (ref.provider === "workspace-note") {
                 if (Option.isNone(notes))
                   return yield* new WorkspaceLinksError({

@@ -50,9 +50,258 @@ import { TelegramService } from "../../../telegram/TelegramService.ts";
 import * as TelegramStore from "../../../telegram/TelegramStore.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { WorkspaceLinksLive } from "../../../workspace/WorkspaceLinks.ts";
+import { chatResourceId } from "@t3tools/contracts";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import * as SlackReader from "../../../communications/SlackReader.ts";
+import * as SlackConnection from "../../../communications/SlackConnection.ts";
+import * as SlackStore from "../../../communications/SlackAccountStore.ts";
 
 const projectId = ProjectId.make("project-workspace-mcp");
 const threadId = ThreadId.make("thread-workspace-mcp");
+
+it.effect(
+  "authorizes only an exact linked Slack message and denies revoked, saved-only and unlinked continuations",
+  () => {
+    const calls: URL[] = [];
+    const workspaceId = `T${"A".repeat(79)}`;
+    const conversationId = `C${"A".repeat(79)}`;
+    const messageId = "999999999999.999999";
+    const replyRootId = "999999999999.999998";
+    const source =
+      "EXACT A " + '\u0000"\\\n'.repeat(5000) + '"\\'.repeat(5000) + "😀éa".repeat(5000);
+    let deleted = false;
+    let identity = "U1";
+    const http = HttpClient.make((request, url) =>
+      Effect.sync(() => {
+        calls.push(url);
+        const body = url.pathname.endsWith("auth.test")
+          ? { ok: true, team_id: workspaceId, team: "Fixture", user_id: identity, user: identity }
+          : {
+              ok: true,
+              channel: conversationId,
+              team_id: workspaceId,
+              messages: deleted ? [] : [{ ts: messageId, thread_ts: replyRootId, text: source }],
+            };
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json(body, { headers: { "x-oauth-scopes": "channels:read,channels:history" } }),
+        );
+      }),
+    );
+    const config = ServerConfig.layerTest(process.cwd(), { prefix: "slack-linked-mcp-" });
+    return Effect.gen(function* () {
+      // Existing metadata may use every accepted ID character; connect retains that identity.
+      yield* (yield* SlackStore.SlackAccountStore).save({
+        id: "s".repeat(80),
+        provider: "slack",
+        workspaceId,
+        subjectId: identity,
+        identity,
+        label: "Fixture",
+        connected: false,
+        generation: 1,
+        scopes: [],
+        isBot: false,
+      });
+      const connections = yield* SlackConnection.SlackConnection;
+      const a = yield* connections.connect({ token: "synthetic_slack_a" });
+      identity = "U2";
+      const b = yield* connections.connect({ token: "synthetic_slack_b" });
+      const links = yield* WorkspaceLinks;
+      const saved = yield* Saved.WorkspaceSavedItems;
+      const resource = {
+        version: 1,
+        transport: "server",
+        connectionId: a.id,
+        workspaceId,
+        conversationId,
+        messageId,
+        replyRootId,
+      } as const;
+      const ref = {
+        type: "provider-resource",
+        provider: "slack",
+        resourceId: chatResourceId(resource),
+      } as const;
+      const otherChannel = {
+        ...ref,
+        resourceId: chatResourceId({ ...resource, conversationId: "C2" }),
+      };
+      const otherAccount = {
+        ...ref,
+        resourceId: chatResourceId({ ...resource, connectionId: b.id }),
+      };
+      const context = yield* Layer.build(
+        McpServer.toolkit(WorkspaceToolkit).pipe(
+          Layer.provide(WorkspaceHandlers.layer()),
+          Layer.provideMerge(McpServer.McpServer.layer),
+        ),
+      );
+      const server = Context.get(context, McpServer.McpServer);
+      const read = (key = workspaceItemKey(ref), offset?: number) =>
+        server
+          .callTool({
+            name: "workspace_read_item",
+            arguments: { key, ...(offset !== undefined ? { offset } : {}) },
+          })
+          .pipe(
+            Effect.provideService(McpInvocationContext.McpInvocationContext, {
+              environmentId: EnvironmentId.make("env"),
+              threadId,
+              providerSessionId: "slack-fixture",
+              providerInstanceId: ProviderInstanceId.make("codex"),
+              capabilities: new Set<McpInvocationContext.McpCapability>(["workspace"]),
+              issuedAt: 1,
+            }),
+            Effect.provideService(McpSchema.McpServerClient, client),
+          );
+      const owner = { ref: { type: "thread", threadId } } as const;
+      yield* saved.add(ref);
+      for (const key of [
+        "guessed-key",
+        workspaceItemKey(ref),
+        workspaceItemKey(otherChannel),
+        workspaceItemKey(otherAccount),
+      ]) {
+        expect(errorText(yield* read(key))).toContain("not linked");
+        expect(calls).toHaveLength(2);
+      }
+      const conversation = {
+        ...ref,
+        resourceId: chatResourceId({
+          version: 1,
+          transport: "server",
+          connectionId: a.id,
+          workspaceId,
+          conversationId,
+        }),
+      };
+      const conversationLink = yield* links.link({ a: owner, b: { ref: conversation } });
+      expect(errorText(yield* read())).toContain("not linked");
+      expect((yield* read(workspaceItemKey(conversation))).isError).toBe(true);
+      expect(calls).toHaveLength(2);
+      yield* links.unlink(conversationLink.id);
+      const link = yield* links.link({ a: owner, b: { ref, title: "Stored summary only" } });
+      const first = yield* read();
+      expect(calls).toHaveLength(3);
+      expect(first.isError).not.toBe(true);
+      expect(first.structuredContent).toMatchObject({
+        type: "slack-message",
+        resourceId: ref.resourceId,
+        body: { truncated: true },
+      });
+      type MessageContent = {
+        body: { nextOffset?: number; text: string; truncated: boolean };
+      };
+      const content = first.structuredContent as MessageContent;
+      expect(content.body.text).toContain("EXACT A");
+      expect(Buffer.byteLength(content.body.text)).toBeLessThanOrEqual(8192);
+      // @effect-diagnostics preferSchemaOverJson:off -- Assert the actual MCP serialized byte budget.
+      expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThanOrEqual(32000);
+      expect(ref.resourceId).toHaveLength(484);
+      expect(workspaceItemKey(ref)).toHaveLength(592);
+      yield* links.unlink(link.id);
+      let before = calls.length;
+      expect(errorText(yield* read(workspaceItemKey(ref), content.body.nextOffset))).toContain(
+        "not linked",
+      );
+      expect(calls).toHaveLength(before);
+      yield* links.link({ a: { ref: { type: "project", projectId } }, b: { ref } });
+      let offset = 0;
+      let collected = "";
+      let result = first;
+      let pages = 0;
+      for (; pages < 30; pages++) {
+        const chunk = (result.structuredContent as MessageContent).body;
+        expect(result.isError).not.toBe(true);
+        expect(Buffer.byteLength(chunk.text)).toBeLessThanOrEqual(8192);
+        // @effect-diagnostics preferSchemaOverJson:off -- Measure both production MCP result representations.
+        expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(32000);
+        // @effect-diagnostics preferSchemaOverJson:off -- McpServer emits this JSON text alongside structuredContent.
+        expect(result.content).toEqual([
+          { type: "text", text: JSON.stringify(result.structuredContent) },
+        ]);
+        expect(chunk.text).toBe(source.slice(offset, offset + chunk.text.length));
+        expect(chunk.text.length).toBeGreaterThan(0);
+        collected += chunk.text;
+        offset += chunk.text.length;
+        expect(chunk.truncated).toBe(offset < source.length);
+        if (!chunk.truncated) {
+          expect(chunk.nextOffset).toBeUndefined();
+          break;
+        }
+        expect(chunk.nextOffset).toBe(offset);
+        expect(source[offset]).not.toMatch(/[\uDC00-\uDFFF]/);
+        before = calls.length;
+        result = yield* read(workspaceItemKey(ref), chunk.nextOffset);
+        expect(calls).toHaveLength(before + 1);
+      }
+      expect(pages).toBeGreaterThan(2);
+      expect(collected).toBe(source);
+      expect(Buffer.from(collected)).toEqual(Buffer.from(source));
+      for (const url of calls.slice(2)) {
+        expect(url.origin).toBe("https://slack.com");
+        expect(url.pathname).toBe("/api/conversations.replies");
+        expect(url.searchParams.get("channel")).toBe(conversationId);
+        expect(url.searchParams.get("oldest")).toBe(messageId);
+        expect(url.searchParams.get("latest")).toBe(messageId);
+        expect(url.searchParams.get("ts")).toBe(replyRootId);
+        expect(url.searchParams.get("inclusive")).toBe("true");
+        expect(url.searchParams.get("limit")).toBe("1");
+        expect(url.searchParams.has("cursor")).toBe(false);
+      }
+      for (const invalidOffset of [
+        -1,
+        source.length,
+        source.length + 1,
+        source.indexOf("😀") + 1,
+      ]) {
+        before = calls.length;
+        const invalid = yield* read(workspaceItemKey(ref), invalidOffset);
+        expect(invalid.isError).toBe(true);
+        expect(errorText(invalid)).not.toContain("EXACT A");
+        expect(calls).toHaveLength(before + (invalidOffset < 0 ? 0 : 1));
+      }
+      // An independently linked endpoint must still match the provider's exact channel response.
+      yield* links.link({ a: owner, b: { ref: otherChannel } });
+      expect((yield* read(workspaceItemKey(otherChannel))).isError).toBe(true);
+      deleted = true;
+      const missing = yield* read();
+      expect(missing.isError).toBe(true);
+      expect(errorText(missing)).not.toContain("EXACT A");
+      deleted = false;
+      for (const invalid of [
+        { ...ref, resourceId: "malformed" },
+        { ...ref, resourceId: chatResourceId({ ...resource, transport: "desktop" }) },
+        { ...ref, resourceId: chatResourceId({ ...resource, replyRootId: "not-a-timestamp" }) },
+        { ...ref, resourceId: chatResourceId({ ...resource, workspaceId: "T999" }) },
+      ]) {
+        yield* links.link({ a: owner, b: { ref: invalid } });
+        before = calls.length;
+        expect((yield* read(workspaceItemKey(invalid))).isError).toBe(true);
+        expect(calls).toHaveLength(before);
+      }
+      yield* connections.disconnect({ connectionId: a.id });
+      before = calls.length;
+      expect((yield* read(workspaceItemKey(ref), content.body.nextOffset)).isError).toBe(true);
+      expect(calls).toHaveLength(before);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          WorkspaceLinksLive,
+          Saved.layer,
+          SlackReader.layer.pipe(
+            Layer.provideMerge(SlackConnection.layer),
+            Layer.provideMerge(SlackStore.layer),
+            Layer.provide(ServerSecretStore.layer.pipe(Layer.provide(config))),
+            Layer.provide(Layer.succeed(HttpClient.HttpClient, http)),
+          ),
+        ).pipe(Layer.provideMerge(SqlitePersistenceMemory), Layer.provideMerge(baseLayer())),
+      ),
+    );
+  },
+);
 
 const baseLayer = () => {
   const configLayer = ServerConfig.layerTest(process.cwd(), { prefix: "pulse-workspace-mcp-" });

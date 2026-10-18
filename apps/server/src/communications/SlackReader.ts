@@ -9,6 +9,7 @@ import {
   SlackMessageId,
   SlackWorkspaceId,
   CommunicationConnectionId,
+  parseChatResourceId,
   type CommunicationConversation,
   type CommunicationMessage,
 } from "@t3tools/contracts";
@@ -95,7 +96,42 @@ const decode = <S extends Schema.Top>(schema: S, value: unknown) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError(invalid));
 const decodeConversationPage = Schema.decodeEffect(CommunicationConversationPage);
 const decodeMessagePage = Schema.decodeEffect(CommunicationMessagePage);
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const encoder = new TextEncoder();
+const bytes = (value: unknown) => encoder.encode(JSON.stringify(value)).length;
+const ExactInput = Schema.Struct({
+  resourceId: Schema.String.check(Schema.isMaxLength(512)),
+  offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
+const ExactResource = Schema.Struct({
+  connectionId: CommunicationConnectionId,
+  workspaceId: SlackWorkspaceId,
+  conversationId: SlackConversationId,
+  messageId: SlackMessageId,
+  replyRootId: Schema.optionalKey(SlackMessageId),
+});
+const ExactMessages = Schema.Union([
+  Failure,
+  Schema.Struct({
+    ok: Schema.Literal(true),
+    channel: Schema.optionalKey(SlackConversationId),
+    team_id: Schema.optionalKey(SlackWorkspaceId),
+    messages: Schema.Array(
+      Schema.Struct({
+        ...Message.fields,
+        channel: Schema.optionalKey(SlackConversationId),
+        team: Schema.optionalKey(SlackWorkspaceId),
+      }),
+    ).check(Schema.isMaxLength(2)),
+  }),
+]);
+type MessageRead = {
+  readonly resourceId: string;
+  readonly body: {
+    readonly text: string;
+    readonly truncated: boolean;
+    readonly nextOffset?: number;
+  };
+};
 type Lease = Effect.Success<ReturnType<Connection.SlackConnection["Service"]["authorize"]>>;
 type Lane<A> = {
   readonly fingerprint: string;
@@ -111,6 +147,9 @@ export class SlackReader extends Context.Service<
     readonly listMessages: (
       input: SlackListMessagesInput,
     ) => Effect.Effect<CommunicationMessagePage, CommunicationsError>;
+    readonly readMessage: (
+      input: typeof ExactInput.Type,
+    ) => Effect.Effect<MessageRead, CommunicationsError>;
   }
 >()("t3/communications/SlackReader") {}
 
@@ -121,6 +160,7 @@ const make = Effect.gen(function* () {
   const deadlines = new Map<string, number>();
   const conversationLanes = new Map<string, Lane<CommunicationConversationPage>>();
   const messageLanes = new Map<string, Lane<CommunicationMessagePage>>();
+  const exactLanes = new Map<string, Lane<MessageRead>>();
   // Only bounded conversation metadata is retained. Message bodies and tokens never enter a cache.
   const kinds = new Map<string, { kind: CommunicationConversation["kind"]; scope: string }>();
   const rateLimit = Effect.fnUntraced(function* (key: string, header?: string) {
@@ -390,22 +430,8 @@ const make = Effect.gen(function* () {
       }),
     );
   });
-  const listMessages = Effect.fn("SlackReader.listMessages")(function* (
-    raw: SlackListMessagesInput,
-  ) {
-    const input = yield* decode(SlackListMessagesInput, raw);
+  const authorizeMessages = Effect.fnUntraced(function* (input: SlackListMessagesInput) {
     const lease = yield* connections.authorize(input);
-    const binding = {
-      version: 1 as const,
-      provider: "slack" as const,
-      connectionId: input.connectionId,
-      generation: lease.generation,
-      workspaceId: input.workspaceId,
-      conversationId: input.conversationId,
-      replyRootId: input.replyRootId ?? null,
-      direction: input.replyRootId ? ("replies" as const) : ("older" as const),
-    };
-    const cursor = yield* cursorFor(input.cursor, binding);
     const known = kinds.get(
       JSON.stringify([input.connectionId, lease.generation, input.conversationId]),
     );
@@ -434,6 +460,26 @@ const make = Effect.gen(function* () {
         "unsupported",
         "Slack channel replies require a user reader with channel history permission.",
       );
+    return lease;
+  });
+  const listMessages = Effect.fn("SlackReader.listMessages")(function* (
+    raw: SlackListMessagesInput,
+  ) {
+    const input = yield* decode(SlackListMessagesInput, raw);
+    const lease = yield* authorizeMessages(input);
+    const binding = {
+      version: 1 as const,
+      provider: "slack" as const,
+      connectionId: input.connectionId,
+      generation: lease.generation,
+      workspaceId: input.workspaceId,
+      conversationId: input.conversationId,
+      replyRootId: input.replyRootId ?? null,
+      direction: input.replyRootId ? ("replies" as const) : ("older" as const),
+    };
+    const cursor = yield* cursorFor(input.cursor, binding);
+    if (exactLanes.has(JSON.stringify(binding)))
+      return yield* fail("unavailable", "A read is already pending for this Slack endpoint.");
     return yield* singleFlight(
       messageLanes,
       JSON.stringify(binding),
@@ -519,7 +565,109 @@ const make = Effect.gen(function* () {
       }),
     );
   });
-  return SlackReader.of({ listConversations, listMessages });
+  const readMessage = Effect.fn("SlackReader.readMessage")(function* (raw: typeof ExactInput.Type) {
+    const input = yield* decode(ExactInput, raw);
+    const resource = parseChatResourceId(input.resourceId);
+    if (!resource)
+      return yield* fail("invalid-input", "Use an exact canonical Slack message reference.");
+    if (resource.transport !== "server")
+      return yield* fail("unsupported", "Desktop Slack messages cannot be read on this server.");
+    const ref = yield* decode(ExactResource, resource);
+    if (ref.replyRootId) {
+      const [rootSeconds, rootFraction] = ref.replyRootId.split(".");
+      const [seconds, fraction] = ref.messageId.split(".");
+      if (
+        Number(rootSeconds) > Number(seconds) ||
+        (Number(rootSeconds) === Number(seconds) && rootFraction! > fraction!)
+      )
+        return yield* fail("invalid-input", "A Slack reply root cannot be later than its message.");
+    }
+    const lease = yield* authorizeMessages(ref);
+    const binding = {
+      version: 1,
+      provider: "slack",
+      connectionId: ref.connectionId,
+      generation: lease.generation,
+      workspaceId: ref.workspaceId,
+      conversationId: ref.conversationId,
+      replyRootId: ref.replyRootId ?? null,
+      direction: ref.replyRootId ? "replies" : "older",
+    };
+    const key = JSON.stringify(binding);
+    if (messageLanes.has(key))
+      return yield* fail("unavailable", "A read is already pending for this Slack endpoint.");
+    return yield* singleFlight(
+      exactLanes,
+      key,
+      JSON.stringify(input),
+      lease,
+      Effect.gen(function* () {
+        const method = ref.replyRootId ? "conversations.replies" : "conversations.history";
+        const result = yield* request(
+          lease,
+          ref.connectionId,
+          method,
+          {
+            channel: ref.conversationId,
+            limit: "1",
+            oldest: ref.messageId,
+            latest: ref.messageId,
+            inclusive: "true",
+            ...(ref.replyRootId ? { ts: ref.replyRootId } : {}),
+          },
+          ExactMessages,
+        );
+        if (!result.ok)
+          return yield* providerFailure(result.error, ref.connectionId, lease, method);
+        if (
+          (result.channel !== undefined && result.channel !== ref.conversationId) ||
+          (result.team_id !== undefined && result.team_id !== ref.workspaceId)
+        )
+          return yield* fail("not-found", "This exact Slack message is unavailable.");
+        const matches = result.messages.filter((row) => row.ts === ref.messageId);
+        const row = matches[0];
+        if (
+          matches.length !== 1 ||
+          !row ||
+          (row.channel !== undefined && row.channel !== ref.conversationId) ||
+          (row.team !== undefined && row.team !== ref.workspaceId) ||
+          (ref.replyRootId
+            ? row.thread_ts !== ref.replyRootId
+            : row.thread_ts !== undefined && row.thread_ts !== ref.messageId)
+        )
+          return yield* fail("not-found", "This exact Slack message is unavailable.");
+        const source = row.text ?? "";
+        const offset = input.offset ?? 0;
+        if (
+          (offset !== 0 && offset >= source.length) ||
+          (offset > 0 && /[\uDC00-\uDFFF]/.test(source[offset]!))
+        )
+          return yield* fail(
+            "invalid-input",
+            "Use a continuation offset from this exact Slack message.",
+          );
+        let text = "";
+        let size = 0;
+        let serialized = 0;
+        for (const char of source.slice(offset)) {
+          const length = encoder.encode(char).length;
+          const encoded = bytes(char) - 2;
+          // MCP repeats JSON as text: allow up to 3x escaped content plus bounded key/ref metadata.
+          if (size + length > 8192 || serialized + encoded > 9000) break;
+          text += char;
+          size += length;
+          serialized += encoded;
+        }
+        const nextOffset = offset + text.length;
+        const truncated = nextOffset < source.length;
+        return {
+          resourceId: input.resourceId,
+          body: { text, truncated, ...(truncated ? { nextOffset } : {}) },
+        };
+      }),
+    );
+  });
+  return SlackReader.of({ listConversations, listMessages, readMessage });
 });
 
 export const layer = Layer.effect(SlackReader, make);

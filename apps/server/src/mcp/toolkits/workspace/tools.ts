@@ -1,5 +1,6 @@
 import {
   DriveError,
+  CommunicationsError,
   WorkspaceToolsError,
   TelegramError,
   MailError,
@@ -21,6 +22,7 @@ const NO_AUTHORITY =
 export const WorkspaceToolResult = Schema.Record(Schema.String, Schema.Unknown);
 
 export const WorkspaceToolError = Schema.Union([
+  CommunicationsError,
   DriveError,
   WorkspaceToolsError,
   TelegramError,
@@ -68,7 +70,7 @@ export const WorkspaceToolkit = Toolkit.make(
   LinkedItemsTool,
   tool("workspace_read_item", {
     title: "Read a linked item",
-    description: `Read one linked item by its key. A mail message returns headers and a text body; pass body.nextOffset as offset to continue. A Telegram message returns only that received message. A Telegram chat returns a bounded page of received messages; pass nextOffset as offset to continue. A task returns its title and project column. A Drive file returns bounded plain text using the connection explicitly chosen by the user; unsupported files stay unavailable. A calendar event returns one exact confirmed occurrence with bounded metadata and text; pass body.nextOffset as offset to continue. It never lists calendars or related notes. A workspace note requires its own direct confirmed thread or project link. Pass body.nextOffset and revision to continue; related meeting links grant no note access. A web page returns its address. ${NO_AUTHORITY}`,
+    description: `Read one linked item by its key. A mail message returns headers and a text body; pass body.nextOffset as offset to continue. An exact linked server Slack message returns only that message, at most 8192 UTF-8 content bytes. Pass body.nextOffset as offset to continue the same message at a UTF-16 character boundary. Every call rechecks the link and current connection permissions. Linked conversations, desktop Slack references and saving alone grant no message bodies. A Telegram message returns only that received message. A Telegram chat returns a bounded page of received messages; pass nextOffset as offset to continue. A task returns its title and project column. A Drive file returns bounded plain text using the connection explicitly chosen by the user; unsupported files stay unavailable. A calendar event returns one exact confirmed occurrence with bounded metadata and text; pass body.nextOffset as offset to continue. It never lists calendars or related notes. A workspace note requires its own direct confirmed thread or project link. Pass body.nextOffset and revision to continue; related meeting links grant no note access. A web page returns its address. ${NO_AUTHORITY}`,
     parameters: {
       key: Schema.String.check(Schema.isMaxLength(8_192)).annotate({
         description: "A key from <linked_items> or workspace_linked_items.",
