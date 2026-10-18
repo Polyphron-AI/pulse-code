@@ -1,5 +1,5 @@
 import type { WorkspaceDocSelection } from "./WorkspaceDocsPanel";
-import type { NoteDraft } from "./meetings/WorkspaceNoteView";
+import type { NoteDraft } from "./WorkspaceDocsNoteView";
 import { ProjectId, WorkspaceItemRef, type EnvironmentId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import {

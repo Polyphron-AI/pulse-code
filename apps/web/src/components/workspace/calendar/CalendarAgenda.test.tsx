@@ -250,7 +250,7 @@ await Promise.all([
   import("../WorkspaceToolsPanel"),
   import("../WorkspaceBrowser"),
   import("../ProjectTasksResource"),
-  import("../meetings/WorkspaceNoteView"),
+  import("../WorkspaceDocsNoteView"),
   import("../../../state/workspaceNotes"),
 ]);
 

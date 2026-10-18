@@ -636,7 +636,7 @@ it("routes a Drive handoff to Docs with provider fallback and preserves the nati
   expect(bodies.noteReads).not.toHaveBeenCalled();
   expect(bodies.start).not.toHaveBeenCalled();
   await act(async () => {
-    await import("./meetings/WorkspaceNoteView");
+    await import("./WorkspaceDocsNoteView");
     await import("../../state/workspaceNotes");
     getByRole(node, "button", { name: "Open note" }).click();
   });
@@ -754,7 +754,7 @@ it("hands an exact native note to Docs, saves with its captured revision, keeps 
   bodies.noteReads.mockClear();
   await mount();
   await act(async () => {
-    await import("./meetings/WorkspaceNoteView");
+    await import("./WorkspaceDocsNoteView");
     await import("../../state/workspaceNotes");
     getByRole(node, "button", { name: "Open note" }).click();
   });
@@ -826,9 +826,10 @@ it("unmounts note reads when disconnected and keeps read-only writes disabled af
   try {
     await mount();
     await act(async () => {
-      await import("./meetings/WorkspaceNoteView");
+      await import("./WorkspaceDocsNoteView");
       await import("../../state/workspaceNotes");
       getByRole(node, "button", { name: "Open note" }).click();
+      await vi.dynamicImportSettled();
     });
     const edit = getByRole(node, "button", { name: "Edit note" }) as HTMLButtonElement;
     expect(edit.disabled).toBe(true);
@@ -840,6 +841,9 @@ it("unmounts note reads when disconnected and keeps read-only writes disabled af
       for (const listener of bodies.connectionListeners) listener();
     });
     expect(bodies.noteReads).toHaveBeenCalledTimes(reads);
+    expect([...bodies.linkListeners.values()].every((listeners) => listeners.size === 0)).toBe(
+      true,
+    );
     expect(node.textContent).toContain("Notes are unavailable. Their links have been kept.");
     await act(() => {
       bodies.connected = true;
@@ -1061,7 +1065,7 @@ it("returns to a requested note and draft with an unrelated center URL after PRs
   await mount(<App selectedItem={selectedItem} />);
   await act(async () => {
     await import("./WorkspaceDocsPanel");
-    await import("./meetings/WorkspaceNoteView");
+    await import("./WorkspaceDocsNoteView");
     await import("../../state/workspaceNotes");
     await import("./WorkspacePullRequestsPanel");
   });
@@ -1117,7 +1121,14 @@ it("returns to a requested note and draft with an unrelated center URL after PRs
   expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
     "Keep this Docs draft",
   );
-  expect([...bodies.linkListeners.values()].every((listeners) => listeners.size === 0)).toBe(true);
+  expect([...bodies.linkListeners.entries()].filter(([, listeners]) => listeners.size > 0)).toEqual(
+    [[linkQuery(), expect.any(Set)]],
+  );
+  expect(bodies.linkListeners.get(linkQuery())?.size).toBe(1);
+  expect(
+    bodies.linkReads.mock.calls.every(([input]) => JSON.stringify(input) === linkQuery().slice(6)),
+  ).toBe(true);
+  expect(bodies.hubReads).not.toHaveBeenCalled();
   expect(node.querySelector('[aria-label="Center item"]')?.textContent).toBe(
     "Unrelated center URL",
   );

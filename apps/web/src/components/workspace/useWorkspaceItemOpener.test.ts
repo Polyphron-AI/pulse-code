@@ -17,7 +17,7 @@ import {
 
 const boundary = vi.hoisted(() => ({
   navigate: vi.fn(),
-  external: vi.fn(),
+  external: vi.fn().mockResolvedValue(undefined),
   v2: false as boolean | undefined,
 }));
 vi.mock("../../localApi", () => ({

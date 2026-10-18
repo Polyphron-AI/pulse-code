@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
-import { createMeetingNote } from "./meetingNotes";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { fireEvent, getByRole, queryByRole } from "@testing-library/dom";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { ProjectId, EnvironmentId, type WorkspaceNote } from "@t3tools/contracts";
-import { MeetingNoteRecovery, WorkspaceNoteView, type NoteDraft } from "./WorkspaceNoteView";
+import { EnvironmentId, type WorkspaceNote } from "@t3tools/contracts";
+import { WorkspaceDocsNoteView, type NoteDraft } from "./WorkspaceDocsNoteView";
 
 let root: Root;
 let node: HTMLDivElement;
@@ -35,7 +34,7 @@ async function mount(operate = true) {
     const [error, setError] = useState<string | null>(null);
     const [deleted, setDeleted] = useState(false);
     return (
-      <WorkspaceNoteView
+      <WorkspaceDocsNoteView
         environmentId={EnvironmentId.make("original")}
         note={note}
         status="ready"
@@ -136,73 +135,4 @@ it("denies read-only writes through real disabled controls", async () => {
   expect((getByRole(node, "button", { name: "Edit note" }) as HTMLButtonElement).disabled).toBe(
     true,
   );
-});
-
-it("opens a partially saved note and retries both links using the same create journal identity", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  node = document.createElement("div");
-  document.body.append(node);
-  root = createRoot(node);
-  const open = vi.fn();
-  const create = vi.fn().mockResolvedValue({ id: note.id, title: note.title });
-  const link = vi
-    .fn()
-    .mockResolvedValueOnce({})
-    .mockRejectedValueOnce(new Error("Disconnected"))
-    .mockResolvedValue({});
-  const input = {
-    environmentId: EnvironmentId.make("original"),
-    requestId: "00000000-0000-0000-0000-000000000001",
-    title: note.title,
-    body: note.body,
-    projectId: ProjectId.make("project"),
-    meeting: {
-      ref: {
-        type: "provider-resource" as const,
-        provider: "workspace-calendar",
-        resourceId: "wce_00000000-0000-0000-0000-000000000001",
-      },
-    },
-  };
-  function Harness() {
-    const [saved, setSaved] = useState<Awaited<ReturnType<typeof createMeetingNote>> | null>(null);
-    const [failed, setFailed] = useState(false);
-    const [pending, setPending] = useState(false);
-    const run = async () => {
-      setPending(true);
-      try {
-        await createMeetingNote({ create, link }, input, setSaved);
-        setFailed(false);
-      } catch {
-        setFailed(true);
-      } finally {
-        setPending(false);
-      }
-    };
-    return failed && saved ? (
-      <MeetingNoteRecovery
-        canOperate
-        pending={pending}
-        onOpen={() => open(saved.ref)}
-        onRetry={() => void run()}
-      />
-    ) : (
-      <button onClick={() => void run()}>Create notes</button>
-    );
-  }
-  await act(() => root.render(<Harness />));
-  await click("Create notes");
-  expect(node.textContent).toContain("Note saved. Linking did not finish.");
-  await click("Open saved note");
-  expect(open).toHaveBeenCalledWith({
-    type: "provider-resource",
-    provider: "workspace-note",
-    resourceId: note.id,
-  });
-  await click("Retry linking");
-  expect(create).toHaveBeenCalledTimes(2);
-  expect(create.mock.calls[0]).toEqual(create.mock.calls[1]);
-  expect(link.mock.calls[0]).toEqual(link.mock.calls[2]);
-  expect(link.mock.calls[1]).toEqual(link.mock.calls[3]);
-  expect(queryByRole(node, "alert")).toBeNull();
 });

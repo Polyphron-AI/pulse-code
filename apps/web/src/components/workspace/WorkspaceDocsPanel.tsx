@@ -1,3 +1,10 @@
+import { randomUUID } from "../../lib/utils";
+import * as Cause from "effect/Cause";
+import * as Schema from "effect/Schema";
+import { WorkspaceNotesError } from "@t3tools/contracts";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { serverEnvironment } from "../../state/server";
+import { useWorkspaceNoteSession } from "./workspaceResourceState";
 import {
   workspaceItemKey,
   type EnvironmentId,
@@ -7,7 +14,7 @@ import {
   type WorkspaceLinkId,
   type WorkspaceLinkView,
 } from "@t3tools/contracts";
-import { useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useProject, useThreadShells } from "../../state/entities";
 import { useConnectedEnvironmentIds } from "../../state/environments";
@@ -44,16 +51,13 @@ type DocumentEndpoint = WorkspaceDocSelection["document"];
 type Entrances = {
   readonly projectTitle?: string;
   readonly currentItem?: WorkspaceLinkEndpoint | null;
-  readonly renderNative?: (document: DocumentEndpoint) => ReactNode;
 };
 function isDocument(endpoint: WorkspaceLinkEndpoint): endpoint is DocumentEndpoint {
   return endpoint.ref.type === "file" || isWorkspaceNote(endpoint.ref);
 }
 
 /** Adapts the shell's single request into a controlled, project-scoped Docs selection. */
-export function WorkspaceDocsResource(
-  props: WorkspaceResourceBodyProps & Pick<Entrances, "renderNative">,
-) {
+export function WorkspaceDocsResource(props: WorkspaceResourceBodyProps) {
   const projectTitle = useProject(scopeProjectRef(props.environmentId, props.projectId))?.title;
   const requested = props.request ? { ref: props.request } : props.selectedItem;
   const document = requested && isDocument(requested) ? requested : null;
@@ -99,20 +103,7 @@ export function WorkspaceDocsPanel(props: WorkspaceDocsPanelProps & Entrances) {
       ? props.selected
       : null;
   if (hidden) return null;
-  // Native notes keep their revision-safe editor; only Drive files use the shared reader.
-  if (selected && isWorkspaceNote(selected.document.ref) && props.renderNative)
-    return (
-      <section
-        aria-label="Docs resource"
-        className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
-      >
-        <Button size="sm" variant="ghost" onClick={() => props.onSelect(null)}>
-          Back to documents
-        </Button>
-        {props.renderNative(selected.document)}
-      </section>
-    );
-  if (!connected)
+  if (!connected && !(selected && isWorkspaceNote(selected.document.ref)))
     return (
       <section aria-label="Docs resource">
         <p className="text-sm text-muted-foreground">
@@ -125,8 +116,8 @@ export function WorkspaceDocsPanel(props: WorkspaceDocsPanelProps & Entrances) {
       key={`${props.environmentId}:${props.projectId}`}
       {...props}
       selected={selected}
-      linksAvailable={capability.workspaceLinks}
-      discoveryAvailable={capability.workspaceItemContext}
+      linksAvailable={connected && capability.workspaceLinks}
+      discoveryAvailable={connected && capability.workspaceItemContext}
     />
   );
 }
@@ -342,7 +333,34 @@ function SelectedDocument(
       aria-label="Docs resource"
       className="min-w-0 space-y-3 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
     >
-      {removed || props.linksError ? (
+      {isWorkspaceNote(document.ref) ? (
+        <>
+          <Button size="sm" variant="ghost" onClick={() => props.onSelect(null)}>
+            Back to documents
+          </Button>
+          <Suspense fallback={<p role="status">Loading note...</p>}>
+            <NativeNote
+              environmentId={props.environmentId}
+              projectId={props.projectId}
+              request={document.ref}
+              selectedItem={document}
+              onOpen={() => {}}
+              caption={`${props.projectTitle ?? "Workspace note"} · Environment access`}
+              overflowAction={
+                <WorkspaceItemMenu
+                  environmentId={props.environmentId}
+                  item={document}
+                  confirmed={link ? [props.project] : []}
+                  triggerClassName="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
+                  actions={<DocumentLinkActions {...props} {...(link ? { link } : {})} />}
+                >
+                  {null}
+                </WorkspaceItemMenu>
+              }
+            />
+          </Suspense>
+        </>
+      ) : removed || props.linksError ? (
         <>
           <h2 className="break-words text-sm font-semibold">{title}</h2>
           <p role="status" className="text-sm text-muted-foreground">
@@ -470,3 +488,159 @@ function DocumentLinkActions(
     </div>
   );
 }
+
+const isNotesError = Schema.is(WorkspaceNotesError);
+
+const NativeNote = lazy(async () => {
+  const [{ workspaceNotes }, { WorkspaceDocsNoteView }] = await Promise.all([
+    import("../../state/workspaceNotes"),
+    import("./WorkspaceDocsNoteView"),
+  ]);
+  return {
+    default: function NativeNoteBody({
+      environmentId,
+      request,
+      selectedItem,
+      caption,
+      overflowAction,
+    }: WorkspaceResourceBodyProps & { caption: string; overflowAction: ReactNode }) {
+      const ref = request ?? selectedItem?.ref;
+      const projection = useEnvironmentQuery(
+        serverEnvironment.configProjection({ environmentId, input: {} }),
+      );
+      const config = projection.data?.source === "live" ? projection.data.config : null;
+      const connected = useConnectedEnvironmentIds().includes(environmentId);
+      const canOperate = useWorkspaceCanOperate(environmentId) && connected;
+      const hidden = useContext(WorkspaceResourcesBodyContext)?.hidden ?? false;
+      const available = config?.pulseCapabilities?.workspaceNotes === true && connected && !hidden;
+      const query = useEnvironmentQuery(
+        available && ref && isWorkspaceNote(ref)
+          ? workspaceNotes.get({ environmentId, input: { id: ref.resourceId } })
+          : null,
+      );
+      const update = useAtomCommand(workspaceNotes.update, { reportFailure: false });
+      const remove = useAtomCommand(workspaceNotes.delete, { reportFailure: false });
+      const restore = useAtomCommand(workspaceNotes.restore, { reportFailure: false });
+      const [session, patch] = useWorkspaceNoteSession(
+        environmentId,
+        ref && isWorkspaceNote(ref) ? ref.resourceId : null,
+      );
+      const { draft, pending, error, deletedRevision, confirming, retry } = session;
+      const note = query.data;
+      const discard = (action: "cancel" | "reload") => {
+        if (
+          draft &&
+          (draft.title !== note?.title || draft.body !== note?.body) &&
+          confirming !== action
+        ) {
+          patch({ confirming: action });
+          return;
+        }
+        patch({ draft: null, confirming: null, retry: null, error: null });
+        if (action === "reload") query.refresh();
+      };
+      const mutate = async (action: "save" | "delete" | "restore") => {
+        if (!canOperate || !available || pending || !ref || !isWorkspaceNote(ref)) return;
+        if (
+          (action === "save" && !draft) ||
+          (action === "delete" && !note) ||
+          (action === "restore" && deletedRevision === null)
+        )
+          return;
+        const expectedRevision =
+          action === "restore"
+            ? deletedRevision!
+            : action === "save"
+              ? draft!.revision
+              : note!.revision;
+        const fingerprint = JSON.stringify({
+          action,
+          id: ref.resourceId,
+          expectedRevision,
+          ...(action === "save" ? { title: draft!.title, body: draft!.body } : {}),
+        });
+        const requestId =
+          retry?.fingerprint === fingerprint ? retry.requestId : randomUUID().toLowerCase();
+        patch({ retry: { fingerprint, requestId }, pending: true, error: null });
+        try {
+          const input = {
+            environmentId,
+            input: { id: ref.resourceId, requestId, expectedRevision },
+          };
+          const result =
+            action === "save"
+              ? await update({
+                  environmentId,
+                  input: { ...input.input, title: draft!.title, body: draft!.body },
+                })
+              : action === "delete"
+                ? await remove(input)
+                : await restore(input);
+          if (result._tag === "Failure") {
+            const failure = Cause.squash(result.cause);
+            if (action === "restore" && isNotesError(failure) && failure.kind === "conflict") {
+              patch({ error: "This note was changed or already restored. Reload it." });
+              query.refresh();
+            } else
+              patch({
+                error:
+                  failure instanceof Error
+                    ? failure.message
+                    : "Notes are unavailable. Their links have been kept.",
+              });
+          } else {
+            patch({
+              draft: null,
+              retry: null,
+              deletedRevision: action === "delete" ? expectedRevision + 1 : null,
+            });
+            query.refresh();
+          }
+        } catch (cause) {
+          patch({
+            error:
+              cause instanceof Error
+                ? cause.message
+                : "Notes are unavailable. Their links have been kept.",
+          });
+        } finally {
+          patch({ pending: false });
+        }
+      };
+      if (!ref || !isWorkspaceNote(ref))
+        return (
+          <p className="p-4 text-sm text-muted-foreground">
+            Open a linked workspace note to preview it here.
+          </p>
+        );
+      return (
+        <WorkspaceDocsNoteView
+          environmentId={environmentId}
+          caption={caption}
+          overflowAction={overflowAction}
+          note={!available || query.error ? null : note}
+          status={
+            !available || query.error
+              ? "unavailable"
+              : query.isPending && !note
+                ? "loading"
+                : "ready"
+          }
+          error={error ?? query.error}
+          canOperate={canOperate && available && (!query.error || deletedRevision !== null)}
+          pending={pending}
+          draft={draft}
+          deleted={deletedRevision !== null && !(note && note.revision > deletedRevision)}
+          confirming={confirming}
+          onEdit={(draft) => patch({ draft })}
+          onSave={() => void mutate("save")}
+          onDelete={() => void mutate("delete")}
+          onRestore={() => void mutate("restore")}
+          onCancel={() => discard("cancel")}
+          onReload={() => discard("reload")}
+          onKeepDraft={() => patch({ confirming: null })}
+        />
+      );
+    },
+  };
+});

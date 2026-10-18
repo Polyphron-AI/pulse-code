@@ -1,19 +1,22 @@
+import type { ReactNode } from "react";
 import type { EnvironmentId, WorkspaceNote } from "@t3tools/contracts";
 import { WorkspaceNoteCreate } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { WorkspaceDocsReadingView } from "../WorkspaceDocsReadingView";
-import { WorkspaceDocContent } from "../WorkspaceDocContent";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { WorkspaceDocsReadingView } from "./WorkspaceDocsReadingView";
+import { WorkspaceDocContent } from "./WorkspaceDocContent";
 
 export interface NoteDraft {
   readonly title: string;
   readonly body: string;
   readonly revision: number;
 }
-export interface WorkspaceNoteViewProps {
+export interface WorkspaceDocsNoteViewProps {
   readonly environmentId: EnvironmentId;
   readonly note: WorkspaceNote | null;
+  readonly caption?: string;
+  readonly overflowAction?: ReactNode;
   readonly status: "loading" | "ready" | "unavailable";
   readonly error?: string | null;
   readonly canOperate: boolean;
@@ -33,7 +36,7 @@ const isCreate = Schema.is(WorkspaceNoteCreate);
 const validDraft = (draft: NoteDraft) =>
   isCreate({ ...draft, requestId: "00000000-0000-0000-0000-000000000000" });
 /** Note reading and editing shared by the live Docs slot and isolated fixture. */
-export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
+export function WorkspaceDocsNoteView(props: WorkspaceDocsNoteViewProps) {
   const { note, draft, pending, canOperate } = props;
   const writable = canOperate && !pending;
   return (
@@ -112,7 +115,8 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
         <>
           <WorkspaceDocsReadingView
             title={note.title}
-            caption="Available to readers of this environment"
+            caption={props.caption ?? "Available to readers of this environment"}
+            overflowAction={props.overflowAction}
             content={<WorkspaceDocContent content={{ format: "markdown", text: note.body }} />}
           />
           <div className="flex flex-nowrap gap-2">
@@ -168,33 +172,6 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
           Read-only. Connect with operate access to change this note.
         </p>
       ) : null}
-    </section>
-  );
-}
-
-/** A saved note remains reachable even when either independent link failed. */
-export function MeetingNoteRecovery(props: {
-  readonly canOperate: boolean;
-  readonly pending: boolean;
-  readonly onOpen: () => void;
-  readonly onRetry: () => void;
-}) {
-  return (
-    <section aria-label="Saved note linking" className="flex flex-col gap-3 text-sm">
-      <p role="alert">Note saved. Linking did not finish. Retry linking.</p>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={props.onOpen}>
-          Open saved note
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={!props.canOperate || props.pending}
-          onClick={props.onRetry}
-        >
-          Retry linking
-        </Button>
-      </div>
     </section>
   );
 }

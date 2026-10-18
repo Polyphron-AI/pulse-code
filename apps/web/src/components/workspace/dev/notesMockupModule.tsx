@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import type { WorkspaceNote } from "@t3tools/contracts";
-import { WorkspaceNoteView, type NoteDraft } from "../meetings/WorkspaceNoteView";
+import { WorkspaceDocsNoteView, type NoteDraft } from "../WorkspaceDocsNoteView";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
@@ -90,7 +90,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
       setError(null);
     };
     return (
-      <WorkspaceNoteView
+      <WorkspaceDocsNoteView
         environmentId={session.environmentId}
         note={current}
         status={deleted ? "unavailable" : "ready"}
