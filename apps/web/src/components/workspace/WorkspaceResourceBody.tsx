@@ -11,18 +11,22 @@ import { useWorkspaceNoteSession, WorkspaceResourcesBodyContext } from "./worksp
 import { isWorkspaceNote } from "./meetings/meetingNotes";
 import type { WorkspaceItemRef, WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { lazy, Suspense, useContext, type ReactNode } from "react";
-import type { WorkspaceResourceScope, WorkspaceResourceTab } from "./workspaceResourceState";
+import type {
+  WorkspaceResourceRequest,
+  WorkspaceResourceScope,
+  WorkspaceResourceTab,
+} from "./workspaceResourceState";
 
 export interface WorkspaceResourceBodyProps extends WorkspaceResourceScope {
   readonly selectedItem: WorkspaceLinkEndpoint | null;
-  readonly request: WorkspaceItemRef | null;
+  readonly request: WorkspaceResourceRequest | null;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
 }
 export interface WorkspaceResourceBodySwitchProps extends WorkspaceResourceBodyProps {
   readonly tab: WorkspaceResourceTab;
 }
 const Files = lazy(() =>
-  import("./WorkspaceToolsPanel").then((module) => ({ default: module.WorkspaceProjectFiles })),
+  import("./ProjectDriveExplorer").then((module) => ({ default: module.ProjectDriveExplorer })),
 );
 const Browser = lazy(() =>
   import("./WorkspaceBrowser").then((module) => ({ default: module.WorkspaceBrowser })),
@@ -39,7 +43,7 @@ export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): 
   let body: ReactNode;
   switch (props.tab) {
     case "files":
-      body = <Files {...props} />;
+      body = <Files key={`${props.environmentId}:${props.projectId}`} {...props} />;
       break;
     case "browser":
       body = (

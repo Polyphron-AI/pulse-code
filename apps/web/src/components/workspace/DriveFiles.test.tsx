@@ -5,13 +5,16 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { DriveSearch, DriveFileAccess } from "./DriveFiles";
 const mocks = vi.hoisted(() => ({
   capable: true,
+  connected: true,
   search: vi.fn(),
   bind: vi.fn(),
   read: vi.fn(),
   query: vi.fn(),
   binding: "first",
 }));
-vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["remote"] }));
+vi.mock("../../state/environments", () => ({
+  useConnectedEnvironmentIds: () => (mocks.connected ? ["remote"] : []),
+}));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,
@@ -67,6 +70,7 @@ afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());
   renderer = undefined;
   mocks.capable = true;
+  mocks.connected = true;
   mocks.binding = "first";
   vi.clearAllMocks();
   vi.unstubAllGlobals();
@@ -82,6 +86,30 @@ it("gates old servers without creating Drive search queries or reader controls",
       </>,
     );
   });
+  expect(mocks.query).not.toHaveBeenCalled();
+  expect(renderer!.root.findAllByType("button")).toHaveLength(0);
+});
+it("unmounts search and reader queries when the environment disconnects", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const view = (
+    <>
+      <DriveSearch environmentId={environmentId} onLink={async () => {}} />
+      <DriveFileAccess environmentId={environmentId} fileId="file" />
+    </>
+  );
+  await act(() => {
+    renderer = create(view);
+  });
+  mocks.query.mockClear();
+  mocks.connected = false;
+  await act(() =>
+    renderer!.update(
+      <>
+        <DriveSearch environmentId={environmentId} onLink={async () => {}} />
+        <DriveFileAccess environmentId={environmentId} fileId="file" />
+      </>,
+    ),
+  );
   expect(mocks.query).not.toHaveBeenCalled();
   expect(renderer!.root.findAllByType("button")).toHaveLength(0);
 });

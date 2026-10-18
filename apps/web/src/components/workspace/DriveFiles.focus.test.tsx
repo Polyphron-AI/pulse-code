@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pending: false,
   sessionListeners: new Set<() => void>(),
 }));
+vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["remote"] }));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => {
     useSyncExternalStore(

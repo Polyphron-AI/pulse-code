@@ -21,6 +21,7 @@ import {
 const mocks = vi.hoisted(() => ({
   command: vi.fn(),
   operate: true,
+  connected: true,
   tasksV2: false,
   newCommand: vi.fn(),
   zone: "Africa/Johannesburg",
@@ -59,7 +60,8 @@ vi.mock("../../hooks/useSettings", () => ({
 }));
 vi.mock("../../state/entities", () => ({ useThreadShells: () => [] }));
 vi.mock("../../state/environments", () => ({
-  useConnectedEnvironmentIds: () => ["remote", "other", "other-environment"],
+  useConnectedEnvironmentIds: () =>
+    mocks.connected ? ["remote", "other", "other-environment"] : [],
 }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: {
@@ -254,6 +256,8 @@ afterEach(async () => {
   renderer = undefined;
   mocks.operate = true;
   mocks.description = undefined;
+  mocks.connected = true;
+  mocks.driveRoot = null;
   mocks.tasksV2 = false;
   mocks.zone = "Africa/Johannesburg";
   mocks.settingsReady = true;
@@ -1143,4 +1147,16 @@ it("marks oversize descriptions invalid and clears the error when the draft fits
   expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
   await act(submit);
   expect(mocks.command.mock.calls.at(-1)?.[0].input.description).toBe("x".repeat(600));
+});
+it("refuses settings saves while the environment is disconnected", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.connected = false;
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command).not.toHaveBeenCalled();
+  expect(mocks.newCommand).not.toHaveBeenCalled();
 });

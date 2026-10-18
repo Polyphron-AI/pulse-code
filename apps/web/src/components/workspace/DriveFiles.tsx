@@ -22,7 +22,9 @@ export const errorText = (result: Parameters<typeof squashAtomCommandFailure>[0]
 export function useDriveAccess(environmentId: EnvironmentId) {
   const canOperate = useWorkspaceCanOperate(environmentId);
   const connected = useConnectedEnvironmentIds().includes(environmentId);
-  const connections = useEnvironmentQuery(drive.connections({ environmentId, input: {} }));
+  const connections = useEnvironmentQuery(
+    connected ? drive.connections({ environmentId, input: {} }) : null,
+  );
   return { connections, canOperate: canOperate && connected };
 }
 export function DriveSearch(props: {
@@ -30,7 +32,8 @@ export function DriveSearch(props: {
   onLink: (endpoint: WorkspaceLinkEndpoint) => Promise<void>;
 }) {
   const { driveRead } = useMailCapabilities(props.environmentId);
-  return driveRead ? <DriveSearchAvailable {...props} /> : null;
+  const connected = useConnectedEnvironmentIds().includes(props.environmentId);
+  return driveRead && connected ? <DriveSearchAvailable {...props} /> : null;
 }
 function DriveSearchAvailable({
   environmentId,
@@ -172,8 +175,9 @@ export function DriveFileAccess({
   fileId: string;
 }) {
   const { driveRead } = useMailCapabilities(environmentId);
+  const connected = useConnectedEnvironmentIds().includes(environmentId);
   const [open, setOpen] = useState(false);
-  return driveRead ? (
+  return driveRead && connected ? (
     <>
       <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>
         Read file

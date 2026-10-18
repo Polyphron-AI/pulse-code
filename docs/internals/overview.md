@@ -20,6 +20,12 @@ must not add a second host or selection store. See [workspace shell](./workspace
 capture, invalidation and resource handoff constraints, and [workspace links](./workspace-links.md)
 for confirmed-link grants.
 
+A Drive root is navigation configuration over a confirmed project-folder relation and an explicit
+Drive connection binding. It grants no read access to unlinked descendants. Metadata reads and
+continuation cursors remain scoped to the owning environment, project, folder path and account;
+changing a link, binding or connection invalidates that scope. The shared explorer discards stale
+responses and never creates a binding or relationship while browsing.
+
 Calendar and native notes belong to the selected environment. Desktop account tokens are not
 migrated into the Calendar service. Occurrence identity survives rescheduling, and a confirmed
 meeting link never grants access through a meeting-to-note edge. Each note needs its own direct

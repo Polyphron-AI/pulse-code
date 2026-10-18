@@ -4,6 +4,9 @@ import { EnvironmentAuthorizationError } from "./auth.ts";
 import { NonNegativeInt, PositiveInt, ProjectId } from "./baseSchemas.ts";
 import { WorkspaceLinkId } from "./pulseLinks.ts";
 
+export const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+export const DRIVE_SHORTCUT_MIME = "application/vnd.google-apps.shortcut";
+
 export const DriveConnectionId = Schema.String.check(Schema.isPattern(/^drv_[a-f0-9-]{36}$/));
 export const DriveFileId = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,256}$/));
 export const DriveIdentity = Schema.Struct({

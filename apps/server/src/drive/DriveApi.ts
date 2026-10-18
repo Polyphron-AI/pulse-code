@@ -1,4 +1,10 @@
-import { DriveBrowseInput, DriveError, DriveFile, DriveFileId } from "@t3tools/contracts";
+import {
+  DRIVE_FOLDER_MIME,
+  DriveBrowseInput,
+  DriveError,
+  DriveFile,
+  DriveFileId,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -11,10 +17,10 @@ import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 const Metadata = Schema.Struct({
   id: DriveFileId,
   name: Schema.String,
-  mimeType: Schema.String,
+  mimeType: Schema.String.check(Schema.isMaxLength(160)),
   trashed: Schema.optionalKey(Schema.Boolean),
-  modifiedTime: Schema.optionalKey(Schema.String),
-  size: Schema.optionalKey(Schema.String),
+  modifiedTime: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+  size: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(30))),
   owners: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({
@@ -31,7 +37,7 @@ const Metadata = Schema.Struct({
 const fields =
   "id,name,mimeType,trashed,modifiedTime,size,owners(displayName,emailAddress,me),parents,driveId,shortcutDetails(targetId,targetMimeType)";
 const mimeByType = {
-  folder: "application/vnd.google-apps.folder",
+  folder: DRIVE_FOLDER_MIME,
   document: "application/vnd.google-apps.document",
   spreadsheet: "application/vnd.google-apps.spreadsheet",
   presentation: "application/vnd.google-apps.presentation",
@@ -96,7 +102,7 @@ const fail = (kind: DriveError["kind"], message: string) => new DriveError({ kin
 const metadata = (value: typeof Metadata.Type): DriveFile => ({
   id: value.id,
   name: value.name.slice(0, 300),
-  mimeType: value.mimeType.slice(0, 160),
+  mimeType: value.mimeType,
   url:
     value.mimeType === mimeByType.folder
       ? `https://drive.google.com/drive/folders/${value.id}`
@@ -107,8 +113,8 @@ const metadata = (value: typeof Metadata.Type): DriveFile => ({
           : value.mimeType === mimeByType.presentation
             ? `https://docs.google.com/presentation/d/${value.id}/edit`
             : `https://drive.google.com/file/d/${value.id}/view`,
-  ...(value.modifiedTime ? { modifiedTime: value.modifiedTime.slice(0, 64) } : {}),
-  ...(value.size ? { size: value.size.slice(0, 30) } : {}),
+  ...(value.modifiedTime ? { modifiedTime: value.modifiedTime } : {}),
+  ...(value.size ? { size: value.size } : {}),
   ...(value.owners?.[0]
     ? { owner: (value.owners[0].displayName ?? value.owners[0].emailAddress ?? "").slice(0, 160) }
     : {}),

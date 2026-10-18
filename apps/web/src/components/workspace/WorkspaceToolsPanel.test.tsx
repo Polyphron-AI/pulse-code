@@ -113,12 +113,20 @@ vi.mock("./ProjectTasks", () => ({
   workspaceToolsError: () => "Synthetic error",
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ ready: true, workspaceLinks: true, workspaceTools: true }),
+  useMailCapabilities: () => ({
+    ready: true,
+    workspaceLinks: true,
+    workspaceTools: true,
+    driveRead: true,
+  }),
 }));
 vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => <button>Start thread</button>,
 }));
-vi.mock("./DriveFiles", () => ({ DriveFileAccess: () => <button>Read file</button> }));
+vi.mock("./DriveFiles", () => ({
+  DriveFileAccess: () => <button>Read file</button>,
+  DriveSearch: () => <p>Account-wide Drive search</p>,
+}));
 vi.mock("../preview/openPreviewSession", () => ({
   openPreviewSession: (input: unknown) => mocks.preview(input),
 }));
@@ -282,3 +290,19 @@ it("allows browsing without selection and disables linking with a reason", async
 });
 
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => true }));
+
+it("retains account-wide search beside linked files on older servers", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(
+      <WorkspaceProjectFiles
+        environmentId={environmentId}
+        projectId={ProjectId.make("p")}
+        selectedItem={null}
+        request={null}
+        onOpen={() => {}}
+      />,
+    );
+  });
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Account-wide Drive search");
+});

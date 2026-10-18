@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 // Only side-effect-free seed helpers load statically. Presentation modules must
 // stay behind the dynamic imports after installNetworkGuard() in startup.
+import { driveMockupStates } from "./driveMockupData";
 import {
   createWorkspaceMockupSession,
   parseWorkspaceMockupRequest,
@@ -339,6 +340,9 @@ export async function startWorkspaceMockup(): Promise<void> {
             nextId === "05"
               ? (workspaceBrowserMockupStates.find((value) => value === state) ?? null)
               : null,
+            ["01", "02", "03", "04"].includes(nextId)
+              ? (driveMockupStates.find((value) => value === state) ?? null)
+              : null,
           );
           const current = session;
           if (!current.recipe) throw new Error("Unknown fixture.");
@@ -467,7 +471,7 @@ export async function startWorkspaceMockup(): Promise<void> {
             version: 1,
             fixtureId: current.id,
             referencePng: current.recipe.png,
-            route: `${current.recipe.route}${current.taskState || current.calendarState || current.browserState ? `&state=${current.taskState ?? current.calendarState ?? current.browserState}` : ""}${light ? "&theme=light" : ""}`,
+            route: `${current.recipe.route}${current.taskState || current.calendarState || current.browserState || current.driveState ? `&state=${current.taskState ?? current.calendarState ?? current.browserState ?? current.driveState}` : ""}${light ? "&theme=light" : ""}`,
             viewport: { ...context.viewport },
             locale: current.locale,
             timeZone: current.timeZone,

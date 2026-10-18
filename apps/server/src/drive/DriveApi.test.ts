@@ -10,6 +10,21 @@ const input = {
   limit: 20,
 };
 it.effect.each([
+  ["mimeType", 161],
+  ["modifiedTime", 65],
+  ["size", 31],
+] as const)("rejects oversized structural metadata %s without truncating it", ([field, length]) =>
+  Effect.gen(function* () {
+    const fake = makeFakeDrive();
+    fake.state.listRequests.push({
+      files: [{ id: "file", name: "File", mimeType: "text/plain", [field]: "x".repeat(length) }],
+    });
+    const api = yield* Api.make.pipe(Effect.provide(fake.layer));
+    const result = yield* api.listChildren("token", input).pipe(Effect.flip);
+    expect(result.kind).toBe("unavailable");
+  }),
+);
+it.effect.each([
   ["folder", "application/vnd.google-apps.folder", "https://drive.google.com/drive/folders/file"],
   [
     "document",

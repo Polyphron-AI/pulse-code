@@ -271,6 +271,24 @@ it.layer(testLayer())("WorkspaceLinks", (it) => {
       assert.deepStrictEqual(page.linked[0]?.source, { type: "action", action: "add-to-project" });
     }),
   );
+  it.effect("keeps a Drive file's original viewing origin through unlink and relink", () =>
+    Effect.gen(function* () {
+      const links = yield* WorkspaceLinks;
+      const file: WorkspaceLinkEndpoint = {
+        ref: { type: "file", provider: "google-drive", fileId: "drive-document" },
+        title: "Strategy",
+      };
+      const project = projectItem(710);
+      const { id } = yield* links.link({ a: file, b: project, viewing: file });
+      const original = (yield* links.list(project.ref)).linked[0]!.origin;
+      assert.deepStrictEqual(original?.viewing, file);
+      yield* links.unlink(id);
+      assert.lengthOf((yield* links.list(project.ref)).linked, 0);
+      const relinked = yield* links.link({ a: file, b: project, viewing: project });
+      assert.strictEqual(relinked.id, id);
+      assert.deepStrictEqual((yield* links.list(project.ref)).linked[0]!.origin, original);
+    }),
+  );
 
   it.effect("rejects invalid URLs in endpoints, viewing origins and list requests", () =>
     Effect.gen(function* () {

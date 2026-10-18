@@ -67,6 +67,7 @@ export function ProjectWorkspaceSettings({
         <p className="text-sm text-muted-foreground">Loading project settings...</p>
       )}
       <ProjectDriveRootSettings
+        inSettings
         key={`${environmentId}:${projectId}`}
         environmentId={environmentId}
         projectId={projectId}
@@ -196,7 +197,7 @@ function ProjectWorkspaceSettingsForm({
         <span>Browser thread</span>
         <select
           aria-label="Project browser thread"
-          className="w-full rounded-md border border-input bg-background p-2"
+          className="w-full rounded-md border border-input bg-background p-2 pointer-coarse:min-h-11 pointer-coarse:text-base"
           value={browserThreadId}
           onChange={(event) => setBrowserThreadId(event.target.value)}
           disabled={busy || !canOperate || awaitingConfirmation}
@@ -218,7 +219,7 @@ function ProjectWorkspaceSettingsForm({
           <span>Completed column</span>
           <select
             aria-label="Completed column"
-            className="w-full rounded-md border border-input bg-background p-2"
+            className="w-full rounded-md border border-input bg-background p-2 pointer-coarse:min-h-11 pointer-coarse:text-base"
             value={designatedColumn}
             onChange={(event) => setCompletedColumn(event.target.value)}
             disabled={busy || !canOperate || awaitingConfirmation}

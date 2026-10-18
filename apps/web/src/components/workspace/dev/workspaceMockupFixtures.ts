@@ -1,3 +1,4 @@
+import { driveMockupStates, type DriveMockupState } from "./driveMockupData";
 import type { ReactNode } from "react";
 import {
   chatResourceId,
@@ -124,6 +125,7 @@ export interface WorkspaceMockupSession {
   readonly taskState: WorkspaceTasksMockupState | null;
   readonly calendarState: WorkspaceCalendarMockupState | null;
   readonly browserState: WorkspaceBrowserMockupState | null;
+  readonly driveState: DriveMockupState | null;
   readonly environmentId: EnvironmentId;
   readonly resourceProjectId: ProjectId;
   readonly recipe: WorkspaceMockupRecipe;
@@ -874,7 +876,8 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
         workspaceTasksMockupStates.some((value) => value === state)) ||
       (id === "08" && workspaceCalendarMockupStates.some((value) => value === state)) ||
       (id === "07" && workspaceCalendarAgendaMockupStates.some((value) => value === state)) ||
-      (id === "05" && workspaceBrowserMockupStates.some((value) => value === state))
+      (id === "05" && workspaceBrowserMockupStates.some((value) => value === state)) ||
+      (["01", "02", "03", "04"].includes(id) && driveMockupStates.some((value) => value === state))
     )
   )
     throw new Error("Unknown fixture state.");
@@ -892,6 +895,7 @@ export function createWorkspaceMockupSession(
   taskState: WorkspaceTasksMockupState | null = null,
   calendarState: WorkspaceCalendarMockupState | null = null,
   browserState: WorkspaceBrowserMockupState | null = null,
+  driveState: DriveMockupState | null = null,
 ): WorkspaceMockupSession {
   if (!Object.hasOwn(workspaceMockupRecipes, id)) throw new Error("Unknown fixture.");
   const seed = createWorkspaceMockupSeed();
@@ -924,6 +928,7 @@ export function createWorkspaceMockupSession(
     taskState,
     calendarState,
     browserState,
+    driveState,
     environmentId: seed.environmentId,
     resourceProjectId: seed.resourceProjectId,
     recipe:

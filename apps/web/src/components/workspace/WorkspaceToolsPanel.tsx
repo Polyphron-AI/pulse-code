@@ -11,7 +11,8 @@ import { useThreadShells } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
 import { WorkspaceItemActions } from "./WorkspaceItemActions";
-import { DriveFileAccess } from "./DriveFiles";
+import { DriveFileAccess, DriveSearch } from "./DriveFiles";
+import { useMailLinks } from "./mail/useMailLinks";
 import { workspaceEndpointTitle } from "./mail/linkedItems";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import type { WorkspaceResourceScope } from "./workspaceResourceState";
@@ -116,13 +117,24 @@ export function WorkspaceToolsPanel({
 }
 export function WorkspaceProjectFiles(props: WorkspaceResourceBodyProps) {
   const capability = useMailCapabilities(props.environmentId);
+  const { linkItem } = useMailLinks(props.environmentId);
   return capability.workspaceLinks ? (
-    <WorkspaceToolsPanel
-      {...props}
-      scope={props}
-      item={{ ref: { type: "project", projectId: props.projectId } }}
-      tool="files"
-    />
+    <>
+      <WorkspaceToolsPanel
+        {...props}
+        scope={props}
+        item={{ ref: { type: "project", projectId: props.projectId } }}
+        tool="files"
+      />
+      {capability.driveRead ? (
+        <DriveSearch
+          environmentId={props.environmentId}
+          onLink={async (endpoint) =>
+            linkItem(endpoint, { ref: { type: "project", projectId: props.projectId } })
+          }
+        />
+      ) : null}
+    </>
   ) : (
     <p>Project files are not available on this server yet.</p>
   );

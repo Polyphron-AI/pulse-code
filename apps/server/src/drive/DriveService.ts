@@ -1,4 +1,5 @@
 import {
+  DRIVE_FOLDER_MIME,
   DriveBrowseInput,
   type DriveBrowsePage,
   DriveError,
@@ -32,6 +33,8 @@ const decodeCursor = Schema.decodeUnknownEffect(Schema.fromJsonString(Cursor));
 const encodeInput = Schema.encodeSync(Schema.fromJsonString(DriveBrowseInput));
 const decodeInput = Schema.decodeUnknownEffect(DriveBrowseInput);
 const fail = (kind: DriveError["kind"], message: string) => new DriveError({ kind, message });
+const driveRootKey = (root: WorkspaceDriveRoot | null) =>
+  root ? `${root.linkId}:${root.connectionId}:${root.fileId}` : "";
 const scopeChanged = () =>
   fail("conflict", "The project folder, connection or browse scope changed. Refresh the folder.");
 export const make = Effect.gen(function* () {
@@ -53,6 +56,13 @@ export const make = Effect.gen(function* () {
       Effect.mapError(scopeChanged),
     );
   });
+  const writeCursor = (value: typeof Cursor.Type) => {
+    const body = Buffer.from(encodeCursor(value)).toString("base64url");
+    const cursor = `${body}.${signature(body).toString("base64url")}`;
+    return cursor.length > 8192
+      ? Effect.fail(fail("unavailable", "Google Drive returned an oversized continuation token."))
+      : Effect.succeed(cursor);
+  };
   const observe = <A, R>(
     connectionId: string,
     generation: number,
@@ -102,7 +112,7 @@ export const make = Effect.gen(function* () {
           );
       const designation = yield* getRoot();
       const root = designation.root;
-      const rootKey = root ? `${root.linkId}:${root.connectionId}:${root.fileId}` : "";
+      const rootKey = driveRootKey(root);
       if (cursor && (cursor.rootKey !== rootKey || designation.state !== "available"))
         return yield* scopeChanged();
       if (!root || designation.state !== "available")
@@ -134,7 +144,7 @@ export const make = Effect.gen(function* () {
       const metadata = (fileId: string) =>
         observe(root.connectionId, access.generation, api.file(access.token, fileId));
       const rootFile = yield* metadata(root.fileId);
-      if (rootFile.mimeType !== "application/vnd.google-apps.folder")
+      if (rootFile.mimeType !== DRIVE_FOLDER_MIME)
         return yield* fail(
           "unavailable",
           "The project folder is no longer a folder. Open it in Google Drive.",
@@ -142,7 +152,7 @@ export const make = Effect.gen(function* () {
       let parent = root.fileId;
       const pathFiles = yield* Effect.forEach(decoded.path, metadata, { concurrency: 4 });
       for (const file of pathFiles) {
-        if (file.mimeType !== "application/vnd.google-apps.folder" || file.shortcutDetails)
+        if (file.mimeType !== DRIVE_FOLDER_MIME || file.shortcutDetails)
           return yield* fail(
             "unsupported",
             "Shortcuts and files cannot be browsed as project folders. Open them in Google Drive.",
@@ -176,30 +186,21 @@ export const make = Effect.gen(function* () {
       if (
         currentRoot.state !== "available" ||
         !currentRoot.root ||
-        `${currentRoot.root.linkId}:${currentRoot.root.connectionId}:${currentRoot.root.fileId}` !==
-          rootKey ||
+        driveRootKey(currentRoot.root) !== rootKey ||
         !current.connected ||
         current.generation !== access.generation
       )
         return yield* scopeChanged();
       let nextCursor: string | undefined;
       if (page.nextPageToken) {
-        const body = Buffer.from(
-          encodeCursor({
-            version: 1,
-            pageToken: page.nextPageToken,
-            expiresAt: now + CURSOR_TTL_MS,
-            generation: access.generation,
-            rootKey,
-            fingerprint,
-          }),
-        ).toString("base64url");
-        nextCursor = `${body}.${signature(body).toString("base64url")}`;
-        if (nextCursor.length > 8192)
-          return yield* fail(
-            "unavailable",
-            "Google Drive returned an oversized continuation token.",
-          );
+        nextCursor = yield* writeCursor({
+          version: 1,
+          pageToken: page.nextPageToken,
+          expiresAt: now + CURSOR_TTL_MS,
+          generation: access.generation,
+          rootKey,
+          fingerprint,
+        });
       }
       return {
         files: [...new Map(page.files.map((file) => [file.id, file])).values()],
@@ -228,11 +229,8 @@ export const make = Effect.gen(function* () {
           access.generation,
           api.file(access.token, root.fileId),
         );
-        if (file.mimeType !== "application/vnd.google-apps.folder")
-          return yield* new DriveError({
-            kind: "invalid-input",
-            message: "Choose a Google Drive folder.",
-          });
+        if (file.mimeType !== DRIVE_FOLDER_MIME)
+          return yield* fail("invalid-input", "Choose a Google Drive folder.");
         return yield* store.saveProjectRoot(projectId, root, {
           generation: access.generation,
           file,
@@ -272,10 +270,7 @@ export const make = Effect.gen(function* () {
           limit < 1 ||
           limit > 20
         )
-          return yield* new DriveError({
-            kind: "invalid-input",
-            message: "Enter a search and a page size from 1 to 20.",
-          });
+          return yield* fail("invalid-input", "Enter a search and a page size from 1 to 20.");
         const access = yield* oauth.accessToken(connectionId);
         const result = yield* observe(
           connectionId,
@@ -284,10 +279,7 @@ export const make = Effect.gen(function* () {
         );
         const current = yield* store.get(connectionId);
         if (!current.connected || current.generation !== access.generation)
-          return yield* new DriveError({
-            kind: "conflict",
-            message: "The Drive connection changed. Search again.",
-          });
+          return yield* fail("conflict", "The Drive connection changed. Search again.");
         return result;
       }),
     bindFile: ({ connectionId, fileId }: { connectionId: string; fileId: string }) =>
@@ -304,10 +296,10 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const binding = yield* store.binding(fileId);
         if (Option.isNone(binding))
-          return yield* new DriveError({
-            kind: "connection-required",
-            message: "Choose a Drive connection for this file before reading it.",
-          });
+          return yield* fail(
+            "connection-required",
+            "Choose a Drive connection for this file before reading it.",
+          );
         const connectionId = binding.value.connectionId;
         const access = yield* oauth.accessToken(connectionId);
         const file = yield* observe(
@@ -322,20 +314,14 @@ export const make = Effect.gen(function* () {
         );
         const current = yield* store.get(connectionId);
         if (!current.connected || current.generation !== access.generation)
-          return yield* new DriveError({
-            kind: "conflict",
-            message: "The Drive connection changed. Read the file again.",
-          });
+          return yield* fail("conflict", "The Drive connection changed. Read the file again.");
         if (
           !Number.isSafeInteger(offset) ||
           offset < 0 ||
           offset > content.bytes.length ||
           (offset < content.bytes.length && (content.bytes[offset]! & 0xc0) === 0x80)
         )
-          return yield* new DriveError({
-            kind: "invalid-input",
-            message: "Use the nextOffset returned by the previous read.",
-          });
+          return yield* fail("invalid-input", "Use the nextOffset returned by the previous read.");
         const text = content.bytes.toString("utf8");
         let budget = 24000;
         let body = sliceUtf8(text, offset, budget);

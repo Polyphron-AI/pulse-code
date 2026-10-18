@@ -1,4 +1,5 @@
 import {
+  DRIVE_FOLDER_MIME,
   DriveError,
   DriveIdentity,
   DriveFile,
@@ -147,19 +148,26 @@ export const make = Effect.gen(function* () {
       yield* sql`SELECT project_id FROM projection_projects WHERE project_id=${projectId} AND deleted_at IS NULL`;
     if (!rows.length) return yield* fail("not-found", "This project is unavailable.");
   });
-  const binding = (fileId: string) =>
+  const decodeBinding = (row: { fileId: string; connectionId: string; fileJson: string }) =>
+    decodeFile(row.fileJson).pipe(
+      Effect.map((file) => ({ connectionId: row.connectionId, file })),
+      Effect.tapError(() =>
+        Effect.logWarning("Drive binding metadata could not be decoded", {
+          fileId: row.fileId,
+          connectionId: row.connectionId,
+        }),
+      ),
+    );
+  const binding = (fileId: string, strict = true) =>
     safe(
       Effect.gen(function* () {
         const [found] = yield* sql<{
           connectionId: string;
           fileJson: string;
         }>`SELECT connection_id AS "connectionId", file_json AS "fileJson" FROM drive_file_bindings WHERE file_id=${fileId}`;
-        return found
-          ? Option.some({
-              connectionId: found.connectionId,
-              file: yield* decodeFile(found.fileJson),
-            } satisfies DriveBinding)
-          : Option.none<DriveBinding>();
+        if (!found) return Option.none<DriveBinding>();
+        const decoded = decodeBinding({ ...found, fileId });
+        return yield* strict ? decoded.pipe(Effect.map(Option.some)) : decoded.pipe(Effect.option);
       }),
     );
   const inspectRoot = Effect.fnUntraced(function* (projectId: ProjectId, root: WorkspaceDriveRoot) {
@@ -194,9 +202,7 @@ export const make = Effect.gen(function* () {
     const connection = yield* row(root.connectionId);
     if (!connection || connection.removed || !connection.connected) return result("disconnected");
     return result(
-      file?.id === root.fileId && file.mimeType === "application/vnd.google-apps.folder"
-        ? "available"
-        : "unavailable",
+      file?.id === root.fileId && file.mimeType === DRIVE_FOLDER_MIME ? "available" : "unavailable",
     );
   });
   const validateProjectRoot = (projectId: ProjectId, root: WorkspaceDriveRoot) =>
@@ -264,7 +270,7 @@ export const make = Effect.gen(function* () {
                 "conflict",
                 "The Drive connection changed. Choose the project folder again.",
               );
-            if (verified.file.mimeType !== "application/vnd.google-apps.folder")
+            if (verified.file.mimeType !== DRIVE_FOLDER_MIME)
               return yield* fail("invalid-input", "Choose a Google Drive folder.");
             const rootJson = encodeRoot(root);
             yield* sql`INSERT INTO workspace_project_config(project_id,columns_json,browser_thread_id,completed_column,drive_root_json) VALUES(${projectId},${encodeColumns(["To do", "In progress", "Done"])},NULL,'Done',${rootJson}) ON CONFLICT(project_id) DO UPDATE SET drive_root_json=excluded.drive_root_json`;
@@ -367,7 +373,7 @@ export const make = Effect.gen(function* () {
           Effect.ensuring(announce),
         ),
       ),
-    binding,
+    binding: (fileId: string) => binding(fileId, false),
     bindings: (fileIds: readonly string[]) =>
       safe(
         Effect.gen(function* () {
@@ -376,14 +382,12 @@ export const make = Effect.gen(function* () {
           );
           if (ids.length === 0) return [];
           const rows = yield* sql<{
+            fileId: string;
             connectionId: string;
             fileJson: string;
-          }>`SELECT connection_id AS "connectionId",file_json AS "fileJson" FROM drive_file_bindings WHERE file_id IN ${sql.in([...new Set(ids)])}`;
+          }>`SELECT file_id AS "fileId",connection_id AS "connectionId",file_json AS "fileJson" FROM drive_file_bindings WHERE file_id IN ${sql.in([...new Set(ids)])}`;
           const bindings = yield* Effect.forEach(rows, (row) =>
-            decodeFile(row.fileJson).pipe(
-              Effect.map((file) => ({ connectionId: row.connectionId, file })),
-              Effect.option,
-            ),
+            decodeBinding(row).pipe(Effect.option),
           );
           return bindings.flatMap((binding) => (Option.isSome(binding) ? [binding.value] : []));
         }),

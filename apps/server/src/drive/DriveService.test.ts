@@ -7,6 +7,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Logger from "effect/Logger";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -138,7 +139,24 @@ describe("project Drive folder browsing", () => {
       yield* service.bindFile({ connectionId: input.connectionId, fileId: "corrupt" });
       const sql = yield* SqlClient.SqlClient;
       yield* sql`UPDATE drive_file_bindings SET file_json='invalid-json' WHERE file_id='corrupt'`;
+      expect((yield* service.getBinding({ fileId: "corrupt" })).binding).toBeUndefined();
       const before = fake.calls.length;
+      const messages: unknown[] = [];
+      yield* service.getBindings({ fileIds: ["corrupt"] }).pipe(
+        Effect.provide(
+          Logger.layer(
+            [
+              Logger.make(({ message }) => {
+                messages.push(message);
+              }),
+            ],
+            { mergeWithExisting: false },
+          ),
+        ),
+      );
+      expect(encodeJson(messages)).toContain("Drive binding metadata could not be decoded");
+      expect(encodeJson(messages)).toContain("corrupt");
+      expect(encodeJson(messages)).not.toContain("invalid-json");
       expect(
         (yield* service.getBindings({ fileIds: ["corrupt", "synkek-root"] })).bindings.map(
           (binding) => binding.file.id,

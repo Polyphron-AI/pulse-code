@@ -4,10 +4,36 @@ import { createRoot, type Root } from "react-dom/client";
 import { getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceMockupApp, WorkspaceMockupRenderContext } from "./WorkspaceMockupApp";
+import { createWorkspaceMockupModule as createDriveModule } from "./driveMockupModule";
 import { createWorkspaceMockupSession, workspaceMockupRecipes } from "./workspaceMockupFixtures";
 
 let root: Root;
 let node: HTMLDivElement;
+it("keeps the Drive settings sheet visible when Linked context opens in state 20", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize(size: { width: number; height: number }): void };
+    }
+  ).happyDOM.setWindowSize({ width: 1280, height: 800 });
+  const session = createWorkspaceMockupSession("01", null, null, null, "drive-t1-20");
+  const drive = createDriveModule(session);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root.render(
+      <WorkspaceMockupRenderContext value={{ session, modules: [drive], onCommit() {} }}>
+        <WorkspaceMockupApp session={session} />
+      </WorkspaceMockupRenderContext>,
+    ),
+  );
+  expect(node.querySelector("[data-workspace-linked-context]")).not.toBeNull();
+  const sheet = getByRole(document.body, "dialog", { name: "Project workspace settings" });
+  expect(getByRole(sheet, "region", { name: "Project Drive folder" })).toBeTruthy();
+  drive.dispose();
+  session.dispose();
+});
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
   node?.remove();

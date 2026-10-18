@@ -794,6 +794,29 @@ No selected Pulse bug or ticket was supplied; ticket grouping or tracker writes 
 
 ## Review response log
 
+W7-T3 implementation response, 2026-10-18. W7-T2's bounded read-only
+`pulse.drive.getBindings` extension is retained. It reads at most 200 local binding rows through
+the existing Drive RPC layer with read scope, without Google calls or writes. It is gated on live
+`driveExplorer`; root-only older servers use the selected item's `getBinding` instead. Corrupt
+binding metadata is warned about without logging its body, and both public read paths treat the
+damaged entry as unverified. Root validation retains strict decoding.
+
+The capture adapter now shares the explorer and root-settings presentation components. A narrow
+fixture-only extension to the strict parser, session, entry, fixture app and Projects adapter admits the named
+Drive states for recipes 01-04. It leaves the import list and production route unchanged. These
+settings recipes need both the Projects center and the resource settings sheet, which the original
+Drive resource-only stub could not supply. This is an implementation scope extension for the
+reviewer-assigned capture matrix. Controller captures and visual acceptance remain pending.
+
+State 20 uses the existing Linked context trigger while the real settings sheet remains open.
+The file rows retain native list semantics; sort controls expose their current key and direction
+through pressed state and an accessible description instead of placing `aria-sort` on generic spans.
+
+The PNGs' nonalphabetical order with `Name ↑` remains a marked fixture-only reference exception.
+Live lists use server sorting. The existing four-mode client-runtime fake-session tests establish
+environment isolation and input forwarding only. Direct, relay and tunnel transport acceptance
+needs the controller's integrated pass; no physical-device result is inferred from those tests.
+
 Plan fix round 1 at HEAD ba035b52c3, responding to `.superpowers/sdd/2026-10-14-unified-workspace/plan-reviews/review-w7-w8.md` and the W7/W8 rows in `review-cross-wave.md`. Wave 4's canonical section and the corrected wave-map serial chains take precedence over older review paths. These are plan changes; implementation and rendered acceptance remain unrun.
 
 | Finding                   | Response                                                                                                                                                                                                                                                                                 |

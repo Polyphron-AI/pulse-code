@@ -59,7 +59,7 @@ vi.mock("./mail/useMailCapabilities", () => ({
 }));
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => state.operate }));
 vi.mock("../../state/environments", () => ({
-  useConnectedEnvironmentIds: () => (state.connected ? ["remote"] : []),
+  useConnectedEnvironmentIds: () => (state.connected ? ["remote", "another"] : []),
 }));
 vi.mock("../../state/drive", () => ({
   drive: {
@@ -238,6 +238,8 @@ beforeEach(() => {
   state.linkVersion = 1;
   state.batchPending = false;
   state.batchError = null;
+  state.refresh.mockImplementation(() => domRoot.render(view()));
+  state.bindRefresh.mockImplementation(() => domRoot.render(view()));
   state.links = {
     linked: [
       {
@@ -360,7 +362,7 @@ it("keeps known options, selected folder, Use state and focus while changed link
   ).toEqual(["Choose a linked item to verify", "SynKEK", "Another folder"]);
   expect(select("Confirmed Drive link").value).toBe(linkId);
   expect(node.textContent).toContain("Folder: SynKEK");
-  expect(node.textContent).toContain("Drive connection: Work (owner@example.test)");
+  expect(node.textContent).toContain("Bound to: Work (owner@example.test)");
   expect(use.disabled).toBe(false);
   expect(document.activeElement).toBe(use);
   state.batchPending = false;
@@ -382,6 +384,95 @@ it("announces a pending folder batch without disabling or blurring the dropdown"
   expect(dropdown.getAttribute("aria-busy")).toBe("false");
   expect(node.textContent).not.toContain("Checking which linked items are folders...");
 });
+it("retains a selected item after it verifies as a non-folder", async () => {
+  await render();
+  await choose();
+  state.folder = false;
+  await render();
+  expect(select("Confirmed Drive link").selectedOptions[0]?.textContent).toBe(
+    "SynKEK (not a folder)",
+  );
+  expect(select("Confirmed Drive link").value).toBe(linkId);
+  expect(button("Use as project folder").disabled).toBe(true);
+  expect(node.textContent).toContain("This linked item is not a folder.");
+});
+it("waits for delayed verification refresh before focusing Use", async () => {
+  state.bound = false;
+  state.bind.mockResolvedValueOnce({ _tag: "Success", value: { connectionId, file } });
+  await render();
+  await choose();
+  await change("Verify with connection", connectionId);
+  state.bindRefresh.mockImplementationOnce(() => {
+    state.batchPending = true;
+  });
+  await click("Verify and bind linked item");
+  expect(document.activeElement).not.toBe(button("Choose folder"));
+  state.bound = true;
+  state.batchPending = false;
+  await render();
+  expect(document.activeElement).toBe(button("Use as project folder"));
+});
+it("keeps checking copy out of retained reloads and errors, and returns Retry focus to the dropdown", async () => {
+  await render();
+  await choose();
+  state.batchPending = true;
+  await render();
+  expect(node.textContent).not.toContain("Checking which linked items are folders...");
+  state.batchError = "Batch failed";
+  state.rootError = "Root failed";
+  await render();
+  expect(node.textContent).not.toContain("Checking which linked items are folders...");
+  expect(button("Retry")).toBeTruthy();
+  const retry = button("Retry folder check");
+  retry.focus();
+  await click("Retry folder check");
+  expect(document.activeElement).toBe(retry);
+  state.batchError = null;
+  state.batchPending = false;
+  await render();
+  expect(document.activeElement).toBe(select("Confirmed Drive link"));
+});
+it("clears retained classifications on environment changes", async () => {
+  await render();
+  await choose();
+  state.batchPending = true;
+  await act(() =>
+    domRoot.render(
+      <ProjectDriveRootSettings
+        environmentId={EnvironmentId.make("another")}
+        projectId={projectId}
+      />,
+    ),
+  );
+  await click("Choose folder");
+  expect(node.textContent).toContain("Checking which linked items are folders...");
+  expect(node.textContent).not.toContain("Folder: SynKEK");
+});
+it("does not duplicate the root query on initial link results and announces a pending save", async () => {
+  await render();
+  expect(state.refresh).not.toHaveBeenCalled();
+  await choose();
+  let release!: (value: unknown) => void;
+  state.setRoot.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  await click("Use as project folder");
+  expect(getByRole(node, "status").textContent).toBe("Saving project folder...");
+  await act(async () => release({ _tag: "Success", value: state.root }));
+});
+it("keeps a settings form visible when linked context hides the resource body", async () => {
+  await act(() =>
+    domRoot.render(
+      <WorkspaceResourcesBodyContext value={{ hidden: true, restoreFocus() {} }}>
+        <ProjectDriveRootSettings environmentId={environmentId} projectId={projectId} inSettings />
+      </WorkspaceResourcesBodyContext>,
+    ),
+  );
+  expect(button("Choose folder")).toBeTruthy();
+});
 it("shows a batch failure under the dropdown before selection and retries only that batch", async () => {
   state.batchError = "Synthetic binding lookup failure";
   await render();
@@ -393,7 +484,7 @@ it("shows a batch failure under the dropdown before selection and retries only t
   const rootRefreshes = state.refresh.mock.calls.length;
   state.batchError = null;
   state.bindRefresh.mockImplementationOnce(() => domRoot.render(view()));
-  await click("Retry");
+  await click("Retry folder check");
   expect(state.bindRefresh).toHaveBeenCalledTimes(1);
   expect(state.refresh).toHaveBeenCalledTimes(rootRefreshes);
   expect(queryByRole(node, "alert")).toBeNull();
@@ -529,7 +620,7 @@ it("requires explicit verification and account selection for missing metadata, t
   expect(button("Verify and bind linked item").disabled).toBe(true);
   expect(node.textContent).toContain("Choose a connection and verify this linked item");
   expect(state.bind).not.toHaveBeenCalled();
-  await change("Drive connection", connectionId);
+  await change("Verify with connection", connectionId);
   await click("Verify and bind linked item");
   expect(state.bind).toHaveBeenCalledExactlyOnceWith({
     environmentId,
@@ -543,7 +634,7 @@ it("focuses Choose after binding if refreshed folder metadata is still unavailab
   state.bind.mockResolvedValueOnce({ _tag: "Success", value: { connectionId, file } });
   await render();
   await choose();
-  await change("Drive connection", connectionId);
+  await change("Verify with connection", connectionId);
   await click("Verify and bind linked item");
   expect(button("Use as project folder").disabled).toBe(true);
   expect(document.activeElement).toBe(button("Choose folder"));
@@ -629,23 +720,23 @@ it.each([undefined, { id: "owner", name: "" }, { id: "owner", name: "Owner" }])(
     await render();
     await choose();
     const expected = identity?.name ? "Work (Owner)" : "Work";
-    expect(select("Drive connection").options[1]!.textContent).toBe(expected);
+    expect(select("Verify with connection").options[1]!.textContent).toBe(expected);
     expect(node.textContent).not.toContain("Disconnected");
     expect(node.textContent).not.toContain("(disconnected)");
     state.connectionConnected = false;
     await render();
     expect(node.textContent?.match(/\(disconnected\)/g)).toHaveLength(2);
     expect(node.textContent).not.toContain("(disconnected) (disconnected)");
-    expect(select("Drive connection").options).toHaveLength(1);
+    expect(select("Verify with connection").options).toHaveLength(1);
   },
 );
 it("explains pending verification and a disconnected binding below the action row", async () => {
   await render();
   await choose();
-  await change("Drive connection", connectionId);
+  await change("Verify with connection", connectionId);
   expect(button("Use as project folder").disabled).toBe(true);
   expect(node.textContent).toContain("Verify and bind first, or clear the connection choice.");
-  await change("Drive connection", "");
+  await change("Verify with connection", "");
   state.connectionConnected = false;
   await render();
   expect(button("Use as project folder").disabled).toBe(true);
@@ -658,6 +749,11 @@ it("makes no root RPCs on old servers, after capability downgrade, or while hidd
   expect(node.textContent).toContain("Project Drive folders need a newer server.");
   await click("Link to");
   expect(node.textContent).toContain("Existing Link to search");
+  const toggle = button("Close linked files");
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(
+    node.querySelector(`#${CSS.escape(toggle.getAttribute("aria-controls")!)}`)?.textContent,
+  ).toBe("Existing Link to search");
   state.capable = true;
   await render(true);
   expect(state.rootQuery).not.toHaveBeenCalled();

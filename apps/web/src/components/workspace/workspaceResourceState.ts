@@ -19,17 +19,19 @@ export interface WorkspaceResourceScope {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
 }
+/** Client navigation hint only. Folder identity remains validated by the Drive listing. */
+export type WorkspaceResourceRequest = WorkspaceItemRef & { readonly driveKind?: "folder" };
 export interface OpenWorkspaceResourceInput {
   readonly tab: WorkspaceResourceTab;
   readonly projectId: ProjectId;
-  readonly request?: WorkspaceItemRef | null;
+  readonly request?: WorkspaceResourceRequest | null;
 }
 export interface WorkspaceResourcesState {
   readonly environmentId: EnvironmentId | null;
   readonly open: boolean;
   readonly projectId: ProjectId | null;
   readonly selectedTab: WorkspaceResourceTab;
-  readonly request: WorkspaceItemRef | null;
+  readonly request: WorkspaceResourceRequest | null;
   readonly clearRequest: (request: WorkspaceItemRef) => void;
   readonly chooseProject: (projectId: ProjectId) => void;
   readonly resetProject: () => void;
@@ -119,7 +121,7 @@ interface ResourceSession {
   readonly projectId: ProjectId | null;
   readonly selectedTab: WorkspaceResourceTab;
   readonly tabs: Readonly<Record<string, WorkspaceResourceTab>>;
-  readonly request: WorkspaceItemRef | null;
+  readonly request: WorkspaceResourceRequest | null;
 }
 function readSession(
   environmentId: EnvironmentId | null,
@@ -271,7 +273,11 @@ export function useWorkspaceResourceState(
     (input: OpenWorkspaceResourceInput) => {
       if (!isProjectId(input.projectId) || !isTab(input.tab))
         throw new Error("Invalid resource destination.");
-      const request = input.request == null ? null : decodeRequest(input.request);
+      const decoded = input.request == null ? null : decodeRequest(input.request);
+      const request: WorkspaceResourceRequest | null =
+        decoded?.type === "file" && input.request?.driveKind === "folder"
+          ? { ...decoded, driveKind: "folder" }
+          : decoded;
       if (request !== null) {
         const matches =
           input.tab === "files"

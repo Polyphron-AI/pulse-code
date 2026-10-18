@@ -183,6 +183,19 @@ function FixtureReport() {
               environmentId={session.environmentId}
               space={session.recipe.space}
               header={header}
+              {...(session.driveState === "drive-t1-20"
+                ? {
+                    linkedContext: {
+                      item: {
+                        ref: { type: "project" as const, projectId: session.resourceProjectId },
+                        title: "SynKEK",
+                      },
+                      render: () => (
+                        <div className="p-4 text-sm">Sample project Linked context</div>
+                      ),
+                    },
+                  }
+                : {})}
               storage={session.storage}
               resources={resourcePanel}
               {...(session.recipe.space === "mail" || session.recipe.space === "communications"
