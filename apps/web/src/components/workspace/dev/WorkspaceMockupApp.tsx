@@ -86,9 +86,10 @@ function FixtureReport() {
       <p>Module body pending its owning wave.</p>
     </main>
   );
-  const selectedProject = session.seed.projects.find(
-    (project) => project.id === resources.projectId,
-  );
+  const selectedProject =
+    session.pullRequestsState === "prs-choose-project"
+      ? undefined
+      : session.seed.projects.find((project) => project.id === resources.projectId);
   const resource = runtime.modules.find(
     (module) => module.area === session.recipe.resourceArea,
   )?.resource;
@@ -108,15 +109,22 @@ function FixtureReport() {
   const resourcePanel = (
     <WorkspaceResourcesPanelView
       projects={session.seed.projects}
-      selectedProjectId={resources.projectId}
+      selectedProjectId={
+        session.pullRequestsState === "prs-choose-project" ? null : resources.projectId
+      }
       status={
-        selectedProject ? "selected" : resources.projectId === null ? "choose" : "unavailable"
+        selectedProject
+          ? "selected"
+          : resources.projectId === null || session.pullRequestsState === "prs-choose-project"
+            ? "choose"
+            : "unavailable"
       }
       tab={resources.selectedTab}
       onTabChange={resources.selectTab}
       onChooseProject={resources.chooseProject}
       body={
-        selectedProject && resources.selectedTab === session.recipe.resourceTab ? (
+        (selectedProject || session.pullRequestsState === "prs-choose-project") &&
+        resources.selectedTab === session.recipe.resourceTab ? (
           (resource ?? <p>Resource body pending its owning wave.</p>)
         ) : (
           <p>Choose the recipe project and tab to view its sample resource.</p>

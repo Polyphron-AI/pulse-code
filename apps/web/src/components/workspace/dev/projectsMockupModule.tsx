@@ -9,6 +9,7 @@ import { WorkspaceItemMenuView } from "../WorkspaceItemMenuView";
 import { Button } from "../../ui/button";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 import { DriveSettingsFixture } from "./driveMockupModule";
+import { PullRequestsFixture } from "./pullRequestsMockupModule";
 
 function ProjectsFixture({ session }: { session: Parameters<CreateWorkspaceMockupModule>[0] }) {
   const [query, setQuery] = useState("");
@@ -195,7 +196,9 @@ function FixtureProjectMenu({
 
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => ({
   area: "projects",
-  readyRegions: session.id === "04" ? ["center"] : [],
+  readyRegions:
+    session.id === "04" ? (session.pullRequestsState ? ["center", "resource"] : ["center"]) : [],
+  ...(session.pullRequestsState ? { resource: <PullRequestsFixture session={session} /> } : {}),
   ...(session.id === "04" && session.driveState?.startsWith("drive-t")
     ? {
         center: (

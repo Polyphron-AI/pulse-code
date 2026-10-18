@@ -2,7 +2,7 @@
 
 // The real root already loads Calendar through Snooze. Keep that dependency outside fixture action timing.
 import "../calendar/CalendarDatePicker";
-import { getByRole } from "@testing-library/dom";
+import { getByRole, getAllByRole } from "@testing-library/dom";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 
@@ -104,6 +104,65 @@ async function boot(): Promise<Capture> {
   expect(main).not.toHaveBeenCalled();
   return window.__workspaceMockupCapture!;
 }
+
+it.each([
+  ["prs-list", 1280, "Status unavailable"],
+  ["prs-empty", 1280, "No linked pull requests"],
+  ["prs-choose-project", 1280, "Choose a project to see pull requests"],
+  ["prs-incomplete", 1280, "Showing loaded links"],
+  ["prs-error", 1280, "This environment could not read project links"],
+  ["prs-phone", 390, "Status unavailable"],
+] as const)(
+  "renders the D23 %s proposal at %ipx without application requests",
+  async (state, width, expected) => {
+    const dom = (
+      window as unknown as {
+        happyDOM: {
+          setWindowSize: (size: { width: number; height: number }) => void;
+          setURL: (url: string) => void;
+        };
+      }
+    ).happyDOM;
+    const height = width === 390 ? 844 : 800;
+    dom.setWindowSize({ width, height });
+    dom.setURL(`http://fixture.invalid/workspace?space=projects&fixture=04&state=${state}`);
+    const capture = await boot();
+    capture.configureCapture({
+      ...host,
+      viewport: { width, height, deviceScaleFactor: 1, zoom: 1 },
+    });
+    if (width === 390)
+      await act(() => getByRole(document.body, "button", { name: "Resources" }).click());
+    expect(getByRole(document.body, "tab", { name: "PRs" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    const panel = getByRole(document.body, "region", { name: "Project pull requests" });
+    expect(panel.textContent).toContain(expected);
+    if (state === "prs-choose-project")
+      expect(
+        document
+          .querySelector("[data-workspace-resource-frame]")
+          ?.getAttribute("data-resource-status"),
+      ).toBe("choose");
+    if (state === "prs-list" || state === "prs-phone") {
+      expect(panel.textContent).toContain("Open");
+      expect(panel.textContent).toContain("Merged");
+      expect(panel.textContent).toContain("Closed");
+      expect(panel.textContent).toContain("Via Project link · Design review · Build product pages");
+      await act(() => getByRole(panel, "button", { name: "Sources for synkek/site #42" }).click());
+      expect(getByRole(panel, "button", { name: "Unlink from Design review" })).toBeTruthy();
+      await act(() => getAllByRole(panel, "link", { name: "Open on host" })[0]!.click());
+    }
+    const report = await capture.ready();
+    expect(report.manifest).toMatchObject({
+      resourceTab: "prs",
+      networkRequests: 0,
+      fixtureId: "04",
+    });
+    expect(report.manifest.route).toContain(`state=${state}`);
+    expect(report.incompleteRegions).not.toContain("04.projects.resource");
+  },
+);
 
 it.each([
   [1024, 800],

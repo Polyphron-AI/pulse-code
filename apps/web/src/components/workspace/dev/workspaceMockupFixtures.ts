@@ -70,6 +70,15 @@ export const workspaceBrowserMockupStates = [
   "captured-page",
 ] as const;
 export type WorkspaceBrowserMockupState = (typeof workspaceBrowserMockupStates)[number];
+export const workspacePullRequestsMockupStates = [
+  "prs-list",
+  "prs-empty",
+  "prs-choose-project",
+  "prs-incomplete",
+  "prs-error",
+  "prs-phone",
+] as const;
+export type WorkspacePullRequestsMockupState = (typeof workspacePullRequestsMockupStates)[number];
 export type WorkspaceMockupArea =
   | "mail"
   | "communications"
@@ -127,6 +136,7 @@ export interface WorkspaceMockupSession {
   readonly calendarState: WorkspaceCalendarMockupState | null;
   readonly browserState: WorkspaceBrowserMockupState | null;
   readonly driveState: DriveMockupState | null;
+  readonly pullRequestsState: WorkspacePullRequestsMockupState | null;
   readonly environmentId: EnvironmentId;
   readonly resourceProjectId: ProjectId;
   readonly recipe: WorkspaceMockupRecipe;
@@ -878,7 +888,9 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
       (id === "08" && workspaceCalendarMockupStates.some((value) => value === state)) ||
       (id === "07" && workspaceCalendarAgendaMockupStates.some((value) => value === state)) ||
       (id === "05" && workspaceBrowserMockupStates.some((value) => value === state)) ||
-      (["01", "02", "03", "04"].includes(id) && driveMockupStates.some((value) => value === state))
+      (["01", "02", "03", "04"].includes(id) &&
+        driveMockupStates.some((value) => value === state)) ||
+      (id === "04" && workspacePullRequestsMockupStates.some((value) => value === state))
     )
   )
     throw new Error("Unknown fixture state.");
@@ -897,6 +909,7 @@ export function createWorkspaceMockupSession(
   calendarState: WorkspaceCalendarMockupState | null = null,
   browserState: WorkspaceBrowserMockupState | null = null,
   driveState: DriveMockupState | null = null,
+  pullRequestsState: WorkspacePullRequestsMockupState | null = null,
 ): WorkspaceMockupSession {
   if (!Object.hasOwn(workspaceMockupRecipes, id)) throw new Error("Unknown fixture.");
   const seed = createWorkspaceMockupSeed();
@@ -930,12 +943,19 @@ export function createWorkspaceMockupSession(
     calendarState,
     browserState,
     driveState,
+    pullRequestsState,
     environmentId: seed.environmentId,
     resourceProjectId: seed.resourceProjectId,
-    recipe:
-      calendarState &&
-      calendarState !== "picker" &&
-      !workspaceCalendarAgendaMockupStates.some((state) => state === calendarState)
+    recipe: pullRequestsState
+      ? {
+          ...workspaceMockupRecipes[id],
+          resourceArea: "projects",
+          resourceTab: "prs",
+          requiredAreas: ["projects"],
+        }
+      : calendarState &&
+          calendarState !== "picker" &&
+          !workspaceCalendarAgendaMockupStates.some((state) => state === calendarState)
         ? { ...workspaceMockupRecipes[id], view: "week" }
         : calendarState === "recordings"
           ? { ...workspaceMockupRecipes[id], view: "recordings" }

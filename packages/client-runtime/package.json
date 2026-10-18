@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./projectPullRequests": {
+      "types": "./src/projectPullRequests.ts",
+      "default": "./src/projectPullRequests.ts"
+    },
     "./calendar/dates": {
       "types": "./src/calendar/dates.ts",
       "default": "./src/calendar/dates.ts"
