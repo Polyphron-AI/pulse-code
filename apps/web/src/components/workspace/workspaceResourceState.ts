@@ -1,3 +1,4 @@
+import type { WorkspaceDocSelection } from "./WorkspaceDocsPanel";
 import type { NoteDraft } from "./meetings/WorkspaceNoteView";
 import { ProjectId, WorkspaceItemRef, type EnvironmentId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
@@ -352,6 +353,37 @@ const NoteSessionsContext = createContext<{
   setSessions: Dispatch<SetStateAction<NoteSessions>>;
 } | null>(null);
 
+interface DocSession {
+  readonly request: WorkspaceItemRef | null;
+  readonly centerKey: string | null;
+  readonly selected: WorkspaceDocSelection | null;
+}
+type DocSessions = ReadonlyMap<string, DocSession>;
+const DocSessionsContext = createContext<{
+  sessions: DocSessions;
+  setSessions: Dispatch<SetStateAction<DocSessions>>;
+} | null>(null);
+
+/** Document addresses survive body remounts only for this provider's lifetime. */
+export function useWorkspaceDocSession(environmentId: EnvironmentId, projectId: ProjectId) {
+  const value = useContext(DocSessionsContext);
+  if (value === null) throw new Error("Doc sessions require WorkspaceResourcesProvider.");
+  const key = JSON.stringify([environmentId, projectId]);
+  const { sessions, setSessions } = value;
+  const save = useCallback(
+    (session: DocSession) => {
+      setSessions((previous) => {
+        if (previous.get(key) === session) return previous;
+        const next = new Map(previous);
+        next.set(key, session);
+        return next;
+      });
+    },
+    [key, setSessions],
+  );
+  return [sessions.get(key), save] as const;
+}
+
 function createBrowserDraft() {
   let address = "";
   return {
@@ -396,6 +428,11 @@ export function WorkspaceResourcesProvider(props: {
 }): ReactNode {
   const [sessions, setSessions] = useState<NoteSessions>(() => new Map());
   const notes = useMemo(() => ({ sessions, setSessions }), [sessions]);
+  const [docSessions, setDocSessions] = useState<DocSessions>(() => new Map());
+  const documents = useMemo(
+    () => ({ sessions: docSessions, setSessions: setDocSessions }),
+    [docSessions],
+  );
   const [getBrowserDraft] = useState(() => {
     const drafts = new Map<string, ReturnType<typeof createBrowserDraft>>();
     return (key: string) => {
@@ -413,7 +450,11 @@ export function WorkspaceResourcesProvider(props: {
     createElement(
       NoteSessionsContext,
       { value: notes },
-      createElement(BrowserDraftsContext, { value: getBrowserDraft }, props.children),
+      createElement(
+        DocSessionsContext,
+        { value: documents },
+        createElement(BrowserDraftsContext, { value: getBrowserDraft }, props.children),
+      ),
     ),
   );
 }

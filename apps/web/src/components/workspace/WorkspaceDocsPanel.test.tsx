@@ -1,4 +1,4 @@
-import { act, useState, type ReactNode } from "react";
+import { act, useEffect, useState, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import {
@@ -9,7 +9,17 @@ import {
   type WorkspaceLinkView,
   type WorkspaceLinkEndpoint,
 } from "@t3tools/contracts";
-import { WorkspaceDocsPanel, type WorkspaceDocSelection } from "./WorkspaceDocsPanel";
+import {
+  WorkspaceDocsPanel,
+  WorkspaceDocsResource,
+  type WorkspaceDocSelection,
+} from "./WorkspaceDocsPanel";
+import {
+  useWorkspaceResourceState,
+  WorkspaceResourcesProvider,
+  WorkspaceResourcesBodyContext,
+} from "./workspaceResourceState";
+import type { WorkspaceResourceRequest } from "./workspaceResourceState";
 
 const mocks = vi.hoisted(() => ({
   linked: [] as WorkspaceLinkView[],
@@ -22,13 +32,17 @@ const mocks = vi.hoisted(() => ({
   link: vi.fn(),
   unlink: vi.fn(),
   query: vi.fn(),
+  activeQueries: new Set<string>(),
   menus: vi.fn(),
   mimeType: "text/plain",
   discoveryAvailable: true,
   refreshBinding: vi.fn(),
   threads: [] as { id: string; projectId: string; environmentId: string }[],
 }));
-vi.mock("../../state/entities", () => ({ useThreadShells: () => mocks.threads }));
+vi.mock("../../state/entities", () => ({
+  useThreadShells: () => mocks.threads,
+  useProject: () => null,
+}));
 vi.mock("../../state/environments", () => ({
   useConnectedEnvironmentIds: () => (mocks.connected ? ["remote", "other"] : []),
 }));
@@ -60,6 +74,14 @@ vi.mock("../../state/drive", () => ({
 }));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (query: { kind: string } | null) => {
+    const key = query ? JSON.stringify(query) : null;
+    useEffect(() => {
+      if (key === null) return;
+      mocks.activeQueries.add(key);
+      return () => {
+        mocks.activeQueries.delete(key);
+      };
+    }, [key]);
     if (query) mocks.query(query);
     return {
       data:
@@ -542,3 +564,99 @@ it("offers separate project and captured-current-item links without granting eit
   });
   expect(mocks.link).toHaveBeenLastCalledWith(document, { ref: { type: "project", projectId } });
 });
+
+function ResourceHarness({
+  env = environmentId,
+  project = projectId,
+  active = true,
+  hidden = false,
+  request = null,
+}: {
+  env?: EnvironmentId;
+  project?: ProjectId;
+  active?: boolean;
+  hidden?: boolean;
+  request?: WorkspaceResourceRequest | null;
+}) {
+  const value = useWorkspaceResourceState(env, {
+    storage: { getItem: () => null, setItem: () => {} },
+  });
+  return (
+    <WorkspaceResourcesProvider value={value}>
+      <WorkspaceResourcesBodyContext value={{ hidden, restoreFocus: () => {} }}>
+        {active ? (
+          <WorkspaceDocsResource
+            key={`${env}:${project}`}
+            environmentId={env}
+            projectId={project}
+            selectedItem={{ ref: { type: "url", url: "https://example.test/center" } }}
+            request={request}
+            onOpen={() => {}}
+          />
+        ) : null}
+      </WorkspaceResourcesBodyContext>
+    </WorkspaceResourcesProvider>
+  );
+}
+
+it.each(["tab", "hidden", "project", "environment"])(
+  "retains only the Drive address and rejects a late body after %s leaves Docs",
+  async (change) => {
+    let finish!: (value: unknown) => void;
+    mocks.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    await act(() => {
+      renderer = create(<ResourceHarness request={document.ref} />);
+    });
+    await act(() => {
+      button("Read file").props.onClick();
+    });
+    expect(mocks.read).toHaveBeenCalledExactlyOnceWith({
+      environmentId,
+      input: { fileId: "file", offset: 0 },
+    });
+    mocks.query.mockClear();
+    await act(() =>
+      renderer!.update(
+        <ResourceHarness
+          active={change !== "tab"}
+          hidden={change === "hidden"}
+          env={change === "environment" ? EnvironmentId.make("other") : environmentId}
+          project={change === "project" ? ProjectId.make("other-project") : projectId}
+        />,
+      ),
+    );
+    expect(button("Read file")).toBeUndefined();
+    const driveQuery = (key: string) =>
+      ["binding", "connections", "changes"].includes((JSON.parse(key) as { kind: string }).kind);
+    expect([...mocks.activeQueries].filter(driveQuery)).toHaveLength(0);
+    if (change === "tab" || change === "hidden") {
+      expect(mocks.activeQueries.size).toBe(0);
+      expect(mocks.query).not.toHaveBeenCalled();
+    }
+    await act(() =>
+      finish({
+        _tag: "Success",
+        value: {
+          connectionId: "chosen",
+          file: { id: "file", name: "Brief", mimeType: "text/plain" },
+          body: { text: "Late old body", truncated: false },
+        },
+      }),
+    );
+    expect(text()).not.toContain("Late old body");
+    await act(() => renderer!.update(<ResourceHarness />));
+    expect(button("Read file")).toBeDefined();
+    expect(button("Read file").props.disabled).toBe(false);
+    expect(text()).not.toContain("Late old body");
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+    expect(mocks.bind).not.toHaveBeenCalled();
+    expect(mocks.link).not.toHaveBeenCalled();
+    expect(mocks.unlink).not.toHaveBeenCalled();
+  },
+);

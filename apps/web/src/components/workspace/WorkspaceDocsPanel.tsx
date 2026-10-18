@@ -7,7 +7,7 @@ import {
   type WorkspaceLinkId,
   type WorkspaceLinkView,
 } from "@t3tools/contracts";
-import { useContext, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useProject, useThreadShells } from "../../state/entities";
 import { useConnectedEnvironmentIds } from "../../state/environments";
@@ -18,7 +18,7 @@ import { DriveReader } from "./DriveFiles";
 import { WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { WorkspaceDocsReadingView } from "./WorkspaceDocsReadingView";
 import type { WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
-import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
+import { useWorkspaceDocSession, WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { isWorkspaceNote } from "./meetings/meetingNotes";
 import { workspaceEndpointTitle } from "./mail/linkedItems";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
@@ -56,30 +56,34 @@ export function WorkspaceDocsResource(
   const projectTitle = useProject(scopeProjectRef(props.environmentId, props.projectId))?.title;
   const requested = props.request ? { ref: props.request } : props.selectedItem;
   const document = requested && isDocument(requested) ? requested : null;
-  const intent = props.request ?? (document ? workspaceItemKey(document.ref) : null);
-  const [state, setState] = useState<{
-    intent: WorkspaceItemRef | string | null;
-    selected: WorkspaceDocSelection | null;
-  }>(() => ({
-    intent,
-    selected: document
-      ? { environmentId: props.environmentId, projectId: props.projectId, document }
-      : null,
-  }));
-  if (state.intent !== intent)
-    setState({
-      intent,
-      selected: document
-        ? { environmentId: props.environmentId, projectId: props.projectId, document }
-        : null,
-    });
+  const centerDocument =
+    props.selectedItem && isDocument(props.selectedItem) ? props.selectedItem : null;
+  const centerKey = centerDocument ? workspaceItemKey(centerDocument.ref) : null;
+  const [previous, save] = useWorkspaceDocSession(props.environmentId, props.projectId);
+  const state = useMemo(() => {
+    if (previous?.request === props.request && previous.centerKey === centerKey) return previous;
+    const freshRequest = props.request !== null && props.request !== previous?.request;
+    const freshCenter =
+      props.request === null && centerKey !== null && centerKey !== previous?.centerKey;
+    return {
+      request: props.request,
+      centerKey,
+      selected:
+        !previous || freshRequest || freshCenter
+          ? document
+            ? { environmentId: props.environmentId, projectId: props.projectId, document }
+            : null
+          : previous.selected,
+    };
+  }, [previous, props.request, props.environmentId, props.projectId, centerKey, document]);
+  useEffect(() => save(state), [save, state]);
   return (
     <WorkspaceDocsPanel
       {...props}
       currentItem={props.selectedItem}
       {...(projectTitle ? { projectTitle } : {})}
       selected={state.selected}
-      onSelect={(selected) => setState({ intent, selected })}
+      onSelect={(selected) => save({ ...state, selected })}
     />
   );
 }

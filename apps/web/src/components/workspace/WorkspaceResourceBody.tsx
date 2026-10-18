@@ -41,6 +41,12 @@ const Docs = lazy(() =>
   import("./WorkspaceDocsPanel").then((module) => ({ default: module.WorkspaceDocsResource })),
 );
 
+const PullRequests = lazy(() =>
+  import("./WorkspacePullRequestsPanel").then((module) => ({
+    default: module.WorkspacePullRequestsPanel,
+  })),
+);
+
 /** The single live resource switch. Later waves replace only their tab's case. */
 export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): ReactNode {
   let body: ReactNode;
@@ -78,11 +84,7 @@ export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): 
       );
       break;
     case "prs":
-      body = (
-        <p className="text-sm text-muted-foreground">
-          Project pull requests are not available in this view yet.
-        </p>
-      );
+      body = <PullRequests {...props} />;
       break;
   }
   return (
