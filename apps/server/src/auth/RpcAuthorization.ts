@@ -38,6 +38,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.notesGet]: AuthOrchestrationReadScope,
   [WS_METHODS.notesRead]: AuthOrchestrationReadScope,
   [WS_METHODS.notesSubscribeChanges]: AuthOrchestrationReadScope,
+  [WS_METHODS.workspaceListProjectOverview]: AuthOrchestrationReadScope,
   [WS_METHODS.workspaceGetProjectConfig]: AuthOrchestrationReadScope,
   [WS_METHODS.workspaceQueryTasks]: AuthOrchestrationReadScope,
   [WS_METHODS.workspaceListTasks]: AuthOrchestrationReadScope,

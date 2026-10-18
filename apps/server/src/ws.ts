@@ -312,6 +312,7 @@ export const serverPulseCapabilities = {
   driveProjectRoot: true,
   driveExplorer: true,
   workspaceTools: true,
+  workspaceProjectOverview: true,
   workspaceTasksV2: true,
   workspaceNotes: true,
   workspaceCalendar: true,
@@ -1279,6 +1280,7 @@ const workspaceToolsWsRpcLayer = WorkspaceToolsWsRpcGroup.toLayer(
     const tools = yield* WorkspaceTools;
     const automation = yield* WorkspaceAutomation;
     return WorkspaceToolsWsRpcGroup.of({
+      [WS_METHODS.workspaceListProjectOverview]: tools.overview,
       [WS_METHODS.workspaceGetProjectConfig]: ({ projectId }) => tools.config(projectId),
       [WS_METHODS.workspaceSaveProjectConfig]: tools.saveConfig,
       [WS_METHODS.workspaceListTasks]: ({ projectId }) => tools.listTasks(projectId),

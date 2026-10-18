@@ -36,7 +36,9 @@ const TARGET = new PrimaryConnectionTarget({
 function session(client: WsRpcProtocolClient): RpcSession {
   return {
     client,
-    initialConfig: Effect.never,
+    initialConfig: Effect.succeed({
+      pulseCapabilities: { workspaceProjectOverview: true },
+    } as import("@t3tools/contracts").ServerConfig),
     subscribeServerConfig: (input) => client.subscribeServerConfig(input),
     ready: Effect.void,
     probe: Effect.void,
@@ -48,6 +50,7 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
   client: WsRpcProtocolClient,
   otherClient = client,
   otherTarget: ConnectionTarget = TARGET,
+  overviewSupported = true,
 ) {
   const connectionState: SupervisorConnectionState = {
     ...AVAILABLE_CONNECTION_STATE,
@@ -60,7 +63,14 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
   const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
     target: TARGET,
     state: yield* SubscriptionRef.make(connectionState),
-    session: yield* SubscriptionRef.make(Option.some(session(client))),
+    session: yield* SubscriptionRef.make<Option.Option<RpcSession>>(
+      Option.some({
+        ...session(client),
+        initialConfig: Effect.succeed({
+          pulseCapabilities: overviewSupported ? { workspaceProjectOverview: true } : {},
+        } as import("@t3tools/contracts").ServerConfig),
+      }),
+    ),
     prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
     connect: Effect.void,
     disconnect: Effect.void,
@@ -104,7 +114,13 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
   const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
     Effect.sync(() => registry.dispose()),
   );
-  return { atoms: createWorkspaceToolsAtoms(runtime), registry, supervisor };
+  const projects = Atom.make<readonly { id: importProjectId; title: string }[]>([]);
+  return {
+    atoms: createWorkspaceToolsAtoms(runtime, { projects: () => projects }),
+    registry,
+    supervisor,
+    projects,
+  };
 });
 
 it.effect("refreshes task totals in two subscribed client registries", () =>
@@ -658,4 +674,282 @@ it.effect.each(["local", "direct", "relay", "tunnel"])(
         expect(AsyncResult.getOrThrow(first.registry.get(current)).description).toBeNull();
       }),
     ),
+);
+
+const overviewPage = (title = "A", nextCursor?: string) => ({
+  projects: [
+    {
+      projectId: importProjectId.make("project"),
+      title,
+      description: null,
+      driveRoot: "none" as const,
+      channels: { count: 0, complete: true, providers: [] },
+    },
+  ],
+  incomplete: false,
+  ...(nextCursor ? { nextCursor } : {}),
+});
+const overviewClient = (
+  read: (input: {
+    cursor?: string;
+  }) => Effect.Effect<ReturnType<typeof overviewPage>, WorkspaceToolsError>,
+  counters?: {
+    workspace: SubscriptionRef.SubscriptionRef<number>;
+    links: SubscriptionRef.SubscriptionRef<number>;
+    drive: SubscriptionRef.SubscriptionRef<number>;
+  },
+) =>
+  ({
+    [WS_METHODS.workspaceListProjectOverview]: read,
+    [WS_METHODS.workspaceSubscribeChanges]: () =>
+      counters ? SubscriptionRef.changes(counters.workspace) : Stream.never,
+    [WS_METHODS.pulseLinksSubscribeChanges]: () =>
+      counters ? SubscriptionRef.changes(counters.links) : Stream.never,
+    [WS_METHODS.driveSubscribeChanges]: () =>
+      counters ? SubscriptionRef.changes(counters.drive) : Stream.never,
+  }) as unknown as WsRpcProtocolClient;
+it.effect(
+  "shares one overview RPC for 50 cards and keys all normalized filters and environment",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let reads = 0;
+        const inputs: unknown[] = [];
+        const client = overviewClient((input) =>
+          Effect.sync(() => {
+            reads++;
+            inputs.push(input);
+            return {
+              ...overviewPage(),
+              projects: Array.from({ length: 50 }, (_, i) => ({
+                ...overviewPage().projects[0]!,
+                projectId: importProjectId.make(`p${i}`),
+              })),
+            };
+          }),
+        );
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const a = atoms.overview({
+          environmentId: TARGET.environmentId,
+          input: { filter: "  GROWTH  " },
+        });
+        const b = atoms.overview({
+          environmentId: TARGET.environmentId,
+          input: { filter: "growth", drive: "all", order: "title", limit: 50 },
+        });
+        expect(a).toBe(b);
+        const stops = [registry.mount(a), registry.mount(b)];
+        yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((s) => s())));
+        expect(
+          AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, a)))
+            .projects,
+        ).toHaveLength(50);
+        expect(reads).toBe(1);
+        expect(inputs).toEqual([{ filter: "growth", drive: "all", order: "title", limit: 50 }]);
+        for (const input of [
+          { filter: "other" },
+          { drive: "linked" as const },
+          { limit: 1 },
+          { cursor: "next" },
+        ])
+          expect(atoms.overview({ environmentId: TARGET.environmentId, input })).not.toBe(a);
+        expect(
+          atoms.overview({
+            environmentId: EnvironmentId.make("other"),
+            input: { filter: "growth" },
+          }),
+        ).not.toBe(a);
+      }),
+    ),
+);
+it.effect("refreshes overview on config, links, roots, actual project changes and reconnect", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counters = {
+        workspace: yield* SubscriptionRef.make(0),
+        links: yield* SubscriptionRef.make(0),
+        drive: yield* SubscriptionRef.make(0),
+      };
+      let title = "Before";
+      const { atoms, registry, supervisor, projects } = yield* makeTestRuntime(
+        overviewClient(() => Effect.succeed(overviewPage(title)), counters),
+      );
+      const query = atoms.overview({ environmentId: TARGET.environmentId, input: {} });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      for (const event of ["workspace", "links", "drive", "project", "reconnect"] as const) {
+        title = event;
+        const seen = Latch.makeUnsafe();
+        const unsubscribe = registry.subscribe(query, (result) => {
+          if (AsyncResult.isSuccess(result) && result.value.projects[0]?.title === event)
+            seen.openUnsafe();
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+        if (event === "project")
+          registry.set(projects, [{ id: importProjectId.make("p"), title: event }]);
+        else if (event === "reconnect") {
+          yield* SubscriptionRef.update(supervisor.state, (s) => ({
+            ...s,
+            phase: "offline" as const,
+          }));
+          yield* SubscriptionRef.update(supervisor.state, (s) => ({
+            ...s,
+            phase: "connected" as const,
+            generation: s.generation + 1,
+          }));
+        } else yield* SubscriptionRef.update(counters[event], (n) => n + 1);
+        yield* seen.await;
+      }
+    }),
+  ),
+);
+it.effect(
+  "falls back to bounded client titles on older servers without overview RPC or metadata subscriptions",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let calls = 0;
+        const client = new Proxy({} as WsRpcProtocolClient, {
+          get() {
+            return () => {
+              calls++;
+              return Stream.never;
+            };
+          },
+        });
+        const { atoms, registry, projects } = yield* makeTestRuntime(client, client, TARGET, false);
+        registry.set(
+          projects,
+          Array.from({ length: 51 }, (_, i) => ({
+            id: importProjectId.make(`p${String(i).padStart(2, "0")}`),
+            title: `Project ${String(i).padStart(2, "0")}`,
+          })),
+        );
+        const query = atoms.overview({ environmentId: TARGET.environmentId, input: { limit: 50 } });
+        const page = AsyncResult.getOrThrow(
+          yield* Effect.promise(() => executeAtomQuery(registry, query)),
+        );
+        expect(page.projects).toHaveLength(50);
+        expect(page.incomplete).toBe(true);
+        expect(page.nextCursor).toEqual(expect.any(String));
+        expect(page.projects[0]).toEqual({
+          projectId: "p00",
+          title: "Project 00",
+          description: null,
+          driveRoot: "unavailable",
+          channels: { count: null, complete: false, providers: [] },
+        });
+        const last = AsyncResult.getOrThrow(
+          yield* Effect.promise(() =>
+            executeAtomQuery(
+              registry,
+              atoms.overview({
+                environmentId: TARGET.environmentId,
+                input: { limit: 50, cursor: page.nextCursor },
+              }),
+            ),
+          ),
+        );
+        expect(last.projects.map((p) => p.projectId)).toEqual(["p50"]);
+        expect(calls).toBe(0);
+      }),
+    ),
+);
+it.effect.each(["local", "direct", "relay", "tunnel"])(
+  "keeps late %s project overview reads in their owning environment",
+  (mode) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = Latch.makeUnsafe(),
+          finish = Latch.makeUnsafe();
+        const slow = overviewClient(() =>
+          Effect.gen(function* () {
+            started.openUnsafe();
+            yield* finish.await;
+            return overviewPage("Old");
+          }),
+        );
+        const fast = overviewClient(() => Effect.succeed(overviewPage("Current")));
+        const environmentId = EnvironmentId.make(`overview-${mode}`);
+        const target =
+          mode === "relay"
+            ? new RelayConnectionTarget({ environmentId, label: mode })
+            : new PrimaryConnectionTarget({
+                environmentId,
+                label: mode,
+                httpBaseUrl:
+                  mode === "local" ? "http://127.0.0.1:3773" : "https://remote.example.test",
+                wsBaseUrl: mode === "local" ? "ws://127.0.0.1:3773" : "wss://remote.example.test",
+              });
+        const { atoms, registry } = yield* makeTestRuntime(slow, fast, target);
+        const old = atoms.overview({ environmentId: TARGET.environmentId, input: {} }),
+          current = atoms.overview({ environmentId, input: {} });
+        const stops = [registry.mount(old), registry.mount(current)];
+        yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((s) => s())));
+        yield* started.await;
+        expect(
+          AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, current)))
+            .projects[0]?.title,
+        ).toBe("Current");
+        finish.openUnsafe();
+        expect(
+          AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, old)))
+            .projects[0]?.title,
+        ).toBe("Old");
+        expect(AsyncResult.getOrThrow(registry.get(current)).projects[0]?.title).toBe("Current");
+      }),
+    ),
+);
+
+it.effect("clears stale cursor overview rows during event refresh and failure", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counters = {
+        workspace: yield* SubscriptionRef.make(0),
+        links: yield* SubscriptionRef.make(0),
+        drive: yield* SubscriptionRef.make(0),
+      };
+      const began = Latch.makeUnsafe(),
+        finish = Latch.makeUnsafe();
+      let changed = false;
+      const client = overviewClient(
+        (input) =>
+          Effect.gen(function* () {
+            if (input.cursor && changed) {
+              began.openUnsafe();
+              yield* finish.await;
+              return yield* new WorkspaceToolsError({
+                kind: "invalid-input",
+                message: "Restart pagination",
+              });
+            }
+            return overviewPage("Old", input.cursor ? undefined : "next");
+          }),
+        counters,
+      );
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const query = atoms.overview({
+        environmentId: TARGET.environmentId,
+        input: { cursor: "next" },
+      });
+      const stop = registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(() => executeAtomQuery(registry, query));
+      const cleared = Latch.makeUnsafe();
+      const unsub = registry.subscribe(query, (result) => {
+        if (result.waiting && Option.isNone(AsyncResult.value(result))) cleared.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(unsub));
+      changed = true;
+      yield* SubscriptionRef.update(counters.links, (n) => n + 1);
+      yield* began.await;
+      yield* cleared.await;
+      expect(Option.isNone(AsyncResult.value(registry.get(query)))).toBe(true);
+      finish.openUnsafe();
+      const failed = yield* Effect.promise(() => executeAtomQuery(registry, query));
+      expect(AsyncResult.isFailure(failed)).toBe(true);
+      expect(Option.isNone(AsyncResult.value(failed))).toBe(true);
+    }),
+  ),
 );

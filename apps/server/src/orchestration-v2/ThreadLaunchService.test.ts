@@ -1,3 +1,5 @@
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
+import { EnvironmentId as OverviewEnvironmentId } from "@t3tools/contracts";
 import * as WorkspaceAutomation from "../workspace/WorkspaceAutomation.ts";
 import * as WorkspaceTools from "../workspace/WorkspaceTools.ts";
 import { WorkspaceLinksLive, WorkspaceLinks } from "../workspace/WorkspaceLinks.ts";
@@ -2229,6 +2231,14 @@ it.effect(
       Layer.provide(Layer.mergeAll(harness.layer, NodeCrypto.layer, Scheduler.layer)),
     );
     const dependencies = Layer.mergeAll(schedules, WorkspaceTools.layer, WorkspaceLinksLive).pipe(
+      Layer.provideMerge(
+        Layer.succeed(
+          ServerEnvironmentIdentity,
+          ServerEnvironmentIdentity.of({
+            getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("workspace-test")),
+          }),
+        ),
+      ),
       Layer.provideMerge(harness.layer),
       Layer.provide(NodeCrypto.layer),
     );

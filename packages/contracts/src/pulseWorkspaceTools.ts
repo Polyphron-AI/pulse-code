@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { EnvironmentAuthorizationError } from "./auth.ts";
-import { ProjectId, ThreadId, NonNegativeInt } from "./baseSchemas.ts";
+import { EnvironmentId, ProjectId, ThreadId, NonNegativeInt } from "./baseSchemas.ts";
 import { ScheduledTaskUpsertInput, ScheduledTaskMutationResult } from "./scheduledTask.ts";
 import { WorkspaceLinkEndpoint } from "./pulseLinks.ts";
 import { WorkspaceDriveRoot } from "./pulseDrive.ts";
@@ -36,6 +36,69 @@ export const WorkspaceProjectConfig = Schema.Struct({
   revision: Schema.optionalKey(NonNegativeInt),
 });
 export type WorkspaceProjectConfig = typeof WorkspaceProjectConfig.Type;
+export const WorkspaceProjectOverviewQuery = Schema.Struct({
+  limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })).pipe(
+    Schema.withDecodingDefault(Effect.succeed(50)),
+  ),
+  filter: Schema.String.check(Schema.isMaxLength(256)).pipe(
+    Schema.withDecodingDefault(Effect.succeed("")),
+  ),
+  drive: Schema.Literals(["all", "linked", "unlinked"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("all")),
+  ),
+  order: Schema.Literal("title").pipe(Schema.withDecodingDefault(Effect.succeed("title"))),
+  cursor: Schema.optional(
+    Schema.String.check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(2048),
+      Schema.isPattern(/^[A-Za-z0-9_-]+$/),
+    ),
+  ),
+});
+export type WorkspaceProjectOverviewQuery = typeof WorkspaceProjectOverviewQuery.Type;
+// SQLite lower() folds ASCII only, including when the filter is compared to descriptions.
+export const normalizeWorkspaceProjectOverviewFilter = (value: string) =>
+  value.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+export const WorkspaceProjectOverviewCursor = Schema.Struct({
+  version: Schema.Literal(1),
+  environmentId: EnvironmentId,
+  filter: WorkspaceProjectOverviewQuery.fields.filter,
+  drive: Schema.Literals(["all", "linked", "unlinked"]),
+  order: Schema.Literal("title"),
+  sortTitle: Schema.String,
+  projectId: ProjectId,
+});
+export const WorkspaceProjectOverview = Schema.Struct({
+  projectId: ProjectId,
+  title: Schema.String,
+  description: Schema.NullOr(
+    Schema.String.check(Schema.isMaxLength(WorkspaceProjectDescriptionMaxLength)),
+  ),
+  driveRoot: Schema.Literals(["linked", "none", "unavailable"]),
+  channels: Schema.Struct({
+    count: Schema.NullOr(NonNegativeInt),
+    complete: Schema.Boolean,
+    providers: Schema.Array(
+      Schema.Struct({ provider: Schema.String, count: NonNegativeInt, complete: Schema.Boolean }),
+    ).check(Schema.isMaxLength(100)),
+  }),
+  members: Schema.optionalKey(
+    Schema.Struct({
+      count: NonNegativeInt,
+      complete: Schema.Literal(true),
+      source: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+      observedAt: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64)),
+    }),
+  ),
+});
+export type WorkspaceProjectOverview = typeof WorkspaceProjectOverview.Type;
+export const WorkspaceProjectOverviewPage = Schema.Struct({
+  projects: Schema.Array(WorkspaceProjectOverview).check(Schema.isMaxLength(50)),
+  nextCursor: WorkspaceProjectOverviewQuery.fields.cursor,
+  // Paging and unavailable metadata do not make the selected native project rows incomplete.
+  incomplete: Schema.Boolean,
+});
+export type WorkspaceProjectOverviewPage = typeof WorkspaceProjectOverviewPage.Type;
 export const WorkspaceProjectConfigSave = Schema.Struct({
   description: WorkspaceProjectConfig.fields.description,
   projectId: ProjectId,
@@ -145,6 +208,7 @@ export class WorkspaceToolsError extends Schema.TaggedError<WorkspaceToolsError>
 ) {}
 const error = Schema.Union([WorkspaceToolsError, EnvironmentAuthorizationError]);
 export const PULSE_WORKSPACE_TOOLS_METHODS = {
+  workspaceListProjectOverview: "pulse.workspace.listProjectOverview",
   workspaceGetProjectConfig: "pulse.workspace.getProjectConfig",
   workspaceSaveProjectConfig: "pulse.workspace.saveProjectConfig",
   workspaceQueryTasks: "pulse.workspace.queryTasks",
@@ -158,6 +222,11 @@ export const PULSE_WORKSPACE_TOOLS_METHODS = {
   workspaceSaveAutomation: "pulse.workspace.saveAutomation",
 } as const;
 export const PulseWorkspaceToolsRpcs = [
+  Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceListProjectOverview, {
+    payload: WorkspaceProjectOverviewQuery,
+    success: WorkspaceProjectOverviewPage,
+    error,
+  }),
   Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceQueryTasks, {
     payload: WorkspaceTaskQuery,
     success: WorkspaceTaskPage,

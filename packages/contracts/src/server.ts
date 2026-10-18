@@ -617,6 +617,7 @@ export const ServerConfig = Schema.Struct({
       driveProjectRoot: Schema.optionalKey(Schema.Boolean),
       driveExplorer: Schema.optionalKey(Schema.Boolean),
       workspaceTools: Schema.optionalKey(Schema.Boolean),
+      workspaceProjectOverview: Schema.optionalKey(Schema.Boolean),
       workspaceTasksV2: Schema.optionalKey(Schema.Boolean),
       workspaceNotes: Schema.optionalKey(Schema.Boolean),
       workspaceCalendar: Schema.optionalKey(Schema.Boolean),

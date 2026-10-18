@@ -1,3 +1,5 @@
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
+import { EnvironmentId as OverviewEnvironmentId } from "@t3tools/contracts";
 import { vi } from "vite-plus/test";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
@@ -43,6 +45,14 @@ const layer = Layer.effect(
   }),
 ).pipe(
   Layer.provideMerge(Tools.layer),
+  Layer.provideMerge(
+    Layer.succeed(
+      ServerEnvironmentIdentity,
+      ServerEnvironmentIdentity.of({
+        getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("workspace-test")),
+      }),
+    ),
+  ),
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeCrypto.layer),
 );

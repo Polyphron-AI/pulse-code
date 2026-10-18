@@ -1,3 +1,5 @@
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
+import { EnvironmentId as OverviewEnvironmentId } from "@t3tools/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
 import {
@@ -14,6 +16,14 @@ import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as Tools from "./WorkspaceTools.ts";
 const isTaskPage = Schema.is(WorkspaceTaskPage);
 const layer = Tools.layer.pipe(
+  Layer.provideMerge(
+    Layer.succeed(
+      ServerEnvironmentIdentity,
+      ServerEnvironmentIdentity.of({
+        getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("workspace-test")),
+      }),
+    ),
+  ),
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeCrypto.layer),
 );

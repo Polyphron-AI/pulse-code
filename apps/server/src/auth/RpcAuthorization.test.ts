@@ -2,7 +2,9 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as Tools from "../workspace/WorkspaceTools.ts";
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
 import {
+  EnvironmentId,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthRelayReadScope,
@@ -428,6 +430,7 @@ it.effect(
       const projectId = ProjectId.make("description-auth");
       yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Description','/synthetic','[]','2026-10-17T12:00:00Z','2026-10-17T12:00:00Z')`;
       const tested = [
+        WS_METHODS.workspaceListProjectOverview,
         WS_METHODS.workspaceGetProjectConfig,
         WS_METHODS.workspaceSaveProjectConfig,
       ] as const;
@@ -441,6 +444,7 @@ it.effect(
         const client = yield* RpcTest.makeClient(group).pipe(
           Effect.provide(
             Layer.mergeAll(
+              group.toLayerHandler(WS_METHODS.workspaceListProjectOverview, tools.overview),
               group.toLayerHandler(WS_METHODS.workspaceGetProjectConfig, ({ projectId }) =>
                 tools.config(projectId),
               ),
@@ -449,6 +453,14 @@ it.effect(
             ),
           ),
         );
+        expect(
+          (yield* client[WS_METHODS.workspaceListProjectOverview]({
+            limit: 50,
+            filter: "",
+            drive: "all",
+            order: "title",
+          })).projects.map((p) => p.projectId),
+        ).toEqual([projectId]);
         const original = yield* client[WS_METHODS.workspaceGetProjectConfig]({ projectId });
         expect(original.description).toBeNull();
         for (const description of ["  Authorized description  ", null]) {
@@ -472,6 +484,14 @@ it.effect(
       Effect.scoped,
       Effect.provide(
         Tools.layer.pipe(
+          Layer.provide(
+            Layer.succeed(
+              ServerEnvironmentIdentity,
+              ServerEnvironmentIdentity.of({
+                getEnvironmentId: Effect.succeed(EnvironmentId.make("auth-test")),
+              }),
+            ),
+          ),
           Layer.provideMerge(SqlitePersistenceMemory),
           Layer.provide(NodeCrypto.layer),
         ),

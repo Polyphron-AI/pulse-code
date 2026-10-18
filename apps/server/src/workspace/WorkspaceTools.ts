@@ -1,5 +1,13 @@
 import {
   WorkspaceToolsError,
+  WorkspaceProjectOverviewQuery,
+  WorkspaceProjectOverviewCursor,
+  normalizeWorkspaceProjectOverviewFilter,
+  type WorkspaceProjectOverview,
+  WorkspaceProjectOverviewPage,
+  WorkspaceItemRef,
+  workspaceItemKey,
+  parseTelegramResourceId,
   WorkspaceProjectDescriptionMaxLength,
   WorkspaceTaskQuery,
   WorkspaceTaskDueOn,
@@ -12,7 +20,10 @@ import {
   WorkspaceTaskUpsert,
   WorkspaceTaskPatch,
   WorkspaceDriveRoot,
+  DriveFile,
 } from "@t3tools/contracts";
+import * as Option from "effect/Option";
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -96,8 +107,19 @@ export function taskQuerySql(
   >`SELECT t.id,t.project_id AS "projectId",p.title AS "projectTitle",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,${done} AS done ${relation} WHERE ${sql.and(pageFilters)} ORDER BY ${order} LIMIT ${query.limit + 1}`;
   return { done, filters, relation, page };
 }
+const decodeOverviewQuery = Schema.decodeUnknownEffect(WorkspaceProjectOverviewQuery);
+const overviewCursorJson = Schema.fromJsonString(WorkspaceProjectOverviewCursor);
+const decodeOverviewCursor = Schema.decodeUnknownEffect(overviewCursorJson);
+const encodeOverviewCursor = Schema.encodeSync(overviewCursorJson);
+const decodeOverviewRef = Schema.decodeUnknownOption(Schema.fromJsonString(WorkspaceItemRef));
+const decodeOverviewRoot = Schema.decodeUnknownOption(Schema.fromJsonString(WorkspaceDriveRoot));
+const decodeFolder = Schema.decodeUnknownOption(Schema.fromJsonString(DriveFile));
+const encodeOverviewPage = Schema.encodeSync(Schema.fromJsonString(WorkspaceProjectOverviewPage));
+const OverviewLinksPerProject = 100;
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const identity = yield* ServerEnvironmentIdentity;
+  const environmentId = yield* identity.getEnvironmentId;
   const crypto = yield* Crypto.Crypto;
   const instance = yield* crypto.randomUUIDv4;
   const locks = yield* makeKeyedSerialExecutor<string>();
@@ -196,6 +218,235 @@ export const make = Effect.gen(function* () {
       return { column, changed };
     });
   return {
+    overview: (input: typeof WorkspaceProjectOverviewQuery.Encoded) =>
+      safe(
+        sql.withTransaction(
+          Effect.gen(function* (): Effect.gen.Return<
+            WorkspaceProjectOverviewPage,
+            WorkspaceToolsError | import("effect/unstable/sql/SqlError").SqlError
+          > {
+            const query = yield* decodeOverviewQuery(input).pipe(
+              Effect.mapError(() =>
+                fail("invalid-input", "Choose valid project filters and a page size from 1 to 50."),
+              ),
+            );
+            const filter = normalizeWorkspaceProjectOverviewFilter(query.filter);
+            const invalidCursor = () =>
+              fail(
+                "invalid-input",
+                "Use a project cursor from this environment and the same filters.",
+              );
+            const cursor = query.cursor
+              ? yield* decodeOverviewCursor(
+                  Buffer.from(query.cursor, "base64url").toString("utf8"),
+                ).pipe(Effect.mapError(invalidCursor))
+              : undefined;
+            if (
+              cursor &&
+              (cursor.environmentId !== environmentId ||
+                cursor.filter !== filter ||
+                cursor.drive !== query.drive ||
+                cursor.order !== query.order)
+            )
+              return yield* invalidCursor();
+            const after = cursor
+              ? sql`AND (lower(p.title) > ${cursor.sortTitle} OR (lower(p.title) = ${cursor.sortTitle} AND p.project_id > ${cursor.projectId}))`
+              : sql``;
+            // Filter on a designated root; each card reports whether that root is valid.
+            const rootFilter =
+              query.drive === "all"
+                ? sql``
+                : query.drive === "linked"
+                  ? sql`AND c.drive_root_json IS NOT NULL`
+                  : sql`AND c.drive_root_json IS NULL`;
+            const rows = yield* sql<{
+              projectId: ProjectId;
+              title: string;
+              sort_title: string;
+              description: string | null;
+              rootJson: string | null;
+            }>`
+        SELECT p.project_id AS "projectId", p.title, lower(p.title) AS sort_title, c.description, c.drive_root_json AS "rootJson"
+        FROM projection_projects p LEFT JOIN workspace_project_config c ON c.project_id=p.project_id
+        WHERE p.deleted_at IS NULL AND (instr(lower(p.title),${filter})>0 OR instr(lower(coalesce(c.description,'')),${filter})>0)
+        ${rootFilter} ${after} ORDER BY lower(p.title),p.project_id LIMIT ${query.limit + 1}`;
+            const selected = rows.slice(0, query.limit);
+            if (!selected.length) return { projects: [], incomplete: false };
+            const keys = selected.map((row) =>
+              workspaceItemKey({ type: "project", projectId: row.projectId }),
+            );
+            // Inspect a bounded number of direct confirmed endpoints per project. A lookahead marks unknown totals.
+            const links = yield* sql<{
+              projectKey: string;
+              otherKey: string;
+              refJson: string;
+              ordinal: number;
+              chatType: string | null;
+            }>`
+        WITH endpoints AS (
+          SELECT key_a AS project_key,key_b AS other_key,ref_b_json AS ref_json,link_id FROM workspace_links WHERE status='confirmed' AND ${sql.in("key_a", keys)}
+          UNION ALL
+          SELECT key_b AS project_key,key_a AS other_key,ref_a_json AS ref_json,link_id FROM workspace_links WHERE status='confirmed' AND ${sql.in("key_b", keys)}
+        ), ranked AS (
+          SELECT *,row_number() OVER(PARTITION BY project_key ORDER BY link_id) AS ordinal FROM endpoints
+        ) SELECT r.project_key AS "projectKey",r.other_key AS "otherKey",r.ref_json AS "refJson",r.ordinal,t.chat_type AS "chatType"
+        FROM ranked r LEFT JOIN telegram_chats t ON json_extract(CASE WHEN json_valid(r.ref_json) THEN r.ref_json ELSE '{}' END,'$.provider')='telegram'
+          AND json_extract(CASE WHEN json_valid(r.ref_json) THEN r.ref_json ELSE '{}' END,'$.resourceId')=t.connection_id || '/' || t.chat_id
+        WHERE r.ordinal<=${OverviewLinksPerProject + 1}`;
+            const roots = yield* sql<{
+              projectId: ProjectId;
+              keyA: string | null;
+              keyB: string | null;
+              refA: string | null;
+              refB: string | null;
+              status: string | null;
+              bindingConnection: string | null;
+              fileJson: string | null;
+              connected: number | null;
+              removed: number | null;
+            }>`
+        SELECT c.project_id AS "projectId",l.key_a AS "keyA",l.key_b AS "keyB",l.ref_a_json AS "refA",l.ref_b_json AS "refB",l.status,
+          b.connection_id AS "bindingConnection",b.file_json AS "fileJson",d.connected,d.removed
+        FROM workspace_project_config c
+        LEFT JOIN workspace_links l ON l.link_id=json_extract(CASE WHEN json_valid(c.drive_root_json) THEN c.drive_root_json ELSE '{}' END,'$.linkId')
+        LEFT JOIN drive_file_bindings b ON b.file_id=json_extract(CASE WHEN json_valid(c.drive_root_json) THEN c.drive_root_json ELSE '{}' END,'$.fileId')
+        LEFT JOIN drive_connections d ON d.id=json_extract(CASE WHEN json_valid(c.drive_root_json) THEN c.drive_root_json ELSE '{}' END,'$.connectionId')
+        WHERE ${sql.in(
+          "c.project_id",
+          selected.map((row) => row.projectId),
+        )} AND c.drive_root_json IS NOT NULL`;
+            const rootByProject = new Map(roots.map((row) => [row.projectId, row]));
+            const counts = new Map(
+              keys.map((key) => [
+                key,
+                {
+                  complete: true,
+                  count: 0,
+                  providers: new Map<string, { count: number; complete: boolean }>(),
+                },
+              ]),
+            );
+            for (const link of links) {
+              const totals = counts.get(link.projectKey)!;
+              if (link.ordinal > OverviewLinksPerProject) {
+                totals.complete = false;
+                continue;
+              }
+              const parsed = decodeOverviewRef(link.refJson);
+              if (Option.isNone(parsed) || workspaceItemKey(parsed.value) !== link.otherKey) {
+                totals.complete = false;
+                continue;
+              }
+              const ref = parsed.value;
+              if (
+                ref.type !== "provider-resource" ||
+                ref.provider === "workspace-note" ||
+                ref.provider === "workspace-calendar" ||
+                ref.provider === "pulse-meeting"
+              )
+                continue;
+              const telegram =
+                ref.provider === "telegram" ? parseTelegramResourceId(ref.resourceId) : undefined;
+              if (telegram?.messageId) continue;
+              const provider = totals.providers.get(ref.provider) ?? { count: 0, complete: true };
+              totals.providers.set(ref.provider, provider);
+              if (!telegram || !link.chatType) {
+                provider.complete = false;
+                continue;
+              }
+              if (link.chatType === "channel") {
+                totals.count++;
+                provider.count++;
+              }
+            }
+            const projects: WorkspaceProjectOverview[] = selected.map((row) => {
+              let driveRoot: WorkspaceProjectOverview["driveRoot"] =
+                row.rootJson === null ? "none" : "unavailable";
+              const root = row.rootJson === null ? Option.none() : decodeOverviewRoot(row.rootJson);
+              const stored = rootByProject.get(row.projectId);
+              if (
+                Option.isSome(root) &&
+                stored?.status === "confirmed" &&
+                stored.bindingConnection === root.value.connectionId &&
+                stored.connected === 1 &&
+                stored.removed === 0
+              ) {
+                const a = decodeOverviewRef(stored.refA),
+                  b = decodeOverviewRef(stored.refB),
+                  folder = decodeFolder(stored.fileJson);
+                const expected = [
+                  workspaceItemKey({ type: "project", projectId: row.projectId }),
+                  workspaceItemKey({
+                    type: "file",
+                    provider: "google-drive",
+                    fileId: root.value.fileId,
+                  }),
+                ].sort();
+                const actual =
+                  Option.isSome(a) && Option.isSome(b)
+                    ? [workspaceItemKey(a.value), workspaceItemKey(b.value)].sort()
+                    : [];
+                const storedKeys = [stored.keyA, stored.keyB].sort();
+                if (
+                  expected.every((key, i) => key === actual[i] && key === storedKeys[i]) &&
+                  Option.isSome(folder) &&
+                  folder.value.id === root.value.fileId &&
+                  folder.value.mimeType === "application/vnd.google-apps.folder"
+                )
+                  driveRoot = "linked";
+              }
+              const totals = counts.get(
+                workspaceItemKey({ type: "project", projectId: row.projectId }),
+              )!;
+              const complete =
+                totals.complete && [...totals.providers.values()].every((p) => p.complete);
+              return {
+                projectId: row.projectId,
+                title: row.title,
+                description: row.description,
+                driveRoot,
+                channels: {
+                  count: complete ? totals.count : null,
+                  complete,
+                  providers: [...totals.providers]
+                    .filter(([, p]) => p.count > 0)
+                    .map(([provider, p]) => ({
+                      provider,
+                      count: p.count,
+                      complete: totals.complete && p.complete,
+                    })),
+                },
+              };
+            });
+            const last = selected.at(-1)!;
+            const nextCursor =
+              rows.length > query.limit
+                ? Buffer.from(
+                    encodeOverviewCursor({
+                      version: 1,
+                      environmentId,
+                      filter,
+                      drive: query.drive,
+                      order: query.order,
+                      sortTitle: last.sort_title,
+                      projectId: last.projectId,
+                    }),
+                  ).toString("base64url")
+                : undefined;
+            const page = { projects, ...(nextCursor ? { nextCursor } : {}), incomplete: false };
+            // Reject the whole page when metadata exceeds the 128 KiB response budget.
+            if (
+              (nextCursor && nextCursor.length > 2048) ||
+              Buffer.byteLength(encodeOverviewPage(page), "utf8") > 128 * 1024
+            )
+              return yield* fail(
+                "unavailable",
+                "Project summary metadata exceeds the bounded overview response.",
+              );
+            return page;
+          }),
+        ),
+      ),
     config,
     getTask,
     queryTasks: (input: typeof WorkspaceTaskQuery.Encoded) =>

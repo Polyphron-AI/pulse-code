@@ -657,7 +657,7 @@ const commandReadinessLayer = HttpRouter.middleware(
 /** One Telegram reader shared by workspace MCP and remote clients. */
 const WorkspaceToolsLayerLive = WorkspaceAutomation.layer.pipe(
   Layer.merge(WorkspaceCalendar.layer),
-  Layer.provideMerge(WorkspaceTools.layer),
+  Layer.provideMerge(WorkspaceTools.layer.pipe(Layer.provide(ServerEnvironmentLayerLive))),
   Layer.merge(WorkspaceNotes.layer),
 );
 

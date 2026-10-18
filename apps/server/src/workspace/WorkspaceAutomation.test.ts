@@ -1,3 +1,5 @@
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
+import { EnvironmentId as OverviewEnvironmentId } from "@t3tools/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
 import {
@@ -24,6 +26,14 @@ import { renderLinkedItems, withLinkedItems } from "./linkedItemsContext.ts";
 const decodeInput = Schema.decodeUnknownEffect(WorkspaceAutomationSave);
 const projectId = ProjectId.make("project-automation");
 const layer = Layer.mergeAll(Tools.layer, WorkspaceLinksLive).pipe(
+  Layer.provideMerge(
+    Layer.succeed(
+      ServerEnvironmentIdentity,
+      ServerEnvironmentIdentity.of({
+        getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("workspace-test")),
+      }),
+    ),
+  ),
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeCrypto.layer),
 );

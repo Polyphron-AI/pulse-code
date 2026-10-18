@@ -2,6 +2,8 @@ import { expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import { ServerConfig } from "./server.ts";
 import {
+  WorkspaceProjectOverviewQuery,
+  WorkspaceProjectOverviewPage,
   WorkspaceTask,
   WorkspaceTaskQuery,
   WorkspaceTaskPage,
@@ -15,6 +17,7 @@ import {
   PulseWorkspaceToolsRpcs,
   WorkspaceToolsError,
 } from "./pulseWorkspaceTools.ts";
+const isPulseCapabilities = Schema.is(ServerConfig.fields.pulseCapabilities);
 const decodeQuery = Schema.decodeUnknownSync(WorkspaceTaskQuery);
 const decodePage = Schema.decodeUnknownSync(WorkspaceTaskPage);
 const decodeTask = Schema.decodeUnknownSync(WorkspaceTask);
@@ -129,7 +132,7 @@ const isConfig = Schema.is(WorkspaceProjectConfig);
 const isTask = Schema.is(WorkspaceTaskUpsert);
 const isAutomation = Schema.is(WorkspaceAutomationSave);
 it("bounds basic task settings and exposes an optional workspace family without recurrence or dependency fields", () => {
-  expect(PulseWorkspaceToolsRpcs).toHaveLength(11);
+  expect(PulseWorkspaceToolsRpcs).toHaveLength(12);
   expect(
     isConfig({
       projectId: "p",
@@ -281,3 +284,52 @@ it.each(["x".repeat(601), "\u{1f680}".repeat(300) + "x", ` ${"x".repeat(600)} `]
     expect(() => decodeConfigSave(input)).toThrow();
   },
 );
+
+it("bounds overview queries and preserves raw multi-line descriptions", () => {
+  const decode = Schema.decodeUnknownSync(WorkspaceProjectOverviewQuery);
+  expect(decode({})).toEqual({ limit: 50, filter: "", drive: "all", order: "title" });
+  for (const input of [
+    { limit: 0 },
+    { limit: 51 },
+    { limit: 1.5 },
+    { filter: "x".repeat(257) },
+    { cursor: "x".repeat(2049) },
+    { cursor: "" },
+    { order: "recent" },
+  ])
+    expect(() => decode(input)).toThrow();
+  const project = {
+    projectId: "p",
+    title: "",
+    description: "Line 1\nLine 2",
+    driveRoot: "none",
+    channels: { count: null, complete: false, providers: [] },
+  };
+  const page = Schema.decodeUnknownSync(WorkspaceProjectOverviewPage);
+  expect(page({ projects: [project], incomplete: false }).projects[0]?.description).toBe(
+    project.description,
+  );
+  expect(() =>
+    page({ projects: Array.from({ length: 51 }, () => project), incomplete: false }),
+  ).toThrow();
+  expect(() =>
+    page({
+      projects: [
+        {
+          ...project,
+          members: { count: 8, complete: false, source: "Slack", observedAt: "2026-10-13" },
+        },
+      ],
+      incomplete: false,
+    }),
+  ).toThrow();
+  expect(() =>
+    page({ projects: [{ ...project, members: { count: 8, complete: true } }], incomplete: false }),
+  ).toThrow();
+});
+it("registers the optional project overview RPC", () => {
+  expect(
+    PulseWorkspaceToolsRpcs.some((rpc) => rpc._tag === "pulse.workspace.listProjectOverview"),
+  ).toBe(true);
+  expect(isPulseCapabilities({ workspaceProjectOverview: true })).toBe(true);
+});

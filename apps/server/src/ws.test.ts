@@ -239,4 +239,5 @@ it.effect("recovers a reveal kind whose real probe outlasts the config timeout",
 it("advertises the project Drive root and explorer read capabilities", () => {
   assert.strictEqual(serverPulseCapabilities.driveProjectRoot, true);
   assert.strictEqual(serverPulseCapabilities.driveExplorer, true);
+  assert.strictEqual(serverPulseCapabilities.workspaceProjectOverview, true);
 });

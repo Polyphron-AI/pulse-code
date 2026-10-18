@@ -1,3 +1,5 @@
+import { ServerEnvironmentIdentity } from "../../../environment/ServerEnvironment.ts";
+import { EnvironmentId as OverviewEnvironmentId } from "@t3tools/contracts";
 import { vi } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import * as Calendar from "../../../workspace/WorkspaceCalendar.ts";
@@ -239,6 +241,14 @@ describe("workspace MCP toolkit", () => {
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(WorkspaceLinksLive, WorkspaceTools.layer).pipe(
+          Layer.provideMerge(
+            Layer.succeed(
+              ServerEnvironmentIdentity,
+              ServerEnvironmentIdentity.of({
+                getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("workspace-test")),
+              }),
+            ),
+          ),
           Layer.provideMerge(SqlitePersistenceMemory),
           Layer.provideMerge(baseLayer()),
         ),
@@ -693,6 +703,14 @@ it.effect("reads only direct confirmed calendar occurrences and revokes reads af
         ),
       ).pipe(
         Layer.provideMerge(WorkspaceTools.layer),
+        Layer.provideMerge(
+          Layer.succeed(
+            ServerEnvironmentIdentity,
+            ServerEnvironmentIdentity.of({
+              getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("workspace-test")),
+            }),
+          ),
+        ),
         Layer.provideMerge(SqlitePersistenceMemory),
         Layer.provideMerge(baseLayer()),
       ),

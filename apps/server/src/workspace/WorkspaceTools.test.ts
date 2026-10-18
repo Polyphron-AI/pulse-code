@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
-import { ProjectId, ThreadId, WorkspaceDriveRoot } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId, WorkspaceDriveRoot } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as Tools from "./WorkspaceTools.ts";
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
 const projectId = ProjectId.make("project-tools");
 const encodeRoot = Schema.encodeSync(Schema.fromJsonString(WorkspaceDriveRoot));
 const seedWorkspaceProject = Effect.gen(function* () {
@@ -19,6 +20,14 @@ const seedWorkspaceProject = Effect.gen(function* () {
   return projectId;
 });
 const layer = Tools.layer.pipe(
+  Layer.provideMerge(
+    Layer.succeed(
+      ServerEnvironmentIdentity,
+      ServerEnvironmentIdentity.of({
+        getEnvironmentId: Effect.succeed(EnvironmentId.make("tools-test")),
+      }),
+    ),
+  ),
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeCrypto.layer),
 );

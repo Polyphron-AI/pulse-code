@@ -1,3 +1,5 @@
+import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
+import { EnvironmentId as OverviewEnvironmentId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { ProjectId, workspaceItemKey } from "@t3tools/contracts";
 import * as NodeCrypto from "node:crypto";
@@ -998,7 +1000,16 @@ describe("Drive read-only account and file lifecycle", () => {
       expect(yield* sql`SELECT link_id FROM workspace_links WHERE status='confirmed'`).toHaveLength(
         1,
       );
-    }).pipe(Effect.scoped, Effect.provide(testLayer())),
+    }).pipe(
+      Effect.provideService(
+        ServerEnvironmentIdentity,
+        ServerEnvironmentIdentity.of({
+          getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("drive-test")),
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(testLayer()),
+    ),
   );
   it.effect("replaces only an explicitly chosen root and fails closed on corrupt stored JSON", () =>
     Effect.gen(function* () {

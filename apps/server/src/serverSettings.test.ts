@@ -1,3 +1,5 @@
+import { ServerEnvironmentIdentity } from "./environment/ServerEnvironment.ts";
+import { EnvironmentId as OverviewEnvironmentId } from "@t3tools/contracts";
 import { vi } from "vite-plus/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
@@ -149,6 +151,14 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       Effect.scoped,
       Effect.provide(
         WorkspaceTools.layer.pipe(
+          Layer.provideMerge(
+            Layer.succeed(
+              ServerEnvironmentIdentity,
+              ServerEnvironmentIdentity.of({
+                getEnvironmentId: Effect.succeed(OverviewEnvironmentId.make("workspace-test")),
+              }),
+            ),
+          ),
           Layer.provideMerge(makeServerSettingsLayer()),
           Layer.provide(NodeCrypto.layer),
         ),
