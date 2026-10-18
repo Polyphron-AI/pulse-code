@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import {
   chatResourceId,
   ChatResource,
+  normalizeLinkUrl,
   type ChatAccount,
   type ChatConversation,
   type ChatMessage,
@@ -127,10 +128,27 @@ export function sendAttempt(
   previous: { text: string; nonce: string; destination: string } | undefined,
   createNonce: () => string,
   destination = "",
+  generation = 0,
 ) {
-  return previous?.text === text && previous.destination === destination
+  const scopedDestination = JSON.stringify([destination, generation]);
+  return previous?.text === text && previous.destination === scopedDestination
     ? previous
-    : { text, nonce: createNonce(), destination };
+    : { text, nonce: createNonce(), destination: scopedDestination };
+}
+
+export function appendDraftLink(text: string, raw: string): string | undefined {
+  const url = normalizeLinkUrl(raw);
+  if (url === undefined) return undefined;
+  return `${text}${text.length && !text.endsWith("\n") ? "\n" : ""}${url}`;
+}
+
+/** The reader retains drafts and unresolved sends while a composer is unmounted. */
+export interface ChatDraft {
+  text: string;
+  generation: number;
+  attempt?: ReturnType<typeof sendAttempt> | undefined;
+  inFlight?: boolean;
+  notice?: string;
 }
 
 export interface ConversationRow {

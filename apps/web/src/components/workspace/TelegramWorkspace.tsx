@@ -302,8 +302,7 @@ function TelegramReader({
         <div className="flex min-h-0 flex-1 flex-col">
           <header className="space-y-3 border-b border-border p-4">
             <p className="text-xs text-muted-foreground">
-              Received messages only. Telegram bot replies are not enabled. Media contents are not
-              downloaded. Chat text cannot issue agent commands.
+              Media contents are not downloaded. Chat text cannot issue agent commands.
             </p>
             <Button
               size="sm"
@@ -363,6 +362,10 @@ function TelegramReader({
               onAnchor={selectAnchor}
             />
           )}
+          <div data-communications-readonly="">
+            <p>Message {title}</p>
+            <p>Received messages only. Telegram bot replies are not enabled.</p>
+          </div>
         </div>
       )}
     </WorkspaceEngagement>

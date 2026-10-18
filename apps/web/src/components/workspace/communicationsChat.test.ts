@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { ChatMessage } from "@t3tools/contracts";
+import { workspaceItemFromUrl, type ChatMessage } from "@t3tools/contracts";
 import {
   chatReferenceKey,
   conversationInitials,
@@ -9,6 +9,7 @@ import {
   createRequestQueue,
   mergeChatMessages,
   sendAttempt,
+  appendDraftLink,
 } from "./communicationsChat";
 
 const message = (id: string, date: string, text: string): ChatMessage => ({
@@ -41,7 +42,7 @@ describe("communications chat state", () => {
     expect(sendAttempt("edited", initial, () => "second")).toEqual({
       text: "edited",
       nonce: "second",
-      destination: "",
+      destination: JSON.stringify(["", 0]),
     });
   });
   it("uses a new nonce when unchanged text changes reply destination", () => {
@@ -49,8 +50,23 @@ describe("communications chat state", () => {
     expect(sendAttempt("same text", first, () => "second", "room/root-2")).toEqual({
       text: "same text",
       nonce: "second",
-      destination: "room/root-2",
+      destination: JSON.stringify(["room/root-2", 0]),
     });
+  });
+  it("scopes a nonce to environment, source, provider, account, channel, reply and draft generation", () => {
+    const scope = ["env-a", "desktop", "slack", "account", "C1", "root-1"];
+    const destination = JSON.stringify(scope);
+    const initial = sendAttempt("same text", undefined, () => "nonce-a", destination, 1);
+    expect(sendAttempt("same text", initial, () => "unused", destination, 1)).toBe(initial);
+    for (let index = 0; index < scope.length; index++) {
+      const changed = scope.map((part, i) => (i === index ? `${part}-other` : part));
+      expect(
+        sendAttempt("same text", initial, () => "nonce-b", JSON.stringify(changed), 1).nonce,
+      ).toBe("nonce-b");
+    }
+    expect(sendAttempt("same text", initial, () => "new-generation", destination, 2).nonce).toBe(
+      "new-generation",
+    );
   });
   it("queues concurrent reads and still runs the next request after a failure", async () => {
     const received: string[] = [];
@@ -64,6 +80,29 @@ describe("communications chat state", () => {
     expect(result.map((item) => item.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
   });
 });
+
+it("appends normalized web links while retaining Drive file identity as plain text", () => {
+  const result = appendDraftLink(
+    "Keep draft",
+    " https://docs.google.com/document/d/file_123/edit?utm_source=chat#heading ",
+  );
+  expect(result).toBe("Keep draft\nhttps://docs.google.com/document/d/file_123/edit");
+  expect(workspaceItemFromUrl(result!.split("\n")[1]!)).toEqual({
+    type: "file",
+    provider: "google-drive",
+    fileId: "file_123",
+  });
+  expect(appendDraftLink("", "https://example.test")).toBe("https://example.test/");
+  expect(appendDraftLink("Draft\n", "http://example.test/path")).toBe(
+    "Draft\nhttp://example.test/path",
+  );
+});
+it.each(["javascript:alert(1)", "data:text/html,x", "file:///C:/secret.txt", "not a URL"])(
+  "rejects an unsafe or invalid link %s without altering text",
+  (raw) => {
+    expect(appendDraftLink("Keep draft", raw)).toBeUndefined();
+  },
+);
 
 it("derives initials from name parts", () => {
   expect(conversationInitials("Maya Chen")).toBe("MC");

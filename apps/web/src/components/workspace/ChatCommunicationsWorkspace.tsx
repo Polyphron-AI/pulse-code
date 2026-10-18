@@ -7,6 +7,7 @@ import {
   useState,
   useMemo,
   type ReactNode,
+  type RefObject,
 } from "react";
 import * as Schema from "effect/Schema";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -23,11 +24,11 @@ import {
   type ChatMessage,
   type ProjectId,
 } from "@t3tools/contracts";
-import { BookmarkIcon, FileTextIcon, RefreshCwIcon, SendIcon, XIcon } from "lucide-react";
+import { BookmarkIcon, FileTextIcon, PlusIcon, RefreshCwIcon, SendIcon, XIcon } from "lucide-react";
 import { Button } from "../ui/button";
-import { Textarea } from "../ui/textarea";
+import { Input } from "../ui/input";
+import { Popover, PopoverTrigger, PopoverPopup, PopoverTitle } from "../ui/popover";
 import { randomUUID } from "../../lib/utils";
-import { RequestState } from "./office/shared";
 import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import {
   chatEndpoint,
@@ -35,6 +36,7 @@ import {
   chatReferenceKey,
   mergeChatMessages,
   sendAttempt,
+  appendDraftLink,
   conversationGroups,
   conversationInitials,
   conversationSubtitle,
@@ -42,6 +44,7 @@ import {
   type ConversationRow,
   type ConversationProject,
   type SavedChatReference,
+  type ChatDraft,
 } from "./communicationsChat";
 import { ConversationNavigation } from "./ConversationNavigation";
 import { useOpenFiles, type OpenFilesInput } from "./openFiles";
@@ -49,7 +52,7 @@ import { useWorkspaceResources } from "./workspaceResourceState";
 import type { ChatSource } from "./CommunicationsWorkspace";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { displayDay, formatDay, formatEventTime } from "@t3tools/client-runtime/calendar/dates";
-import { useConnectedEnvironmentIds } from "../../state/environments";
+import { useConnectedEnvironmentIds, usePrimaryEnvironmentId } from "../../state/environments";
 import { useProjects } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
@@ -462,7 +465,9 @@ export function CommunicationFileOpener({
   );
 }
 
-function ChatComposer({
+const emptyChatDraft: ChatDraft = { text: "", generation: 0 };
+
+export function ChatComposer({
   account,
   conversation,
   replyTo,
@@ -470,6 +475,12 @@ function ChatComposer({
   onCancelReply,
   nativeThread = false,
   writable,
+  environmentId,
+  transport,
+  drafts,
+  onDraftChange,
+  pendingSends,
+  readerGeneration,
 }: {
   account: ChatAccount;
   conversation: ChatConversation;
@@ -478,58 +489,201 @@ function ChatComposer({
   onCancelReply?: () => void;
   nativeThread?: boolean;
   writable: boolean;
+  environmentId: EnvironmentId | null;
+  transport: "desktop" | "server" | "telegram";
+  drafts?: ReadonlyMap<string, ChatDraft>;
+  onDraftChange?: (destination: string, update: (draft: ChatDraft) => ChatDraft) => void;
+  pendingSends?: RefObject<Map<string, ReturnType<typeof sendAttempt>>>;
+  readerGeneration?: string;
 }) {
-  const { run, busy, error } = useCommunicationsRequest();
-  const [text, setText] = useState("");
-  const [notice, setNotice] = useState("");
-  const attempt = useRef<ReturnType<typeof sendAttempt> | undefined>(undefined);
+  const { run, available } = useCommunicationsRequest();
+  const [localDrafts, setLocalDrafts] = useState<ReadonlyMap<string, ChatDraft>>(() => new Map());
+  const localPending = useRef(new Map<string, ReturnType<typeof sendAttempt>>());
+  const pending = pendingSends ?? localPending;
+  const [link, setLink] = useState<{
+    destination: string;
+    generation: number;
+    text: string;
+    url: string;
+  }>();
+  const [linkError, setLinkError] = useState("");
+  const replyId =
+    replyTo && !(nativeThread && account.provider === "discord")
+      ? account.provider === "slack"
+        ? (replyTo.threadId ?? replyTo.id)
+        : replyTo.id
+      : undefined;
+  const destination = JSON.stringify([
+    environmentId,
+    transport,
+    account.provider,
+    account.id,
+    conversation.workspaceId ?? null,
+    conversation.id,
+    replyId ?? null,
+    nativeThread,
+  ]);
+  const draft = (drafts ?? localDrafts).get(destination) ?? emptyChatDraft;
+  const text = draft.text;
+  const notice = draft.notice;
+  const busy = draft.inFlight === true;
+  const allowed =
+    writable &&
+    available &&
+    environmentId !== null &&
+    transport === "desktop" &&
+    account.provider !== "telegram" &&
+    conversation.accountId === account.id &&
+    conversation.canSend &&
+    (!replyTo ||
+      (replyTo.accountId === account.id &&
+        ((nativeThread && account.provider === "discord") ||
+          replyTo.conversationId === conversation.id)));
+  if (link && (link.destination !== destination || !allowed)) {
+    setLink(undefined);
+    setLinkError("");
+  }
+  const viewDestination = JSON.stringify([
+    destination,
+    allowed,
+    account.identity,
+    readerGeneration,
+  ]);
+  const currentDestination = useRef(viewDestination);
+  const generation = useRef(0);
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    currentDestination.current = viewDestination;
+    generation.current++;
+    return () => {
+      mounted.current = false;
+      generation.current++;
+    };
+  }, [viewDestination]);
+  const latestDraft = useRef(draft);
+  useLayoutEffect(() => {
+    latestDraft.current = draft;
+  }, [draft]);
+  function updateDraft(update: (current: ChatDraft) => ChatDraft) {
+    if (onDraftChange) onDraftChange(destination, update);
+    else
+      setLocalDrafts((current) =>
+        new Map(current).set(destination, update(current.get(destination) ?? emptyChatDraft)),
+      );
+  }
+  function setText(value: string) {
+    const next = {
+      ...latestDraft.current,
+      text: value,
+      generation: latestDraft.current.generation + 1,
+      notice: "",
+    };
+    latestDraft.current = next;
+    updateDraft(() => next);
+  }
   async function send() {
-    if (busy || !writable || !text.trim() || !conversation.canSend) return;
-    const replyId =
-      replyTo && !(nativeThread && account.provider === "discord")
-        ? account.provider === "slack"
-          ? (replyTo.threadId ?? replyTo.id)
-          : replyTo.id
-        : undefined;
+    if (
+      pending.current.has(destination) ||
+      !allowed ||
+      !latestDraft.current.text.trim() ||
+      latestDraft.current.text.length > (account.provider === "discord" ? 2000 : 4096)
+    )
+      return;
     const outgoing = sendAttempt(
-      text,
-      attempt.current,
+      latestDraft.current.text,
+      latestDraft.current.attempt,
       randomUUID,
-      JSON.stringify([account.id, conversation.id, replyId ?? null]),
+      destination,
+      latestDraft.current.generation,
     );
-    attempt.current = outgoing;
-    setNotice("");
-    const result = await run({
-      operation: "messages.send",
+    pending.current.set(destination, outgoing);
+    latestDraft.current = { ...latestDraft.current, attempt: outgoing, inFlight: true, notice: "" };
+    updateDraft((current) => ({ ...current, attempt: outgoing, inFlight: true, notice: "" }));
+    const captured = {
+      environmentId,
+      transport,
+      provider: account.provider,
       accountId: account.id,
       conversationId: conversation.id,
+      replyId,
+      destination: viewDestination,
+      generation: generation.current,
       text: outgoing.text,
-      nonce: outgoing.nonce,
-      ...(replyId ? { replyToId: replyId } : {}),
-    });
-    if (!result) return;
-    if (
-      !result.message ||
-      result.message.accountId !== account.id ||
-      result.message.conversationId !== conversation.id
-    ) {
-      setNotice("The source did not confirm your message. Your text has been kept. You can retry.");
-      return;
+      attempt: outgoing,
+    };
+    try {
+      const result = await run({
+        operation: "messages.send",
+        accountId: captured.accountId,
+        conversationId: captured.conversationId,
+        text: captured.text,
+        nonce: outgoing.nonce,
+        ...(captured.replyId ? { replyToId: captured.replyId } : {}),
+      });
+      const acknowledged = result?.message;
+      const root = acknowledged?.threadId ?? acknowledged?.replyToId;
+      if (
+        !acknowledged ||
+        acknowledged.accountId !== captured.accountId ||
+        acknowledged.conversationId !== captured.conversationId ||
+        root !== captured.replyId ||
+        (acknowledged.threadId !== undefined &&
+          acknowledged.replyToId !== undefined &&
+          acknowledged.threadId !== acknowledged.replyToId) ||
+        !mounted.current ||
+        currentDestination.current !== captured.destination ||
+        generation.current !== captured.generation ||
+        pending.current.get(destination) !== captured.attempt ||
+        latestDraft.current.text !== captured.text
+      ) {
+        updateDraft((current) => ({
+          ...current,
+          notice:
+            "The source did not confirm this message. Your text has been kept. Check history before sending again.",
+        }));
+        return;
+      }
+      onAcknowledged(acknowledged);
+      updateDraft((current) =>
+        current.attempt === captured.attempt && current.text === captured.text
+          ? {
+              ...current,
+              text: "",
+              attempt: undefined,
+              notice: `Sent through ${providerNames[account.provider]} as ${account.identity}.`,
+            }
+          : current,
+      );
+    } finally {
+      if (pending.current.get(destination) === captured.attempt)
+        pending.current.delete(destination);
+      updateDraft((current) =>
+        current.attempt === captured.attempt || current.attempt === undefined
+          ? { ...current, inFlight: false }
+          : current,
+      );
     }
-    onAcknowledged(result.message);
-    setText("");
-    attempt.current = undefined;
-    setNotice(`Sent through ${providerNames[account.provider]} as ${account.identity}.`);
   }
-  if (!conversation.canSend)
+  if (!allowed)
     return (
-      <p className="shrink-0 border-t border-border p-4 text-xs text-muted-foreground">
-        This conversation is read-only for {account.identity}.
-      </p>
+      <div data-communications-readonly="">
+        <p>
+          Message {conversation.kind === "dm" ? "" : "#"}
+          {conversation.title}
+        </p>
+        <p>
+          {transport === "telegram" || account.provider === "telegram"
+            ? "Received messages only. Telegram bot replies are not enabled."
+            : "Read-only on this client. Open Pulse desktop to send with a connected desktop account."}
+        </p>
+      </div>
     );
   return (
     <form
-      className="shrink-0 space-y-2 border-t border-border p-4"
+      aria-label="Conversation composer"
+      aria-busy={busy}
+      className="m-[13px] flex min-h-[100px] shrink-0 flex-col gap-2 rounded-xl border border-(--workspace-line,var(--border)) p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         void send();
@@ -545,7 +699,6 @@ function ChatComposer({
               size="icon-xs"
               variant="ghost"
               aria-label="Cancel reply"
-              disabled={busy}
               onClick={onCancelReply}
             >
               <XIcon />
@@ -553,15 +706,16 @@ function ChatComposer({
           )}
         </div>
       )}
-      <Textarea
+      <textarea
+        className="min-h-[45px] w-full flex-1 resize-none bg-transparent text-2xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+        rows={2}
         aria-label="Message text"
-        placeholder={`Message ${conversation.title}…`}
+        placeholder={`Message ${conversation.kind === "dm" ? "" : "#"}${conversation.title}`}
         value={text}
         maxLength={account.provider === "discord" ? 2000 : 4096}
         disabled={busy}
         onChange={(event) => {
           setText(event.target.value);
-          setNotice("");
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -570,18 +724,112 @@ function ChatComposer({
           }
         }}
       />
-      <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 text-xs text-muted-foreground">
+      <div className="flex items-end justify-between gap-2">
+        <Popover
+          key={destination}
+          open={link?.destination === destination}
+          onOpenChange={(open) => {
+            setLinkError("");
+            setLink(
+              open
+                ? {
+                    destination,
+                    generation: draft.generation,
+                    text: draft.text,
+                    url: "",
+                  }
+                : undefined,
+            );
+          }}
+        >
+          <PopoverTrigger
+            render={
+              <Button size="icon-xs" variant="ghost" aria-label="Links only" disabled={busy} />
+            }
+          >
+            <PlusIcon />
+          </PopoverTrigger>
+          <PopoverPopup width="sm" padding="compact" side="top" align="start">
+            <div
+              className="space-y-2"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+            >
+              <PopoverTitle>Insert link</PopoverTitle>
+              <label className="block text-xs">
+                URL
+                <Input
+                  aria-label="URL"
+                  value={link?.url ?? ""}
+                  onChange={(event) => {
+                    if (link) setLink({ ...link, url: event.target.value });
+                    setLinkError("");
+                  }}
+                />
+              </label>
+              {linkError ? (
+                <p role="alert" className="text-xs text-destructive-foreground">
+                  {linkError}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <Button size="compact" variant="ghost" onClick={() => setLink(undefined)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="compact"
+                  onClick={() => {
+                    if (
+                      !link ||
+                      link.destination !== destination ||
+                      link.generation !== draft.generation ||
+                      link.text !== draft.text
+                    ) {
+                      setLink(undefined);
+                      return;
+                    }
+                    const next = appendDraftLink(link.text, link.url);
+                    if (next === undefined) {
+                      setLinkError("Enter a valid http or https link.");
+                      return;
+                    }
+                    if (next.length > (account.provider === "discord" ? 2000 : 4096)) {
+                      setLinkError("This link would exceed the message length limit.");
+                      return;
+                    }
+                    setText(next);
+                    setLink(undefined);
+                  }}
+                >
+                  Insert
+                </Button>
+              </div>
+            </div>
+          </PopoverPopup>
+        </Popover>
+        <p className="min-w-0 flex-1 text-3xs leading-3 text-muted-foreground [overflow-wrap:anywhere]">
           To {conversation.title} · {providerNames[account.provider]}
           <br />
           Sending as {account.identity}
         </p>
-        <Button type="submit" size="sm" disabled={busy || !writable || !text.trim()}>
-          <SendIcon />
-          {busy ? "Sending…" : "Send"}
-        </Button>
+        <button
+          type="submit"
+          className="relative flex h-6 min-w-[88px] items-center justify-center gap-1 rounded-md bg-(--workspace-blue,var(--primary)) px-2 text-2xs font-semibold text-primary-foreground outline-none hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60 pointer-coarse:after:absolute pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11"
+          disabled={
+            busy ||
+            !allowed ||
+            !text.trim() ||
+            text.length > (account.provider === "discord" ? 2000 : 4096)
+          }
+        >
+          <SendIcon size={12} />
+          {busy ? "Sending..." : "Send"}
+        </button>
       </div>
-      <RequestState busy={busy} error={error} />
       {notice && (
         <p role="status" className="text-xs text-muted-foreground">
           {notice}
@@ -602,7 +850,7 @@ export function ChatCommunicationsWorkspace(props: ChatWorkspaceProps) {
   return props.environmentId ? (
     <ScopedChatWorkspace {...props} environmentId={props.environmentId} />
   ) : (
-    <ChatWorkspace {...props} timeZone="UTC" writable={false} />
+    <ChatWorkspace {...props} timeZone="UTC" writable={false} desktopWritable={false} />
   );
 }
 function ScopedChatWorkspace(props: ChatWorkspaceProps & { environmentId: EnvironmentId }) {
@@ -611,7 +859,15 @@ function ScopedChatWorkspace(props: ChatWorkspaceProps & { environmentId: Enviro
     "UTC";
   const canOperate = useWorkspaceCanOperate(props.environmentId);
   const connected = useConnectedEnvironmentIds().includes(props.environmentId);
-  return <ChatWorkspace {...props} timeZone={timeZone} writable={canOperate && connected} />;
+  const primary = usePrimaryEnvironmentId();
+  return (
+    <ChatWorkspace
+      {...props}
+      timeZone={timeZone}
+      writable={canOperate && connected}
+      desktopWritable={canOperate && connected && props.environmentId === primary}
+    />
+  );
 }
 function ConversationProjectLinks({
   environmentId,
@@ -647,10 +903,21 @@ function ChatWorkspace({
   source,
   timeZone,
   writable,
+  desktopWritable,
   accountError,
   accountControls,
-}: ChatWorkspaceProps & { timeZone: string; writable: boolean }) {
+}: ChatWorkspaceProps & { timeZone: string; writable: boolean; desktopWritable: boolean }) {
   const { run, busy, error } = useCommunicationsRequest();
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, ChatDraft>>(() => new Map());
+  const pendingSends = useRef(new Map<string, ReturnType<typeof sendAttempt>>());
+  const draftChanged = useCallback(
+    (destination: string, update: (draft: ChatDraft) => ChatDraft) => {
+      setDrafts((current) =>
+        new Map(current).set(destination, update(current.get(destination) ?? emptyChatDraft)),
+      );
+    },
+    [],
+  );
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const openItem = useWorkspaceItemOpener(environmentId);
@@ -1483,28 +1750,20 @@ function ChatWorkspace({
               )}
             </CommunicationFileOpener>
             {conversation && search.view !== "later" ? (
-              conversation.canSend && writable ? (
-                <ChatComposer
-                  key={conversation.id}
-                  account={account}
-                  conversation={conversation}
-                  replyTo={replyTo}
-                  writable={writable}
-                  onCancelReply={() => setReplyTo(undefined)}
-                  onAcknowledged={(message) => acknowledge(message)}
-                />
-              ) : (
-                <div data-communications-readonly="">
-                  <p>
-                    Message {conversation.kind === "dm" ? "" : "#"}
-                    {conversation.title}
-                  </p>
-                  <p>
-                    Read-only on this client. Open Pulse desktop to send with a connected desktop
-                    account.
-                  </p>
-                </div>
-              )
+              <ChatComposer
+                account={account}
+                conversation={conversation}
+                replyTo={replyTo}
+                writable={desktopWritable}
+                environmentId={environmentId}
+                transport={source?.resource.transport ?? "desktop"}
+                drafts={drafts}
+                onDraftChange={draftChanged}
+                pendingSends={pendingSends}
+                readerGeneration={JSON.stringify([generation.current, threadGeneration.current])}
+                onCancelReply={() => setReplyTo(undefined)}
+                onAcknowledged={(message) => acknowledge(message)}
+              />
             ) : null}
           </section>
           {thread && conversation ? (
@@ -1575,13 +1834,19 @@ function ChatWorkspace({
                   </CommunicationStream>
                 )}
               </CommunicationFileOpener>
-              {threadConversation && writable ? (
+              {threadConversation ? (
                 <ChatComposer
                   key={`${threadConversation.id}:${thread.id}`}
                   account={account}
                   conversation={threadConversation}
                   replyTo={thread}
-                  writable={writable}
+                  writable={desktopWritable}
+                  environmentId={environmentId}
+                  transport={source?.resource.transport ?? "desktop"}
+                  drafts={drafts}
+                  onDraftChange={draftChanged}
+                  pendingSends={pendingSends}
+                  readerGeneration={JSON.stringify([generation.current, threadGeneration.current])}
                   nativeThread
                   onAcknowledged={(message) => acknowledge(message, true)}
                 />

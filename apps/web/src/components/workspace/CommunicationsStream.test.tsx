@@ -30,6 +30,7 @@ const boundary = vi.hoisted(() => ({
   external: vi.fn(),
   startThread: vi.fn(),
   connected: true,
+  primary: "source-env",
   operate: true,
   toast: vi.fn(),
   lookup: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock("@effect/atom-react", async (original) => ({
 }));
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
 vi.mock("../../state/environments", () => ({
+  usePrimaryEnvironmentId: () => boundary.primary,
   useEnvironment: () => ({ label: "Source" }),
   useConnectedEnvironmentIds: () => (boundary.connected ? ["source-env"] : []),
 }));
@@ -216,6 +218,7 @@ beforeEach(() => {
   ).happyDOM.setWindowSize({ width: 1280, height: 800 });
   boundary.menu.mockReset();
   boundary.connected = true;
+  boundary.primary = "source-env";
   boundary.operate = true;
   boundary.command.mockResolvedValue({ _tag: "Success", value: undefined });
   boundary.projects = ["p1", "p2"];
@@ -712,6 +715,12 @@ it("preserves Discord native thread parent identity in the provider read", async
 });
 
 it("uses the shared received-only Telegram stream with inert captions, chronological stored paging and exact file source", async () => {
+  const bridge = Object.getOwnPropertyDescriptor(window, "desktopBridge");
+  const send = vi.fn();
+  Object.defineProperty(window, "desktopBridge", {
+    configurable: true,
+    value: { communicationsInvoke: send },
+  });
   const received: TelegramMessage = {
     connectionId: "telegram_1000",
     chatId: "-42",
@@ -773,6 +782,13 @@ it("uses the shared received-only Telegram stream with inert captions, chronolog
     expect(getByText(node, "Edited message. This stored message is truncated.")).toBeDefined();
     expect(queryByRole(node, "button", { name: "Reply" })).toBeNull();
     expect(node.textContent).toContain("Telegram bot replies are not enabled.");
+    const receivedOnly = node.querySelector("[data-communications-readonly]");
+    expect(receivedOnly?.textContent).toContain(
+      "Received messages only. Telegram bot replies are not enabled.",
+    );
+    expect(queryByRole(node, "textbox", { name: "Message text" })).toBeNull();
+    expect(queryByRole(node, "button", { name: "Send" })).toBeNull();
+    expect(send).not.toHaveBeenCalled();
     expect(reads.some((query) => query.input?.cursor)).toBe(false);
     await act(() => getByRole(node, "button", { name: "Load older" }).click());
     expect(getAllByRole(node, "article").map((article) => article.textContent)).toEqual([
@@ -791,6 +807,8 @@ it("uses the shared received-only Telegram stream with inert captions, chronolog
   } finally {
     await act(() => root.unmount());
     node.remove();
+    if (bridge) Object.defineProperty(window, "desktopBridge", bridge);
+    else Reflect.deleteProperty(window, "desktopBridge");
   }
 });
 
@@ -858,6 +876,62 @@ it("replaces the reply root with the provider edit while keeping the root before
       expect.stringContaining("Edited root"),
       expect.stringContaining(reply.text),
     ]);
+  } finally {
+    await view.close();
+  }
+});
+
+it("keeps the reader draft when a held send completes after navigating into provider replies", async () => {
+  const held = deferred<ChatResult>();
+  const view = await mountStream({
+    read: async (request) => {
+      if (request.operation === "messages.send") return held.promise;
+      if (request.operation === "messages.list") return { ok: true, messages: [rootMessage] };
+      throw new Error("Unexpected IPC operation");
+    },
+  });
+  try {
+    const draft = getByRole(view.node, "textbox", { name: "Message text" }) as HTMLTextAreaElement;
+    await act(() => fireEvent.change(draft, { target: { value: "Keep pending draft" } }));
+    await act(() => fireEvent.keyDown(draft, { key: "Enter" }));
+    await act(() => getByRole(view.node, "button", { name: "Reply" }).click());
+    await act(() =>
+      held.resolve({
+        ok: true,
+        message: { ...rootMessage, id: "new-ack", text: "ACK arrived after navigation" },
+      }),
+    );
+    await act(() => getByRole(view.node, "button", { name: "Back to conversation" }).click());
+    expect(queryByText(view.node, "ACK arrived after navigation")).toBeNull();
+    expect(
+      (getByRole(view.node, "textbox", { name: "Message text" }) as HTMLTextAreaElement).value,
+    ).toBe("Keep pending draft");
+    expect(view.node.textContent).toContain("Check history before sending again.");
+    expect(view.requests.filter((request) => request.operation === "messages.send")).toHaveLength(
+      1,
+    );
+  } finally {
+    await view.close();
+  }
+});
+
+it("keeps remote Save for Later usable while the desktop composer remains received-only", async () => {
+  boundary.primary = "different-desktop-environment";
+  const view = await mountStream();
+  try {
+    expect(queryByRole(view.node, "textbox", { name: "Message text" })).toBeNull();
+    expect(view.node.textContent).toContain("Read-only on this client.");
+    const save = getByRole(view.node, "button", { name: "Save for Later", hidden: true });
+    expect(save.hasAttribute("disabled")).toBe(false);
+    await act(() => save.click());
+    expect(
+      getByRole(view.node, "button", { name: "Remove from Later", hidden: true }).getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+    expect(view.requests.filter((request) => request.operation === "messages.send")).toHaveLength(
+      0,
+    );
   } finally {
     await view.close();
   }
