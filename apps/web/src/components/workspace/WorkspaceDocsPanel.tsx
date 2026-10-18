@@ -17,6 +17,7 @@ import { Button } from "../ui/button";
 import { DriveReader } from "./DriveFiles";
 import { WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { WorkspaceDocsReadingView } from "./WorkspaceDocsReadingView";
+import { WorkspaceDocContent } from "./WorkspaceDocContent";
 import type { WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
 import { useWorkspaceDocSession, WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { isWorkspaceNote } from "./meetings/meetingNotes";
@@ -359,20 +360,37 @@ function SelectedDocument(
           fileId={document.ref.fileId}
           actions={actions}
           confirmed={link ? [props.project] : []}
-          renderContent={(result, text, overflowAction) => (
-            <WorkspaceDocsReadingView
-              title={result.file.name}
-              caption={
-                link
-                  ? `${props.projectTitle ?? "Linked to this project"} · Sharing information unavailable`
-                  : "Not linked to this project · Sharing information unavailable"
-              }
-              overflowAction={overflowAction}
-              content={
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>
-              }
-            />
-          )}
+          renderContent={(result, text, overflowAction) => {
+            const markdown =
+              result.file.mimeType.split(";")[0]?.trim().toLowerCase() === "text/markdown";
+            return (
+              <>
+                <WorkspaceDocsReadingView
+                  title={result.file.name}
+                  caption={
+                    link
+                      ? `${props.projectTitle ?? "Linked to this project"} · Sharing information unavailable`
+                      : "Not linked to this project · Sharing information unavailable"
+                  }
+                  overflowAction={overflowAction}
+                  content={
+                    <WorkspaceDocContent
+                      content={
+                        markdown
+                          ? { format: "markdown", text }
+                          : { format: "blocks", blocks: [{ type: "paragraph", text }] }
+                      }
+                    />
+                  }
+                />
+                {!markdown ? (
+                  <p className="text-xs text-muted-foreground">
+                    Plain text preview. Open in Google Drive for original formatting.
+                  </p>
+                ) : null}
+              </>
+            );
+          }}
         />
       ) : (
         <>

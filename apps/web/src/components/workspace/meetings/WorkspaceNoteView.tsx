@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { WorkspaceDocsReadingView } from "../WorkspaceDocsReadingView";
+import { WorkspaceDocContent } from "../WorkspaceDocContent";
 
 export interface NoteDraft {
   readonly title: string;
@@ -31,7 +32,7 @@ export interface WorkspaceNoteViewProps {
 const isCreate = Schema.is(WorkspaceNoteCreate);
 const validDraft = (draft: NoteDraft) =>
   isCreate({ ...draft, requestId: "00000000-0000-0000-0000-000000000000" });
-/** Plain text preview shared by the live Docs slot and isolated fixture. */
+/** Note reading and editing shared by the live Docs slot and isolated fixture. */
 export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
   const { note, draft, pending, canOperate } = props;
   const writable = canOperate && !pending;
@@ -112,13 +113,8 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
           <WorkspaceDocsReadingView
             title={note.title}
             caption="Available to readers of this environment"
-            content={
-              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{note.body}</p>
-            }
+            content={<WorkspaceDocContent content={{ format: "markdown", text: note.body }} />}
           />
-          <p className="text-xs text-muted-foreground">
-            Note preview. Formatted Docs view is not available yet.
-          </p>
           <div className="flex flex-nowrap gap-2">
             <Button
               size="xs"

@@ -126,7 +126,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
   return {
     area: "notes",
     readyRegions: ["resource"],
-    incompleteRegions: ["07.docs-format", "07.docs-comments"],
+    incompleteRegions: ["07.docs-comments"],
     resource: <Resource />,
     settled: async () => {
       await Promise.allSettled(pending);

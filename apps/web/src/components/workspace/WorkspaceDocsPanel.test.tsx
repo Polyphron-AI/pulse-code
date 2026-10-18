@@ -264,6 +264,98 @@ it("opens one selected reader explicitly, renders one h1 and safely keeps plain 
   expect(renderer!.root.findAllByType("h1")).toHaveLength(0);
   expect(button("Brief")).toBeDefined();
 });
+it.each(["text/markdown", "text/markdown; charset=utf-8"])(
+  "formats explicitly declared %s across accumulated pages without changing reader actions",
+  async (mimeType) => {
+    mocks.linked = [direct()];
+    mocks.mimeType = mimeType;
+    const file = { id: "file", name: "Brief", mimeType };
+    mocks.read
+      .mockResolvedValueOnce({
+        _tag: "Success",
+        value: {
+          connectionId: "chosen",
+          file,
+          body: {
+            text: "# Source title\n\n## Priorities\n\n1. First",
+            truncated: true,
+            nextOffset: 48,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        _tag: "Success",
+        value: {
+          connectionId: "chosen",
+          file,
+          body: { text: "\n2. Second\n\nFinal paragraph.", truncated: false },
+        },
+      });
+    await mount();
+    await act(() => button("Brief").props.onClick());
+    expect(mocks.read).not.toHaveBeenCalled();
+    await act(() => button("Read file").props.onClick());
+    const card = () => renderer!.root.findByType("article");
+    expect(card().findByType("h2").children).toEqual(["Priorities"]);
+    expect(card().findAllByType("h1")).toHaveLength(1);
+    expect(text()).toContain("Source title");
+    await act(() => button("Read more").props.onClick());
+    expect(
+      card()
+        .findAllByType("li")
+        .map((item) => item.children.join("")),
+    ).toEqual(["First", "Second"]);
+    expect(text()).toContain("Final paragraph.");
+    expect(mocks.read.mock.calls).toEqual([
+      [{ environmentId, input: { fileId: "file", offset: 0 } }],
+      [{ environmentId, input: { fileId: "file", offset: 48 } }],
+    ]);
+    expect(button("Read more")).toBeUndefined();
+    expect(text()).toContain("Open in Google Drive");
+    expect(text()).toContain("Back to documents");
+    expect(mocks.bind).not.toHaveBeenCalled();
+    expect(mocks.link).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  "text/plain",
+  "text/html",
+  "text/xml",
+  "application/xml",
+  "application/json",
+  "text/csv",
+  "text/x-custom",
+  "application/vnd.google-apps.document",
+  "application/vnd.google-apps.presentation",
+  "application/vnd.google-apps.spreadsheet",
+])(
+  "keeps %s source text escaped and unstructured even when it looks like Markdown",
+  async (mimeType) => {
+    mocks.linked = [direct()];
+    mocks.mimeType = mimeType;
+    const body =
+      '# Heading\n\n1. Literal number\n  **literal** [local](file:///secret) <img src="https://tracker.test/pixel">';
+    mocks.read.mockResolvedValueOnce({
+      _tag: "Success",
+      value: {
+        connectionId: "chosen",
+        file: { id: "file", name: "Brief.md", mimeType },
+        body: { text: body, truncated: false },
+      },
+    });
+    await mount();
+    await act(() => button("Brief").props.onClick());
+    await act(() => button("Read file").props.onClick());
+    const card = renderer!.root.findByType("article");
+    expect(card.findAllByType("p").some((paragraph) => paragraph.children.join("") === body)).toBe(
+      true,
+    );
+    for (const tag of ["h2", "h3", "ol", "strong", "a", "img"] as const)
+      expect(card.findAllByType(tag)).toHaveLength(0);
+    expect(text()).toContain("Plain text preview");
+    expect(text()).toContain("Open in Google Drive");
+  },
+);
 it("keeps discovery outside confirmed context and requires a separate explicit project link", async () => {
   mocks.related = [
     {

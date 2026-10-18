@@ -3,7 +3,7 @@ import * as Cause from "effect/Cause";
 import { openMeetingNote } from "./meetings/meetingNotes";
 import { act, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { fireEvent, getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, getAllByRole, getByText, queryByRole } from "@testing-library/dom";
 import {
   EnvironmentId,
   ProjectId,
@@ -543,6 +543,14 @@ async function mount(children: ReactNode = <App />) {
   root = createRoot(node);
   await act(() => root!.render(children));
 }
+function expectNoteContent() {
+  const note = getByRole(node, "region", { name: "Workspace note" });
+  expect(getByText(note, "Paragraph one.", { selector: "p" })).toBeDefined();
+  expect(getAllByRole(getByRole(note, "list"), "listitem").map((item) => item.textContent)).toEqual(
+    ["Preserve this list"],
+  );
+  expect(note.querySelector("pre")).toBeNull();
+}
 it("chooses resources before selection, mounts one lazy body, retains linked items, closes and reopens", async () => {
   await mount();
   expect(bodies.files).not.toHaveBeenCalled();
@@ -632,16 +640,12 @@ it("routes a Drive handoff to Docs with provider fallback and preserves the nati
     await import("../../state/workspaceNotes");
     getByRole(node, "button", { name: "Open note" }).click();
   });
-  expect(getByRole(node, "region", { name: "Workspace note" }).textContent).toContain(
-    bodies.note.body,
-  );
+  expectNoteContent();
   expect(queryByRole(node, "link", { name: "Open in Google Drive" })).toBeNull();
   await act(() => getByRole(node, "button", { name: "Back to documents" }).click());
   expect(queryByRole(node, "region", { name: "Workspace note" })).toBeNull();
   await act(() => getByRole(node, "button", { name: "Open note" }).click());
-  expect(getByRole(node, "region", { name: "Workspace note" }).textContent).toContain(
-    bodies.note.body,
-  );
+  expectNoteContent();
 });
 it("moves the tab stop to the selected tab after an external resource handoff", async () => {
   await mount();
@@ -755,9 +759,7 @@ it("hands an exact native note to Docs, saves with its captured revision, keeps 
     getByRole(node, "button", { name: "Open note" }).click();
   });
   expect(getByRole(node, "tab", { name: "Docs" }).getAttribute("aria-selected")).toBe("true");
-  expect(getByRole(node, "region", { name: "Workspace note" }).textContent).toContain(
-    bodies.note.body,
-  );
+  expectNoteContent();
   expect(bodies.noteReads).toHaveBeenLastCalledWith({
     environmentId: a,
     input: { id: bodies.note.id },
@@ -806,14 +808,14 @@ it("hands an exact native note to Docs, saves with its captured revision, keeps 
     environmentId: a,
     input: { id: bodies.note.id, requestId: expect.any(String), expectedRevision: 4 },
   });
-  expect(node.textContent).toContain(bodies.note.body);
+  expectNoteContent();
   const reads = bodies.noteReads.mock.calls.length;
   await act(() => getByRole(node, "button", { name: "Close resources" }).click());
   expect(document.activeElement).toBe(getByRole(node, "button", { name: "Resources" }));
   expect(bodies.noteReads).toHaveBeenCalledTimes(reads);
   await act(() => getByRole(node, "button", { name: "Resources" }).click());
   expect(getByRole(node, "tab", { name: "Docs" }).getAttribute("aria-selected")).toBe("true");
-  expect(node.textContent).toContain(bodies.note.body);
+  expectNoteContent();
   expect(bodies.writes).not.toHaveBeenCalled();
 });
 it("unmounts note reads when disconnected and keeps read-only writes disabled after reconnect", async () => {
@@ -843,7 +845,7 @@ it("unmounts note reads when disconnected and keeps read-only writes disabled af
       bodies.connected = true;
       for (const listener of bodies.connectionListeners) listener();
     });
-    expect(node.textContent).toContain(bodies.note.body);
+    expectNoteContent();
     expect((getByRole(node, "button", { name: "Delete note" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
@@ -1533,9 +1535,7 @@ it("retains a list-selected Drive address while fresh document and center intent
   expect(host()).toContain("listed-doc");
   expect(bodies.noteReads).not.toHaveBeenCalled();
   await act(() => getByRole(node, "button", { name: "Open note" }).click());
-  expect(getByRole(node, "region", { name: "Workspace note" }).textContent).toContain(
-    bodies.note.body,
-  );
+  expectNoteContent();
   await act(() => getByRole(node, "button", { name: "Open document" }).click());
   expect(host()).toContain("doc-handoff");
   expect(bodies.noteListeners.size).toBe(0);

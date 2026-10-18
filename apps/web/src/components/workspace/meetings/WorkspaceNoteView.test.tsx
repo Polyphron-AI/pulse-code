@@ -70,6 +70,17 @@ async function mount(operate = true) {
 }
 const click = async (name: string) =>
   act(() => fireEvent.click(getByRole(node, "button", { name })));
+it("reads native Markdown through the shared safe body and keeps the original source for editing", async () => {
+  await mount();
+  expect(node.querySelector("ol > li")?.textContent).toBe("Plan");
+  expect(node.querySelector("script, img, pre")).toBeNull();
+  expect(node.textContent).not.toContain("Formatted Docs view is not available yet");
+  expect(node.textContent).not.toContain("<script>");
+  await click("Edit note");
+  expect((getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value).toBe(
+    note.body,
+  );
+});
 it("edits controlled text with captured revision, retains conflict draft and explicitly reloads", async () => {
   const { saved } = await mount();
   expect(getByRole(node, "heading", { level: 1, name: note.title })).toBeDefined();
@@ -85,7 +96,7 @@ it("edits controlled text with captured revision, retains conflict draft and exp
   expect(getByRole(node, "alert").textContent).toContain("draft has been kept");
   await click("Reload current note");
   expect(queryByRole(node, "textbox")).toBeNull();
-  expect(node.textContent).toContain(note.body);
+  expect(node.querySelector("ol > li")?.textContent).toBe("Plan");
 });
 it("blocks a UTF-8 oversized draft and supports explicit delete and Undo", async () => {
   const { saved, removed, restored } = await mount();
@@ -114,7 +125,7 @@ it("blocks a UTF-8 oversized draft and supports explicit delete and Undo", async
   expect(node.textContent).toContain("Their links have been kept");
   await click("Undo delete");
   expect(restored).toHaveBeenCalledOnce();
-  expect(node.textContent).toContain(note.body);
+  expect(node.querySelector("ol > li")?.textContent).toBe("Plan");
 });
 it("denies read-only writes through real disabled controls", async () => {
   const { removed } = await mount(false);

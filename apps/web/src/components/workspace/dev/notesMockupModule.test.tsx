@@ -21,7 +21,7 @@ it("uses the production note view, revision conflicts, retained drafts, Undo and
     act(() => fireEvent.click(getByRole(within, "button", { name })));
   try {
     expect(module.readyRegions).toEqual(["resource"]);
-    expect(module.incompleteRegions).toEqual(["07.docs-format", "07.docs-comments"]);
+    expect(module.incompleteRegions).toEqual(["07.docs-comments"]);
     await act(() =>
       root.render(
         <>
@@ -32,7 +32,8 @@ it("uses the production note view, revision conflicts, retained drafts, Undo and
     );
     const first = node.querySelector<HTMLElement>("#first")!,
       second = node.querySelector<HTMLElement>("#second")!;
-    expect(first.textContent).toContain(session.seed.note.body);
+    expect(getByRole(first, "heading", { level: 2, name: "Launch priorities" })).toBeDefined();
+    expect(first.querySelectorAll("ol > li")).toHaveLength(3);
     await click(first, "Edit note");
     await click(second, "Edit note");
     await act(() =>
@@ -110,7 +111,7 @@ it("opens the controller conflict capture with the retained draft and unchanged 
     expect((getByRole(node, "textbox", { name: "Note title" }) as HTMLInputElement).value).toBe(
       session.seed.note.title,
     );
-    expect(module.incompleteRegions).toEqual(["07.docs-format", "07.docs-comments"]);
+    expect(module.incompleteRegions).toEqual(["07.docs-comments"]);
     expect(session.operations).toHaveLength(0);
   } finally {
     await act(() => root.unmount());
