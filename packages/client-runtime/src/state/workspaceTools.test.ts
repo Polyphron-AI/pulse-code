@@ -702,11 +702,17 @@ const overviewClient = (
   ({
     [WS_METHODS.workspaceListProjectOverview]: read,
     [WS_METHODS.workspaceSubscribeChanges]: () =>
-      counters ? SubscriptionRef.changes(counters.workspace) : Stream.never,
+      counters
+        ? SubscriptionRef.changes(counters.workspace).pipe(Stream.filter((n) => n > 0))
+        : Stream.never,
     [WS_METHODS.pulseLinksSubscribeChanges]: () =>
-      counters ? SubscriptionRef.changes(counters.links) : Stream.never,
+      counters
+        ? SubscriptionRef.changes(counters.links).pipe(Stream.filter((n) => n > 0))
+        : Stream.never,
     [WS_METHODS.driveSubscribeChanges]: () =>
-      counters ? SubscriptionRef.changes(counters.drive) : Stream.never,
+      counters
+        ? SubscriptionRef.changes(counters.drive).pipe(Stream.filter((n) => n > 0))
+        : Stream.never,
   }) as unknown as WsRpcProtocolClient;
 it.effect(
   "shares one overview RPC for 50 cards and keys all normalized filters and environment",
@@ -762,7 +768,7 @@ it.effect(
       }),
     ),
 );
-it.effect("refreshes overview on config, links, roots, actual project changes and reconnect", () =>
+it.effect("refreshes overview from zero on config, links, roots, projects and reconnect", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const counters = {

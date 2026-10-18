@@ -72,7 +72,7 @@ export function createWorkspaceToolsAtoms<R, E>(
             const config = yield* session.initialConfig.pipe(Effect.catch(() => Effect.never));
             return hasOverview(config) ? {} : yield* Effect.never;
           }),
-        ).pipe(Stream.drop(1));
+        ).pipe(Stream.changes);
       return Stream.merge(
         Stream.merge(
           events(WS_METHODS.workspaceSubscribeChanges),

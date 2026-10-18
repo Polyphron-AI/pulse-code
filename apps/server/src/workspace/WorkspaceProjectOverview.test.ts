@@ -217,7 +217,11 @@ it.effect(
       expect(page.projects[0]?.channels.providers).toEqual([
         { provider: "telegram", count: 2, complete: true },
       ]);
-      expect(page.projects[2]?.channels).toEqual({ count: null, complete: false, providers: [] });
+      expect(page.projects[2]?.channels).toEqual({
+        count: null,
+        complete: false,
+        providers: [{ provider: "slack", count: 0, complete: false }],
+      });
       expect(page.projects[3]?.channels).toEqual({ count: 0, complete: true, providers: [] });
       expect(page.incomplete).toBe(false);
     }).pipe(Effect.provide(layer)),
@@ -279,10 +283,13 @@ it.effect("tracks channel completeness per provider and combines it for each pro
       });
     }
     expect((yield* tools.overview({})).projects.map((p) => p.channels)).toEqual([
-      ...Array.from({ length: 3 }, () => ({
+      ...["slack", "x", "unknown"].map((provider) => ({
         count: null,
         complete: false,
-        providers: [{ provider: "telegram", count: 1, complete: true }],
+        providers: [
+          { provider: "telegram", count: 1, complete: true },
+          { provider, count: 0, complete: false },
+        ],
       })),
       {
         count: null,
@@ -296,7 +303,11 @@ it.effect("bounds SQL reads and per-project link inspection without any provider
   Effect.gen(function* () {
     yield* seed(Array.from({ length: 51 }, (_, i) => `Project ${i}`));
     for (let i = 0; i < 102; i++)
-      yield* link(i, 0, { type: "url", url: `https://example.test/${i}` });
+      yield* link(i, 0, {
+        type: "provider-resource",
+        provider: "slack",
+        resourceId: `channel:${i}`,
+      });
     const queries: string[] = [];
     const tools = yield* Tools.make;
     const page = yield* tools.overview({ limit: 50 }).pipe(
@@ -313,8 +324,125 @@ it.effect("bounds SQL reads and per-project link inspection without any provider
     expect(page.projects.find((p) => p.projectId === "overview-00")?.channels).toEqual({
       count: null,
       complete: false,
-      providers: [],
+      providers: [{ provider: "slack", count: 0, complete: false }],
     });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("does not spend the channel inspection cap on mail or known non-channel links", () =>
+  Effect.gen(function* () {
+    yield* seed(["Project"]);
+    const sql = yield* SqlClient.SqlClient;
+    const tools = yield* Tools.WorkspaceTools;
+    for (let i = 0; i < 150; i++)
+      yield* link(i, 0, {
+        type: "mail",
+        accountId: "account",
+        messageId: `<mail-${i}@example.test>`,
+      });
+    for (const [index, provider] of [
+      "workspace-note",
+      "workspace-calendar",
+      "pulse-meeting",
+    ].entries())
+      for (let i = 0; i < 101; i++)
+        yield* link(150 + index * 101 + i, 0, {
+          type: "provider-resource",
+          provider,
+          resourceId: `item-${i}`,
+        });
+    yield* link(500, 0, { type: "file", provider: "google-drive", fileId: "file" });
+    yield* link(501, 0, { type: "url", url: "https://example.test/" });
+    yield* sql`INSERT INTO telegram_chats(connection_id,chat_id,chat_type,title,paired_user_id,paired_user_label,active,created_at) VALUES('telegram_1','-1','channel','One','1','Owner',1,0)`;
+    yield* link(502, 0, {
+      type: "provider-resource",
+      provider: "telegram",
+      resourceId: "telegram_1/-1",
+    });
+    expect((yield* tools.overview({})).projects[0]?.channels).toEqual({
+      count: 1,
+      complete: true,
+      providers: [{ provider: "telegram", count: 1, complete: true }],
+    });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("searches Telegram chats by the composite index and preserves channel result shape", () =>
+  Effect.gen(function* () {
+    yield* seed(["Project"]);
+    const sql = yield* SqlClient.SqlClient;
+    const tools = yield* Tools.WorkspaceTools;
+    yield* sql`INSERT INTO telegram_chats ${sql.insert(
+      Array.from({ length: 300 }, (_, i) => ({
+        connection_id: "telegram_1",
+        chat_id: `-${i + 1}`,
+        chat_type: i === 1 ? "group" : "channel",
+        title: `Chat ${i}`,
+        paired_user_id: "1",
+        paired_user_label: "Owner",
+        active: 1,
+        created_at: 0,
+      })),
+    )}`;
+    for (const [i, resourceId] of [
+      "telegram_1/-1",
+      "telegram_1/-2",
+      "telegram_1/-1/1",
+      "telegram_other/-1",
+    ].entries())
+      yield* link(i, 0, { type: "provider-resource", provider: "telegram", resourceId });
+    const queries: ReturnType<Statement.Statement<unknown>["compile"]>[] = [];
+    const page = yield* tools.overview({}).pipe(
+      Effect.provideService(Statement.CurrentTransformer, (statement) =>
+        Effect.sync(() => {
+          queries.push(statement.compile());
+          return statement;
+        }),
+      ),
+    );
+    expect(page.projects).toEqual([
+      {
+        projectId: "overview-00",
+        title: "Project",
+        description: null,
+        driveRoot: "none",
+        channels: {
+          count: null,
+          complete: false,
+          providers: [{ provider: "telegram", count: 1, complete: false }],
+        },
+      },
+    ]);
+    expect(queries).toHaveLength(3);
+    const [statement, parameters] = queries.find(([query]) => query.includes("telegram_chats"))!;
+    const plan = yield* sql.unsafe<{ detail: string }>(
+      `EXPLAIN QUERY PLAN ${statement}`,
+      parameters,
+    );
+    const telegramPlan = plan.filter((row) => /\bt\b/.test(row.detail)).map((row) => row.detail);
+    expect(telegramPlan).toEqual([
+      expect.stringMatching(
+        /^SEARCH t USING (?:COVERING )?INDEX .*\(connection_id=\? AND chat_id=\?\)/,
+      ),
+    ]);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("returns an explicit error instead of truncating an oversized title cursor", () =>
+  Effect.gen(function* () {
+    yield* seed([`A${"界".repeat(600)}`, "Z"]);
+    const tools = yield* Tools.WorkspaceTools;
+    for (let i = 0; i < 2; i++)
+      expect(yield* tools.overview({ limit: 1 }).pipe(Effect.flip)).toMatchObject({
+        kind: "unavailable",
+        message: "Project title exceeds the 2048-byte project overview cursor limit.",
+      });
+    const page = yield* tools.overview({ limit: 2 });
+    expect(page.projects.map((project) => project.projectId)).toEqual([
+      "overview-00",
+      "overview-01",
+    ]);
+    expect(page.nextCursor).toBeUndefined();
   }).pipe(Effect.provide(layer)),
 );
 

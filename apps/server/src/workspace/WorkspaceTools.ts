@@ -275,7 +275,7 @@ export const make = Effect.gen(function* () {
             const keys = selected.map((row) =>
               workspaceItemKey({ type: "project", projectId: row.projectId }),
             );
-            // Inspect a bounded number of direct confirmed endpoints per project. A lookahead marks unknown totals.
+            // Bound channel candidates per project after excluding known non-channel endpoints.
             const links = yield* sql<{
               projectKey: string;
               otherKey: string;
@@ -287,11 +287,17 @@ export const make = Effect.gen(function* () {
           SELECT key_a AS project_key,key_b AS other_key,ref_b_json AS ref_json,link_id FROM workspace_links WHERE status='confirmed' AND ${sql.in("key_a", keys)}
           UNION ALL
           SELECT key_b AS project_key,key_a AS other_key,ref_a_json AS ref_json,link_id FROM workspace_links WHERE status='confirmed' AND ${sql.in("key_b", keys)}
+        ), resources AS MATERIALIZED (
+          SELECT *,json_extract(ref_json,'$.provider') AS provider,json_extract(ref_json,'$.resourceId') AS resource_id
+          FROM endpoints
+          WHERE json_extract(CASE WHEN json_valid(ref_json) THEN ref_json ELSE '{}' END,'$.type')='provider-resource'
+            AND json_extract(CASE WHEN json_valid(ref_json) THEN ref_json ELSE '{}' END,'$.provider') NOT IN ('workspace-note','workspace-calendar','pulse-meeting')
         ), ranked AS (
-          SELECT *,row_number() OVER(PARTITION BY project_key ORDER BY link_id) AS ordinal FROM endpoints
+          SELECT *,row_number() OVER(PARTITION BY project_key ORDER BY link_id) AS ordinal FROM resources
         ) SELECT r.project_key AS "projectKey",r.other_key AS "otherKey",r.ref_json AS "refJson",r.ordinal,t.chat_type AS "chatType"
-        FROM ranked r LEFT JOIN telegram_chats t ON json_extract(CASE WHEN json_valid(r.ref_json) THEN r.ref_json ELSE '{}' END,'$.provider')='telegram'
-          AND json_extract(CASE WHEN json_valid(r.ref_json) THEN r.ref_json ELSE '{}' END,'$.resourceId')=t.connection_id || '/' || t.chat_id
+        FROM ranked r LEFT JOIN telegram_chats t ON r.provider='telegram'
+          AND t.connection_id=substr(r.resource_id,1,instr(r.resource_id,'/')-1)
+          AND t.chat_id=substr(r.resource_id,instr(r.resource_id,'/')+1)
         WHERE r.ordinal<=${OverviewLinksPerProject + 1}`;
             const roots = yield* sql<{
               projectId: ProjectId;
@@ -409,7 +415,7 @@ export const make = Effect.gen(function* () {
                   count: complete ? totals.count : null,
                   complete,
                   providers: [...totals.providers]
-                    .filter(([, p]) => p.count > 0)
+                    .filter(([, p]) => p.count > 0 || !p.complete)
                     .map(([provider, p]) => ({
                       provider,
                       count: p.count,
@@ -433,12 +439,15 @@ export const make = Effect.gen(function* () {
                     }),
                   ).toString("base64url")
                 : undefined;
+            // Titles have no write-time cap. Truncation would change the keyset boundary.
+            if (nextCursor && nextCursor.length > 2048)
+              return yield* fail(
+                "unavailable",
+                "Project title exceeds the 2048-byte project overview cursor limit.",
+              );
             const page = { projects, ...(nextCursor ? { nextCursor } : {}), incomplete: false };
             // Reject the whole page when metadata exceeds the 128 KiB response budget.
-            if (
-              (nextCursor && nextCursor.length > 2048) ||
-              Buffer.byteLength(encodeOverviewPage(page), "utf8") > 128 * 1024
-            )
+            if (Buffer.byteLength(encodeOverviewPage(page), "utf8") > 128 * 1024)
               return yield* fail(
                 "unavailable",
                 "Project summary metadata exceeds the bounded overview response.",
