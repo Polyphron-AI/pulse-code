@@ -1,8 +1,9 @@
 import { act } from "react";
+import * as Cause from "effect/Cause";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { EnvironmentId } from "@t3tools/contracts";
-import { DriveSearch, DriveFileAccess } from "./DriveFiles";
+import { EnvironmentId, type DriveReadResult } from "@t3tools/contracts";
+import { DriveSearch, DriveFileAccess, DriveReader } from "./DriveFiles";
 const mocks = vi.hoisted(() => ({
   capable: true,
   connected: true,
@@ -10,15 +11,19 @@ const mocks = vi.hoisted(() => ({
   bind: vi.fn(),
   read: vi.fn(),
   query: vi.fn(),
-  binding: "first",
+  binding: "first" as string | undefined,
+  generation: 0 as number | null,
+  subscriptionError: null as string | null,
+  refreshChanges: vi.fn(),
+  operate: true,
 }));
 vi.mock("../../state/environments", () => ({
-  useConnectedEnvironmentIds: () => (mocks.connected ? ["remote"] : []),
+  useConnectedEnvironmentIds: () => (mocks.connected ? ["remote", "other"] : []),
 }));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,
-    data: { authenticated: true, scopes: ["orchestration:operate"] },
+    data: { authenticated: true, scopes: mocks.operate ? ["orchestration:operate"] : [] },
   }),
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
@@ -27,6 +32,12 @@ vi.mock("./mail/useMailCapabilities", () => ({
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (input: unknown) => {
     mocks.query(input);
+    if (input === "changes")
+      return {
+        data: mocks.generation,
+        error: mocks.subscriptionError,
+        refresh: mocks.refreshChanges,
+      };
     if (input === "binding")
       return { data: { binding: { connectionId: mocks.binding } }, error: null, refresh: vi.fn() };
     return {
@@ -39,6 +50,7 @@ vi.mock("../../state/query", () => ({
         },
       ],
       error: null,
+      refresh: vi.fn(),
     };
   },
 }));
@@ -49,6 +61,7 @@ vi.mock("../../state/drive", () => ({
     read: "read",
     search: "search",
     bind: "bind",
+    changes: () => "changes",
   },
 }));
 vi.mock("../../state/use-atom-command", () => ({
@@ -56,6 +69,23 @@ vi.mock("../../state/use-atom-command", () => ({
     command === "search" ? mocks.search : command === "read" ? mocks.read : mocks.bind,
 }));
 vi.mock("../ui/button", () => ({ Button: "button" }));
+vi.mock("./WorkspaceItemActions", () => ({
+  WorkspaceItemMenu: ({
+    children,
+    actions,
+  }: {
+    children?: React.ReactNode;
+    actions?: React.ReactNode;
+  }) => (
+    <div>
+      {children}
+      <details>
+        <summary>Item actions</summary>
+        {actions}
+      </details>
+    </div>
+  ),
+}));
 vi.mock("../ui/input", () => ({ Input: "input" }));
 vi.mock("../ui/dialog", () => ({
   Dialog: ({ children }: { children: unknown }) => children,
@@ -72,8 +102,327 @@ afterEach(async () => {
   mocks.capable = true;
   mocks.connected = true;
   mocks.binding = "first";
+  mocks.generation = 0;
+  mocks.subscriptionError = null;
+  mocks.operate = true;
   vi.clearAllMocks();
+  mocks.read.mockReset();
+  mocks.bind.mockReset();
   vi.unstubAllGlobals();
+});
+
+const page = (text: string, nextOffset?: number, connectionId = "first"): DriveReadResult => ({
+  connectionId,
+  file: {
+    id: "file",
+    name: "Brief",
+    mimeType: "text/plain",
+    url: "https://drive.google.com/file/d/file/view",
+  },
+  body: {
+    text,
+    truncated: nextOffset !== undefined,
+    ...(nextOffset === undefined ? {} : { nextOffset }),
+  },
+});
+const readButton = (label: string) =>
+  renderer!.root.findAllByType("button").findLast((node) => node.props.children === label)!;
+it("reads inline only on request, appends pages, and removes reader chrome on the final page", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.read
+    .mockResolvedValueOnce({ _tag: "Success", value: page("First page text", 15) })
+    .mockResolvedValueOnce({ _tag: "Success", value: page("Second page text") });
+  await act(() => {
+    renderer = create(
+      <DriveReader
+        environmentId={environmentId}
+        fileId="file"
+        renderContent={(_result, text) => <article>{text}</article>}
+      />,
+    );
+  });
+  expect(mocks.bind).not.toHaveBeenCalled();
+  expect(mocks.read).not.toHaveBeenCalled();
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe("First page text");
+  await act(() => readButton("Read more").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe(
+    "First page textSecond page text",
+  );
+  expect(renderer!.root.findAllByType("select")).toHaveLength(0);
+  expect(renderer!.root.findAllByType("h3")).toHaveLength(0);
+  expect(renderer!.root.findAllByType("pre")).toHaveLength(0);
+  for (const label of ["Read file", "Use this connection", "Read more"])
+    expect(readButton(label)).toBeUndefined();
+  expect(renderer!.root.findAllByType("a")).toHaveLength(1);
+  expect(renderer!.root.findByType("details").findAllByType("a")).toHaveLength(1);
+});
+it("clears inline pages on same-account generation changes and suppresses their late continuation", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const view = () => (
+    <DriveReader
+      environmentId={environmentId}
+      fileId="file"
+      renderContent={(_result, text) => <article>{text}</article>}
+    />
+  );
+  mocks.read.mockResolvedValueOnce({ _tag: "Success", value: page("Old generation", 14) });
+  await act(() => {
+    renderer = create(view());
+  });
+  await act(() => readButton("Read file").props.onClick());
+  let settle!: (value: { _tag: "Success"; value: DriveReadResult }) => void;
+  mocks.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+  );
+  await act(() => {
+    readButton("Read more").props.onClick();
+  });
+  mocks.generation = 1;
+  await act(() => renderer!.update(view()));
+  await act(() => settle({ _tag: "Success", value: page("Stale generation") }));
+  expect(renderer!.root.findAllByType("article")).toHaveLength(0);
+  expect(readButton("Read more")).toBeUndefined();
+  mocks.read.mockResolvedValueOnce({ _tag: "Success", value: page("New generation") });
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe("New generation");
+});
+it("does not choose the first account, blocks an unbound read and waits for explicit binding", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.binding = undefined;
+  const view = () => (
+    <DriveReader
+      environmentId={environmentId}
+      fileId="file"
+      renderContent={(_result, text) => <article>{text}</article>}
+    />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  expect(renderer!.root.findByType("select").props.value).toBe("");
+  expect(readButton("Read file").props.disabled).toBe(true);
+  await act(() => readButton("Read file").props.onClick());
+  expect(mocks.read).not.toHaveBeenCalled();
+  const chosen = "drv_00000000-0000-0000-0000-000000000001";
+  await act(() =>
+    renderer!.root.findByType("select").props.onChange({ target: { value: chosen } }),
+  );
+  let finish!: (value: {
+    _tag: "Success";
+    value: { connectionId: string; file: DriveReadResult["file"] };
+  }) => void;
+  mocks.bind.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(() => {
+    readButton("Use this connection").props.onClick();
+  });
+  expect(mocks.bind).toHaveBeenCalledWith({
+    environmentId,
+    input: { connectionId: chosen, fileId: "file" },
+  });
+  expect(mocks.read).not.toHaveBeenCalled();
+  await act(() =>
+    finish({ _tag: "Success", value: { connectionId: chosen, file: page("").file } }),
+  );
+  mocks.binding = chosen;
+  await act(() => renderer!.update(view()));
+  expect(mocks.read).not.toHaveBeenCalled();
+  mocks.read.mockResolvedValueOnce({
+    _tag: "Success",
+    value: page("Chosen body", undefined, chosen),
+  });
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe("Chosen body");
+});
+it("allows read-authorized bound reads while denying account changes without operate access", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.operate = false;
+  await act(() => {
+    renderer = create(
+      <DriveReader
+        environmentId={environmentId}
+        fileId="file"
+        renderContent={(_result, text) => <article>{text}</article>}
+      />,
+    );
+  });
+  expect(renderer!.root.findByType("select").props.disabled).toBe(true);
+  expect(readButton("Use this connection").props.disabled).toBe(true);
+  await act(() => readButton("Use this connection").props.onClick());
+  expect(mocks.bind).not.toHaveBeenCalled();
+  mocks.read.mockResolvedValueOnce({ _tag: "Success", value: page("Read access") });
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe("Read access");
+});
+it.each(["file", "environment"])(
+  "discards a late read on a %s switch without automatic reading",
+  async (change) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    let finish!: (value: { _tag: "Success"; value: DriveReadResult }) => void;
+    mocks.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(() => {
+      renderer = create(
+        <DriveReader
+          environmentId={environmentId}
+          fileId="file"
+          renderContent={(_result, text) => <article>{text}</article>}
+        />,
+      );
+    });
+    const click = readButton("Read file").props.onClick;
+    await act(() => {
+      click();
+      click();
+    });
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+    await act(() =>
+      renderer!.update(
+        <DriveReader
+          environmentId={change === "environment" ? EnvironmentId.make("other") : environmentId}
+          fileId={change === "file" ? "other-file" : "file"}
+          renderContent={(_result, text) => <article>{text}</article>}
+        />,
+      ),
+    );
+    await act(() => finish({ _tag: "Success", value: page("Stale body") }));
+    expect(renderer!.root.findAllByType("article")).toHaveLength(0);
+    expect(renderer!.root.findByType("select").props.value).toBe("");
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+  },
+);
+it("discards a late binding failure on environment change and preserves the new chooser", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.binding = undefined;
+  let finish!: (value: { _tag: "Failure"; cause: Cause.Cause<Error> }) => void;
+  mocks.bind.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(() => {
+    renderer = create(<DriveReader environmentId={environmentId} fileId="file" />);
+  });
+  await act(() =>
+    renderer!.root
+      .findByType("select")
+      .props.onChange({ target: { value: "drv_00000000-0000-0000-0000-000000000001" } }),
+  );
+  await act(() => {
+    readButton("Use this connection").props.onClick();
+  });
+  await act(() =>
+    renderer!.update(<DriveReader environmentId={EnvironmentId.make("other")} fileId="file" />),
+  );
+  await act(() =>
+    finish({ _tag: "Failure", cause: Cause.fail(new Error("Old environment failure")) }),
+  );
+  expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+  expect(renderer!.root.findByType("select").props.value).toBe("");
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+it("clears a disconnected reader, then retries explicitly after reconnecting", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const view = () => (
+    <DriveReader
+      environmentId={environmentId}
+      fileId="file"
+      renderContent={(_result, text) => <article>{text}</article>}
+    />
+  );
+  mocks.read.mockResolvedValueOnce({
+    _tag: "Failure",
+    cause: Cause.fail(new Error("Reconnect the chosen account")),
+  });
+  await act(() => {
+    renderer = create(view());
+  });
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByProps({ role: "alert" }).props.children).toBe(
+    "Reconnect the chosen account",
+  );
+  mocks.connected = false;
+  await act(() => renderer!.update(view()));
+  expect(readButton("Read file")).toBeUndefined();
+  mocks.connected = true;
+  await act(() => renderer!.update(view()));
+  expect(mocks.read).toHaveBeenCalledTimes(1);
+  expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+  mocks.read.mockResolvedValueOnce({ _tag: "Success", value: page("Reconnected body") });
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe("Reconnected body");
+});
+it("waits for change tracking, clears a failed subscription and retries it explicitly", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const view = () => (
+    <DriveReader
+      environmentId={environmentId}
+      fileId="file"
+      renderContent={(_result, text) => <article>{text}</article>}
+    />
+  );
+  mocks.generation = null;
+  await act(() => {
+    renderer = create(view());
+  });
+  expect(readButton("Read file").props.disabled).toBe(true);
+  await act(() => readButton("Read file").props.onClick());
+  expect(mocks.read).not.toHaveBeenCalled();
+  mocks.generation = 1;
+  await act(() => renderer!.update(view()));
+  mocks.read.mockResolvedValueOnce({ _tag: "Success", value: page("Tracked body") });
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe("Tracked body");
+  mocks.subscriptionError = "Drive changes are unavailable";
+  await act(() => renderer!.update(view()));
+  expect(renderer!.root.findAllByType("article")).toHaveLength(0);
+  expect(readButton("Read file").props.disabled).toBe(true);
+  await act(() => readButton("Retry").props.onClick());
+  expect(mocks.refreshChanges).toHaveBeenCalledOnce();
+  mocks.subscriptionError = null;
+  mocks.generation = 2;
+  await act(() => renderer!.update(view()));
+  expect(mocks.read).toHaveBeenCalledTimes(1);
+  expect(readButton("Read file").props.disabled).toBe(false);
+});
+it("rejects a non-progressing continuation and explains a bounded incomplete body", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.read.mockResolvedValueOnce({ _tag: "Success", value: page("Invalid page", 0) });
+  await act(() => {
+    renderer = create(
+      <DriveReader
+        environmentId={environmentId}
+        fileId="file"
+        renderContent={(_result, text) => <article>{text}</article>}
+      />,
+    );
+  });
+  await act(() => readButton("Read file").props.onClick());
+  expect(readButton("Read more")).toBeUndefined();
+  expect(renderer!.root.findByProps({ role: "alert" }).props.children).toContain(
+    "invalid continuation",
+  );
+  mocks.read.mockResolvedValueOnce({
+    _tag: "Success",
+    value: { ...page("Bounded body"), body: { text: "Bounded body", truncated: true } },
+  });
+  await act(() => readButton("Read file").props.onClick());
+  expect(renderer!.root.findByType("article").children.join("")).toBe("Bounded body");
+  expect(JSON.stringify(renderer!.toJSON())).toContain("This view is incomplete");
+  expect(readButton("Read more")).toBeUndefined();
 });
 it("gates old servers without creating Drive search queries or reader controls", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -177,7 +526,12 @@ it("invalidates accumulated pages and late reads after a subscription-driven bin
     _tag: "Success",
     value: {
       connectionId,
-      file: { id: "file", name: "Brief" },
+      file: {
+        id: "file",
+        name: "Brief",
+        mimeType: "text/plain",
+        url: "https://drive.google.com/file/d/file/view",
+      },
       body: { text, truncated: nextOffset !== undefined, nextOffset },
     },
   });

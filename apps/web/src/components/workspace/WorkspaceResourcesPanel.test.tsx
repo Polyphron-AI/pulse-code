@@ -86,6 +86,10 @@ vi.mock("./WorkspaceBrowser", () => ({
   },
 }));
 vi.mock("./ProjectTasksResource", () => ({ ProjectTasksResource: () => <Body name="Tasks" /> }));
+vi.mock("../../state/entities", () => ({ useThreadShells: () => [], useProjects: () => [] }));
+vi.mock("../../state/workspaceLinks", () => ({
+  workspaceLinks: { list: () => "links", projectHub: () => "hub" },
+}));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
     ready: true,
@@ -238,6 +242,17 @@ function Opener() {
       >
         Open file
       </button>
+      <button
+        onClick={() =>
+          openResource({
+            projectId: p,
+            tab: "docs",
+            request: { type: "file", provider: "google-drive", fileId: "doc-handoff" },
+          })
+        }
+      >
+        Open document
+      </button>
     </>
   );
 }
@@ -380,6 +395,34 @@ it("hands a request through the shared provider without changing the selected it
   await act(() => root!.render(<App environmentId={EnvironmentId.make("b")} />));
   expect(queryByRole(node, "tabpanel")?.textContent).not.toContain("Files a");
   expect(node.textContent).not.toContain("handoff");
+});
+it("routes a Drive handoff to Docs with provider fallback and preserves the native note entrance", async () => {
+  await mount();
+  await act(async () => {
+    await import("./WorkspaceDocsPanel");
+  });
+  await act(() => getByRole(node, "button", { name: "Open document" }).click());
+  expect(getByRole(node, "tab", { name: "Docs" }).getAttribute("aria-selected")).toBe("true");
+  expect(getByRole(node, "link", { name: "Open in Google Drive" }).getAttribute("href")).toContain(
+    "doc-handoff",
+  );
+  expect(bodies.noteReads).not.toHaveBeenCalled();
+  expect(bodies.start).not.toHaveBeenCalled();
+  await act(async () => {
+    await import("./meetings/WorkspaceNoteView");
+    await import("../../state/workspaceNotes");
+    getByRole(node, "button", { name: "Open note" }).click();
+  });
+  expect(getByRole(node, "region", { name: "Workspace note" }).textContent).toContain(
+    bodies.note.body,
+  );
+  expect(queryByRole(node, "link", { name: "Open in Google Drive" })).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Back to documents" }).click());
+  expect(queryByRole(node, "region", { name: "Workspace note" })).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Open note" }).click());
+  expect(getByRole(node, "region", { name: "Workspace note" }).textContent).toContain(
+    bodies.note.body,
+  );
 });
 it("moves the tab stop to the selected tab after an external resource handoff", async () => {
   await mount();

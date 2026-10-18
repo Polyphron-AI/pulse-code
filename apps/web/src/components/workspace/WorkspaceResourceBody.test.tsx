@@ -8,8 +8,8 @@ import { WorkspaceResourceBody, type WorkspaceResourceBodyProps } from "./Worksp
 import { WorkspaceResourcesPanelView } from "./WorkspaceResourcesPanelView";
 const mounts = vi.hoisted(() => ({ browser: vi.fn(), agents: vi.fn() }));
 
-vi.mock("./WorkspaceToolsPanel", () => ({
-  WorkspaceProjectFiles: () => <p>Project files</p>,
+vi.mock("./ProjectDriveExplorer", () => ({
+  ProjectDriveExplorer: () => <p>Project files</p>,
 }));
 vi.mock("./WorkspaceAgents", () => ({
   WorkspaceAgents: (props: WorkspaceResourceBodyProps) => {

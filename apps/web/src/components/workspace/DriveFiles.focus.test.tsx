@@ -35,6 +35,7 @@ vi.mock("./mail/useMailCapabilities", () => ({
 }));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (input: unknown) => {
+    if (input === "changes") return { data: 0, error: null };
     if (input === "binding")
       return { data: { binding: { connectionId: "first" } }, error: null, refresh: vi.fn() };
     return {
@@ -56,6 +57,7 @@ vi.mock("../../state/drive", () => ({
     binding: () => "binding",
     read: "read",
     bind: "bind",
+    changes: () => "changes",
   },
 }));
 vi.mock("../../state/use-atom-command", () => ({

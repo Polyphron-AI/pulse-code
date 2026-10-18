@@ -72,6 +72,7 @@ const click = async (name: string) =>
   act(() => fireEvent.click(getByRole(node, "button", { name })));
 it("edits controlled text with captured revision, retains conflict draft and explicitly reloads", async () => {
   const { saved } = await mount();
+  expect(getByRole(node, "heading", { level: 1, name: note.title })).toBeDefined();
   expect(node.querySelector("script")).toBeNull();
   await click("Edit note");
   const body = getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement;

@@ -37,6 +37,9 @@ const Agents = lazy(() =>
 const Tasks = lazy(() =>
   import("./ProjectTasksResource").then((module) => ({ default: module.ProjectTasksResource })),
 );
+const Docs = lazy(() =>
+  import("./WorkspaceDocsPanel").then((module) => ({ default: module.WorkspaceDocsResource })),
+);
 
 /** The single live resource switch. Later waves replace only their tab's case. */
 export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): ReactNode {
@@ -60,9 +63,17 @@ export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): 
       break;
     case "docs":
       body = (
-        <NativeNote
-          key={`${props.environmentId}:${JSON.stringify(props.request ?? props.selectedItem?.ref ?? null)}`}
+        <Docs
+          key={`${props.environmentId}:${props.projectId}`}
           {...props}
+          renderNative={(document) => (
+            <NativeNote
+              key={`${props.environmentId}:${JSON.stringify(document.ref)}`}
+              {...props}
+              request={document.ref}
+              selectedItem={document}
+            />
+          )}
         />
       );
       break;

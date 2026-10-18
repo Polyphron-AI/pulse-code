@@ -132,6 +132,7 @@ vi.mock("../../../state/server", () => ({ serverEnvironment: { configProjection:
 // Keep lazy imports outside individual journey budgets on a cold worker.
 await Promise.all([
   import("../WorkspaceToolsPanel"),
+  import("../WorkspaceDocsPanel"),
   import("../WorkspaceBrowser"),
   import("../ProjectTasksResource"),
   import("../meetings/WorkspaceNoteView"),

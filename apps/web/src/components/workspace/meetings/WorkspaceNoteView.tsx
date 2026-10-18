@@ -3,6 +3,7 @@ import { WorkspaceNoteCreate } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { WorkspaceDocsReadingView } from "../WorkspaceDocsReadingView";
 
 export interface NoteDraft {
   readonly title: string;
@@ -111,8 +112,15 @@ export function WorkspaceNoteView(props: WorkspaceNoteViewProps) {
         </form>
       ) : note && !props.deleted ? (
         <>
-          <h2 className="break-words text-base font-semibold">{note.title}</h2>
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{note.body}</p>
+          <WorkspaceDocsReadingView
+            title={note.title}
+            caption="Environment access"
+            content={
+              <p className="whitespace-pre-wrap break-words text-3xs leading-5 text-muted-foreground">
+                {note.body}
+              </p>
+            }
+          />
           <div className="flex flex-nowrap gap-2">
             <Button
               size="xs"
