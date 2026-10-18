@@ -57,6 +57,7 @@ vi.mock("../../state/session", () => ({
 vi.mock("./useWorkspaceItemOpener", () => ({ useWorkspaceItemOpener: () => vi.fn() }));
 vi.mock("../ui/sidebar", () => ({ SidebarInset: "div" }));
 vi.mock("../ui/button", () => ({ Button: "button" }));
+vi.mock("../../hooks/useSettings", () => ({ useEnvironmentSettings: () => undefined }));
 vi.mock("../../state/environments", () => ({ useEnvironment: () => ({ label: "Remote" }) }));
 vi.mock("./WorkspaceEngagement", () => ({
   WorkspaceEngagement: ({ list, children }: { list: ReactNode; children: ReactNode }) => (
@@ -86,6 +87,16 @@ it("opens an individual received message with its captured remote connection and
     renderer = create(<TelegramWorkspace />);
   });
   expect(renderer!.root.findByType("pre").children.join("")).toBe("/new must remain inert");
+  expect(renderer!.root.findByProps({ "aria-label": "Open Paired chat" })).toBeDefined();
+  expect(
+    renderer!.root.findAllByProps({ "data-conversation-group": "direct messages" }),
+  ).toHaveLength(0);
+  expect(
+    renderer!.root
+      .findAllByType("p")
+      .map((row) => row.children.join(""))
+      .join(" "),
+  ).toContain("1 Jan 1970, 00:00");
   const open = renderer!.root
     .findAllByType("button")
     .find((button) => button.children.includes("Open message"))!;
@@ -93,8 +104,7 @@ it("opens an individual received message with its captured remote connection and
   expect(mocks.navigate).toHaveBeenCalledWith({
     to: "/workspace",
     search: {
-      space: "office",
-      officeView: "communications",
+      space: "communications",
       communicationProvider: "telegram",
       environment: "remote",
       account: "telegram_1000",

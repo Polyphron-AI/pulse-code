@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { getByRole, getAllByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
+import { parseChatResourceId } from "@t3tools/contracts";
+import * as browser from "../workspaceBrowser.logic";
 import { createWorkspaceMockupModule } from "./browserMockupModule";
 import {
   createWorkspaceMockupSession,
@@ -20,11 +22,21 @@ it.each(["search-results", "empty-results", "truncated-results", "captured-page"
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const session = createWorkspaceMockupSession("05", null, null, state);
     const module = createWorkspaceMockupModule(session);
+    const capture = vi.spyOn(browser, "captureWorkspacePage");
     const node = document.createElement("div");
     document.body.append(node);
     const root = createRoot(node);
     try {
       await act(() => root.render(module.resource));
+      const target = capture.mock.results[0]?.value?.target;
+      expect(target?.ref.type).toBe("provider-resource");
+      expect(parseChatResourceId(target.ref.resourceId)).toEqual({
+        version: 1,
+        transport: "server",
+        connectionId: "fixture-slack",
+        workspaceId: "fixture-team",
+        conversationId: "slack-marketing",
+      });
       await act(() => node.querySelector("iframe")!.dispatchEvent(new Event("load")));
       if (state !== "captured-page")
         expect(document.activeElement).toBe(
@@ -83,6 +95,7 @@ it.each(["search-results", "empty-results", "truncated-results", "captured-page"
       node.remove();
       module.dispose();
       session.dispose();
+      capture.mockRestore();
       vi.unstubAllGlobals();
     }
   },

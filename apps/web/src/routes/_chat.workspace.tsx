@@ -79,7 +79,7 @@ function WorkspaceRouteContent() {
     case "communications": {
       return (
         <CommunicationsWorkspace
-          key={JSON.stringify([search.environment, search.communicationProvider, search.item])}
+          key={JSON.stringify([search.environment, search.communicationProvider, search.account])}
           source={source}
         />
       );

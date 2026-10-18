@@ -6,6 +6,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vite-plus/test";
 import {
   EnvironmentId,
   chatResourceId,
+  parseChatResourceId,
   type ChatRequest,
   type ChatResult,
   type ChatConversation,
@@ -26,7 +27,8 @@ const boundary = vi.hoisted(() => ({
   operate: true,
   toast: vi.fn(),
   lookup: vi.fn(),
-  zone: "Africa/Johannesburg",
+  zone: "Africa/Johannesburg" as string | undefined,
+  location: {} as Record<string, unknown>,
 }));
 vi.mock("../ui/toast", () => ({ toastManager: { add: boundary.toast } }));
 vi.mock("../../localApi", () => ({
@@ -38,6 +40,7 @@ vi.mock("../../localApi", () => ({
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   useNavigate: () => boundary.navigate,
+  useSearch: () => boundary.location,
   useRouter: () => ({ state: { location: { href: "/workspace?space=communications" } } }),
 }));
 vi.mock("@effect/atom-react", async (original) => ({
@@ -82,13 +85,14 @@ vi.mock("../../hooks/useHandleNewThread", () => ({
 }));
 vi.mock("../../hooks/useNewProject", () => ({ useNewProject: () => async () => false }));
 
+import type { ChatSource } from "./CommunicationsWorkspace";
 import { ChatCommunicationsWorkspace } from "./ChatCommunicationsWorkspace";
 import { WorkspaceResourcesContext, useWorkspaceResourceState } from "./workspaceResourceState";
 vi.mock("./WorkspaceResourcesPanel", () => ({ WorkspaceProjectResources: () => null }));
 vi.mock("../../hooks/useSettings", () => ({
   useEnvironmentSettings: (
     _id: unknown,
-    select: (settings: { workspaceDisplayTimeZone: string }) => unknown,
+    select: (settings: { workspaceDisplayTimeZone: string | undefined }) => unknown,
   ) => select({ workspaceDisplayTimeZone: boundary.zone }),
 }));
 const env = EnvironmentId.make("source-env");
@@ -152,6 +156,9 @@ async function mountChat(
     environmentId?: EnvironmentId | null;
     bot?: boolean;
     missing?: boolean;
+    historyFailure?: boolean;
+    provider?: "slack" | "discord";
+    view?: "later" | "unread";
   } = {},
 ) {
   const requests: ChatRequest[] = [];
@@ -175,6 +182,8 @@ async function mountChat(
         if (request.operation === "conversations.list")
           return { ok: true, conversations: options.channels ?? [channel] };
         if (request.operation === "messages.list") {
+          if (options.historyFailure)
+            return { ok: false, error: { code: "network", message: "History failed" } };
           if (options.bot && request.threadId)
             return { ok: false, error: { code: "unsupported", message: "User token required" } };
           return {
@@ -188,7 +197,15 @@ async function mountChat(
           };
         }
         if (request.operation === "messages.send")
-          return { ok: true, message: { ...rootMessage, id: "sent", text: request.text } };
+          return {
+            ok: true,
+            message: {
+              ...rootMessage,
+              id: `sent-${requests.length}`,
+              conversationId: request.conversationId,
+              text: request.text,
+            },
+          };
         throw new Error("Unexpected request");
       },
     },
@@ -196,15 +213,35 @@ async function mountChat(
   const node = document.createElement("div");
   document.body.append(node);
   const root = createRoot(node);
+  let currentSource: ChatSource | undefined = options.source
+    ? { provider: options.provider ?? account.provider, resource, resourceId }
+    : undefined;
+  boundary.location = {
+    space: "communications",
+    environment: env,
+    communicationProvider: "slack",
+    account: account.id,
+    ...(options.view ? { view: options.view } : {}),
+    ...(currentSource ? { item: currentSource.resourceId } : {}),
+  };
+  boundary.navigate.mockImplementation(({ search }: { search: Record<string, unknown> }) => {
+    boundary.location = search;
+    const resourceId = typeof search.item === "string" ? search.item : undefined;
+    const resource = resourceId ? parseChatResourceId(resourceId) : undefined;
+    currentSource =
+      resource && resourceId
+        ? { provider: options.provider ?? account.provider, resource, resourceId }
+        : undefined;
+    render();
+    return Promise.resolve();
+  });
   const render = () =>
     root.render(
       <ResourceProvider>
         <ChatCommunicationsWorkspace
-          account={account}
+          account={options.provider ? { ...account, provider: options.provider } : account}
           environmentId={options.environmentId === undefined ? env : options.environmentId}
-          {...(options.source
-            ? { source: { provider: account.provider, resource, resourceId } }
-            : {})}
+          {...(currentSource ? { source: currentSource } : {})}
         />
       </ResourceProvider>,
     );
@@ -223,7 +260,7 @@ async function mountChat(
   };
 }
 async function openChannel(node: HTMLElement) {
-  await act(() => getByRole(node, "button", { name: /marketing Team/ }).click());
+  await act(() => getByRole(node, "button", { name: "Open marketing" }).click());
 }
 
 it.each(["America/Los_Angeles", "Pacific/Kiritimati"])(
@@ -252,7 +289,10 @@ it.each([
   boundary.zone = zone;
   const view = await mountChat({ source: true, message: { ...rootMessage, date } });
   try {
-    expect(view.node.querySelector("time")?.textContent).toBe(expected);
+    expect(view.node.querySelector("time")?.textContent).toBe(expected.split(", ").at(-1));
+    expect(view.node.querySelector("[data-communications-date]")?.textContent).toContain(
+      `13 October ${date.slice(0, 4)}`,
+    );
     expect(view.node.querySelector("time")?.dateTime).toBe(date);
   } finally {
     await view.close();
@@ -346,13 +386,14 @@ it("tabbing through messages neither retargets actions nor starts lookups; expli
     );
     await act(() => fireEvent.keyDown(articles[1]!, { key: "Enter" }));
     expect(articles[1]!.getAttribute("aria-current")).toBe("true");
-    expect(articles[1]!.className).toContain("bg-sidebar-row-active");
     expect(getByRole(view.node, "button", { name: "Clear message selection" })).toBeDefined();
     boundary.menu.mockResolvedValueOnce("project:p1");
     await act(() => getByRole(view.node, "button", { name: "Add to project" }).click());
     expect(boundary.command.mock.calls.at(-1)?.[1].input.a.ref).toEqual(
       chatEndpoint(account, channel, reply)!.ref,
     );
+    await act(() => fireEvent.keyDown(articles[1]!, { key: "Escape" }));
+    expect(queryByRole(view.node, "complementary", { name: "Message thread" })).toBeNull();
     await act(() => fireEvent.keyDown(articles[1]!, { key: "Escape" }));
     expect(articles[1]!.hasAttribute("aria-current")).toBe(false);
   } finally {
@@ -369,17 +410,12 @@ it.each(["conversation", "message"])(
       const row =
         kind === "message"
           ? getByRole(view.node, "article")
-          : getByRole(view.node, "button", { name: /marketing Team/ });
+          : getByRole(view.node, "button", { name: "Open marketing" });
       await act(() => fireEvent.keyDown(row, { key: "ContextMenu" }));
       const host = row.closest("[data-workspace-menu-open=true]")!;
       expect(host).not.toBeNull();
       const trigger = getByRole(host as HTMLElement, "button", { name: "Item actions" });
-      expect(trigger.parentElement!.className).toContain(
-        "group-has-[[data-workspace-menu-open=true]]/chatrow:opacity-100",
-      );
-      expect(trigger.closest(".group\\/chatrow")).not.toBeNull();
-      expect(trigger.parentElement!.className).toContain("right-3");
-      expect(row.className).toContain("pr-12");
+      expect(trigger.closest("[data-workspace-menu-open=true]")).toBe(host);
       if (kind === "message") expect(row.getAttribute("aria-current")).toBe("true");
       await act(() => fireEvent.keyDown(trigger, { key: "Escape" }));
       expect(queryByRole(document.body, "dialog")).toBeNull();
@@ -389,7 +425,7 @@ it.each(["conversation", "message"])(
   },
 );
 
-it("matches exact legacy saved messages, renders them in Later and toggles without duplicates or rewriting", async () => {
+it("opens legacy Later and removes only the selected save before saving it again", async () => {
   const old = {
     provider: account.provider,
     accountId: account.id,
@@ -404,18 +440,26 @@ it("matches exact legacy saved messages, renders them in Later and toggles witho
       getByRole(view.node, "button", { name: "Remove from Later" }).getAttribute("aria-pressed"),
     ).toBe("true");
     await act(() => getByRole(view.node, "button", { name: "Later" }).click());
+    expect(getByRole(view.node, "heading", { name: "Later" })).toBeDefined();
+    expect(queryByRole(view.node, "textbox", { name: "Search loaded conversations" })).toBeNull();
+    expect(queryByRole(view.node, "button", { name: "Filter conversations" })).toBeNull();
+    expect(queryByRole(view.node, "button", { name: "Load earlier messages" })).toBeNull();
+    expect(queryByRole(view.node, "textbox", { name: "Message text" })).toBeNull();
+    const saved = getByRole(view.node, "list", { name: "Saved references on this device" });
+    await act(() =>
+      getByRole(saved, "button", { name: "Open saved message in marketing" }).click(),
+    );
     expect(getByText(view.node, rootMessage.text)).toBeDefined();
-    expect(queryByRole(view.node, "list", { name: "Unavailable saved references" })).toBeNull();
+    expect(getByRole(view.node, "textbox", { name: "Search loaded conversations" })).toBeDefined();
+    expect(getByRole(view.node, "button", { name: "Filter conversations" })).toBeDefined();
     expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([old, foreign]);
     await act(() => getByRole(view.node, "button", { name: "Remove from Later" }).click());
     expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([foreign]);
-    await act(() => getByRole(view.node, "button", { name: "Home" }).click());
     await act(() => getByRole(view.node, "button", { name: "Save for Later" }).click());
-    const entries = JSON.parse(window.localStorage.getItem(savedKey)!);
-    expect(entries).toHaveLength(2);
-    expect(entries[1]).toEqual(
+    expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([
+      foreign,
       expect.objectContaining({ environmentId: env, resourceId: view.resourceId }),
-    );
+    ]);
   } finally {
     await view.close();
   }
@@ -488,7 +532,7 @@ it("keeps a legacy Slack reply with no known root unavailable without guessing a
   }
 });
 
-it("captures each message endpoint once and reuses it through search, menu and saving", async () => {
+it("captures each message endpoint once and reuses it through search and menu", async () => {
   const capture = vi.spyOn(chat, "chatItem");
   const captureEndpoint = vi.spyOn(chat, "chatEndpoint");
   const view = await mountChat();
@@ -511,10 +555,8 @@ it("captures each message endpoint once and reuses it through search, menu and s
     const dialog = getByRole(document.body, "dialog");
     await act(() => getByRole(dialog, "button", { name: "Add to project" }).click());
     const endpoint = boundary.command.mock.calls.at(-1)?.[1].input.a.ref;
-    await act(() => getByRole(view.node, "button", { name: "Save for Later" }).click());
-    expect(JSON.parse(window.localStorage.getItem(savedKey)!)[0].resourceId).toBe(
-      endpoint.resourceId,
-    );
+    expect(parseChatResourceId(endpoint.resourceId)?.messageId).toBe(rootMessage.id);
+    expect(window.localStorage.getItem(savedKey)).toBeNull();
     expect(messageCaptures()).toHaveLength(1);
   } finally {
     capture.mockRestore();
@@ -523,7 +565,7 @@ it("captures each message endpoint once and reuses it through search, menu and s
   }
 });
 
-it("keeps unloaded legacy saves readable and removable without showing raw IDs", async () => {
+it("keeps unavailable legacy Later rows removable without rewriting their address", async () => {
   const old = {
     provider: account.provider,
     accountId: account.id,
@@ -531,18 +573,14 @@ it("keeps unloaded legacy saves readable and removable without showing raw IDs",
     messageId: "old-ts",
   };
   window.localStorage.setItem(savedKey, JSON.stringify([old]));
-  const view = await mountChat({ source: true });
+  const view = await mountChat({ source: true, view: "later" });
   try {
-    expect(
-      getByRole(view.node, "button", { name: "Save for Later" }).getAttribute("aria-pressed"),
-    ).toBe("false");
-    await act(() => getByRole(view.node, "button", { name: "Later" }).click());
     const list = getByRole(view.node, "list", { name: "Unavailable saved references" });
     expect(list.textContent).toContain("marketing: Saved message (details unavailable)");
-    expect(list.textContent).not.toContain("old-ts");
-    expect(
-      getByText(list, "This saved message is outside the messages loaded here or was removed."),
-    ).toBeDefined();
+    expect(list.textContent).toContain(
+      "This saved message is outside the messages loaded here or was removed.",
+    );
+    expect(view.node.textContent).not.toContain("old-ts");
     expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([old]);
     await act(() => getByRole(list, "button", { name: "Remove from Later" }).click());
     expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([]);
@@ -551,25 +589,208 @@ it("keeps unloaded legacy saves readable and removable without showing raw IDs",
   }
 });
 
+it("lists saved refs before reading history and opens their exact address on demand", async () => {
+  const resourceId = chatResourceId({
+    version: 1,
+    transport: "desktop",
+    connectionId: account.id,
+    workspaceId: "T1",
+    conversationId: channel.id,
+    messageId: "outside-loaded-page",
+    replyRootId: "outside-loaded-page",
+  });
+  const entry = {
+    provider: account.provider,
+    accountId: account.id,
+    conversationId: channel.id,
+    messageId: "outside-loaded-page",
+    environmentId: env,
+    resourceId,
+  };
+  window.localStorage.setItem(savedKey, JSON.stringify([entry]));
+  const view = await mountChat({ view: "later" });
+  try {
+    expect(view.requests.map((request) => request.operation)).toEqual(["conversations.list"]);
+    const list = getByRole(view.node, "list", { name: "Saved references on this device" });
+    await act(() => getByRole(list, "button", { name: "Open saved message in marketing" }).click());
+    expect(boundary.location.item).toBe(resourceId);
+    expect(view.requests.filter((request) => request.operation === "messages.list")).toHaveLength(
+      1,
+    );
+    expect(view.node.textContent).toContain("This message is unavailable.");
+    expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([entry]);
+    await act(() => getByRole(view.node, "button", { name: "Later" }).click());
+    await act(() =>
+      getByRole(
+        getByRole(view.node, "list", { name: "Saved references on this device" }),
+        "button",
+        { name: "Remove from Later" },
+      ).click(),
+    );
+    expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([]);
+  } finally {
+    await view.close();
+  }
+});
+
 it.each(["connected", "operate"] as const)(
-  "gates saving and sending when %s is revoked",
+  "gates sending when %s is revoked",
   async (permission) => {
     const view = await mountChat({ source: true });
     try {
       boundary[permission] = false;
       await act(view.render);
+      expect(queryByRole(view.node, "textbox", { name: "Message text" })).toBeNull();
       const save = getByRole(view.node, "button", { name: "Save for Later" });
       expect(save.hasAttribute("disabled")).toBe(true);
       await act(() => save.click());
+      expect(view.node.textContent).toContain("Read-only on this client.");
       expect(window.localStorage.getItem(savedKey)).toBeNull();
-      const area = getByRole(view.node, "region", { name: "Chat history" });
-      await act(() =>
-        fireEvent.change(getByRole(area, "textbox", { name: "Message text" }), {
-          target: { value: "Do not send" },
-        }),
-      );
-      await act(() => fireEvent.submit(area.querySelector("form")!));
       expect(view.requests.some((request) => request.operation === "messages.send")).toBe(false);
+    } finally {
+      await view.close();
+    }
+  },
+);
+
+it("uses UTC when the workspace display zone is unset", async () => {
+  boundary.zone = undefined;
+  const view = await mountChat({ source: true });
+  try {
+    expect(view.node.querySelector("time")?.textContent).toBe("09:12");
+  } finally {
+    await view.close();
+  }
+});
+
+it("keeps the legacy root notice when history fails without guessing a reply read", async () => {
+  const view = await mountChat({ source: true, message: reply, historyFailure: true });
+  try {
+    expect(
+      getByText(
+        view.node,
+        "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source.",
+      ),
+    ).toBeDefined();
+    expect(view.node.textContent).toContain("History failed");
+    expect(view.requests.filter((request) => request.operation === "messages.list")).toEqual([
+      { operation: "messages.list", accountId: account.id, conversationId: channel.id },
+    ]);
+  } finally {
+    await view.close();
+  }
+});
+
+it("shows unavailable Unread without presenting loaded conversations as unread", async () => {
+  const view = await mountChat({ view: "unread" });
+  try {
+    expect(view.node.textContent).toContain(
+      "Unread conversations are unavailable on this version.",
+    );
+    expect(queryByRole(view.node, "button", { name: "Open marketing" })).toBeNull();
+    expect(queryByRole(view.node, "textbox", { name: "Search loaded conversations" })).toBeNull();
+    expect(queryByRole(view.node, "button", { name: "Filter conversations" })).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each(["later", "unread"] as const)(
+  "lets Cmd/Ctrl+K propagate in %s when conversation search is hidden",
+  async (viewName) => {
+    const view = await mountChat({ view: viewName });
+    const onKey = vi.fn();
+    window.addEventListener("keydown", onKey);
+    try {
+      expect(queryByRole(view.node, "textbox", { name: "Search loaded conversations" })).toBeNull();
+      const target = getByRole(view.node, "button", { name: "Later" });
+      target.focus();
+      for (const modifier of ["metaKey", "ctrlKey"]) {
+        const event = new KeyboardEvent("keydown", {
+          key: "k",
+          [modifier]: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        const stopPropagation = vi.spyOn(event, "stopPropagation");
+        await act(() => target.dispatchEvent(event));
+        expect(event.defaultPrevented).toBe(false);
+        expect(stopPropagation).not.toHaveBeenCalled();
+        expect(onKey).toHaveBeenLastCalledWith(event);
+      }
+    } finally {
+      window.removeEventListener("keydown", onKey);
+      await view.close();
+    }
+  },
+);
+
+it.each(["history", "thread"])(
+  "clears a Discord reply after the %s send and scrolls to the acknowledgement",
+  async (path) => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    const nativeThread = {
+      ...channel,
+      id: "native-thread",
+      title: "Native thread",
+      kind: "thread" as const,
+    };
+    const threadRoot = {
+      ...rootMessage,
+      id: "thread-root",
+      threadId: nativeThread.id,
+      text: "Thread parent",
+    };
+    const view = await mountChat({
+      provider: "discord",
+      source: true,
+      messages: [rootMessage, threadRoot],
+      channels: [channel, nativeThread],
+    });
+    try {
+      const history = getByRole(view.node, "region", { name: "Chat history" });
+      const rootRow = getByText(history, rootMessage.text).closest("article")!;
+      await act(() => getByRole(rootRow, "button", { name: "Reply" }).click());
+      expect(getByRole(history, "button", { name: "Cancel reply" })).toBeDefined();
+      if (path === "thread") {
+        const threadRow = getByText(history, threadRoot.text).closest("article")!;
+        await act(() => getByRole(threadRow, "button", { name: "Reply" }).click());
+      }
+      const area =
+        path === "thread"
+          ? getByRole(view.node, "complementary", { name: "Message thread" })
+          : history;
+      for (const text of ["Acknowledged reply", "Next message"]) {
+        await act(() =>
+          fireEvent.change(getByRole(area, "textbox", { name: "Message text" }), {
+            target: { value: text },
+          }),
+        );
+        await act(() => fireEvent.submit(area.querySelector("form")!));
+        expect(queryByRole(history, "button", { name: "Cancel reply" })).toBeNull();
+        await act(() => {
+          for (const callback of frames.splice(0)) callback(0);
+        });
+        expect(scroll).toHaveBeenLastCalledWith({ block: "nearest" });
+        const scrolled = scroll.mock.instances.at(-1);
+        expect(scrolled).toBeInstanceOf(HTMLElement);
+        if (scrolled instanceof HTMLElement)
+          expect(scrolled.parentElement?.parentElement).toBe(area);
+      }
+      const sends = view.requests.filter((request) => request.operation === "messages.send");
+      expect(sends).toHaveLength(2);
+      if (path === "history") expect(sends[0]).toHaveProperty("replyToId", rootMessage.id);
+      else expect(sends[0]).not.toHaveProperty("replyToId");
+      expect(sends[1]).not.toHaveProperty("replyToId");
+      expect(sends[1]).toHaveProperty(
+        "conversationId",
+        path === "thread" ? nativeThread.id : channel.id,
+      );
     } finally {
       await view.close();
     }

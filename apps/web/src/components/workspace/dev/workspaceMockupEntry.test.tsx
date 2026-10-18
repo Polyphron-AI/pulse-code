@@ -366,7 +366,9 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
         ? "Project tasks"
         : id === "07" || id === "08"
           ? "Marketing stand-up"
-          : `Recipe ${id}`,
+          : id === "02" || id === "05" || id === "06"
+            ? "# marketing"
+            : `Recipe ${id}`,
     );
     expect(result.incompleteRegions).not.toContain("shell.engagement");
     expect(result.incompleteRegions).not.toContain("shell.resources");

@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import type { ChatAccount, ChatRequest } from "@t3tools/contracts";
+import type { ChatAccount, ChatRequest, EnvironmentId } from "@t3tools/contracts";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
@@ -12,10 +12,25 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 
+const desktopDestination = { kind: "desktop" } as const;
+
 export function ConnectCommunicationsDialog({
   onClose,
   onConnected,
+  destination = desktopDestination,
 }: {
+  destination?:
+    | { kind: "desktop" }
+    | {
+        kind: "server";
+        environmentId: EnvironmentId;
+        label: string;
+        connect: (input: {
+          environmentId: EnvironmentId;
+          provider: "slack" | "discord";
+          token: string;
+        }) => Promise<ChatAccount>;
+      };
   onClose: () => void;
   onConnected: (account: ChatAccount) => void;
 }) {
@@ -31,17 +46,33 @@ export function ConnectCommunicationsDialog({
       active.current = false;
     };
   }, []);
+  function close() {
+    active.current = false;
+    setToken("");
+    onClose();
+  }
   async function submit() {
-    if (!invoke || busy) return;
+    if ((destination.kind === "desktop" && !invoke) || busy) return;
     const request: ChatRequest = {
       operation: "accounts.connectToken",
       provider,
       token: token.trim(),
     };
+    setToken("");
     setBusy(true);
     setError(undefined);
     try {
-      const result = await invoke(request);
+      const result =
+        destination.kind === "server"
+          ? {
+              ok: true as const,
+              account: await destination.connect({
+                environmentId: destination.environmentId,
+                provider,
+                token: request.token,
+              }),
+            }
+          : await invoke!(request);
       if (!active.current) return;
       if (!result.ok) {
         setError(result.error.message);
@@ -51,7 +82,11 @@ export function ConnectCommunicationsDialog({
       else setError("The service did not confirm an account. Try again.");
     } catch {
       if (active.current)
-        setError("The desktop communications service could not be reached. Try again.");
+        setError(
+          destination.kind === "server"
+            ? "The selected environment could not be reached. Try again."
+            : "The desktop communications service could not be reached. Try again.",
+        );
     } finally {
       if (active.current) {
         setBusy(false);
@@ -63,15 +98,16 @@ export function ConnectCommunicationsDialog({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) close();
       }}
     >
       <DialogPopup className="w-full">
         <DialogHeader>
           <DialogTitle>Connect a communications account</DialogTitle>
           <DialogDescription>
-            Credentials are sent directly to the desktop service. They are not stored in browser
-            storage.
+            {destination.kind === "desktop"
+              ? "Credentials are sent directly to the desktop service. They are not stored in browser storage."
+              : `Credentials stay in the selected environment. Source: ${destination.label}.`}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -144,7 +180,7 @@ export function ConnectCommunicationsDialog({
               <Link
                 to="/settings/integrations"
                 hash="telegram"
-                onClick={onClose}
+                onClick={close}
                 className="underline"
               >
                 Connect Telegram in Settings
@@ -157,7 +193,7 @@ export function ConnectCommunicationsDialog({
               </p>
             )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={close}>
                 Cancel
               </Button>
               <Button type="submit" disabled={busy}>

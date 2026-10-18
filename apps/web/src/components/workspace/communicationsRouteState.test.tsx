@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { getByRole, getAllByRole, getByText } from "@testing-library/dom";
+import { getByRole, getAllByRole, getByText, queryByRole } from "@testing-library/dom";
 import { beforeAll, expect, it, vi } from "vite-plus/test";
 import {
   EnvironmentId,
@@ -78,6 +78,7 @@ vi.mock("@effect/atom-react", async (original) => ({
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
 vi.mock("../../state/environments", () => ({
   useEnvironment: () => ({ label: "Source" }),
+  usePrimaryEnvironmentId: () => "source-env",
   useConnectedEnvironmentIds: () => (boundary.connected ? ["source-env"] : []),
 }));
 vi.mock("../../state/session", () => ({
@@ -232,7 +233,7 @@ it.each(["route search", "equal source"])(
       await act(() =>
         getAllByRole(node, "button", { name: "Load more conversations" })[0]!.click(),
       );
-      expect(getByRole(node, "button", { name: /Second page Team/ })).toBeDefined();
+      expect(getByRole(node, "button", { name: "Open Second page" })).toBeDefined();
       const before = requests.length;
       await act(() => {
         if (change === "route search") {
@@ -245,12 +246,20 @@ it.each(["route search", "equal source"])(
           render(nextSource);
         }
       });
+      if (change === "route search") {
+        expect(queryByRole(node, "button", { name: "Open Second page" })).toBeNull();
+        expect(getByText(node, "Saved messages on this device.")).toBeDefined();
+        await act(() => {
+          boundary.search = { ...boundary.search, view: "chats" };
+          boundary.listeners.forEach((listener) => listener());
+        });
+      }
       expect(requests).toHaveLength(before);
       expect(requests.filter((request) => request.operation === "accounts.list")).toHaveLength(1);
       expect(requests.filter((request) => request.operation === "conversations.list")).toHaveLength(
         2,
       );
-      expect(getByRole(node, "button", { name: /Second page Team/ })).toBeDefined();
+      expect(getByRole(node, "button", { name: "Open Second page" })).toBeDefined();
     } finally {
       await act(() => root.unmount());
       node.remove();

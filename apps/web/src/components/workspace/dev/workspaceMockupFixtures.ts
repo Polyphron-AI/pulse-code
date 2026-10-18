@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import {
+  chatResourceId,
   EnvironmentId,
   ProjectId,
   ThreadId,
@@ -148,6 +149,7 @@ export interface WorkspaceMockupModule {
   readonly incompleteRegions?: readonly string[];
   readonly settled: () => Promise<void>;
   readonly center?: ReactNode;
+  readonly renderEngagement?: (resources: ReactNode) => ReactNode;
   readonly resource?: ReactNode;
   readonly dispose: () => void;
 }
@@ -668,7 +670,15 @@ export function createWorkspaceMockupSeed(): WorkspaceMockupSeed {
         ref: {
           type: "provider-resource",
           provider: "slack",
-          resourceId: "slack-marketing/message-1",
+          resourceId: chatResourceId({
+            version: 1,
+            transport: "server",
+            connectionId: "fixture-slack",
+            workspaceId: "fixture-team",
+            conversationId: "slack-marketing",
+            messageId: "message-1",
+            replyRootId: "message-1",
+          }),
         },
       },
       {

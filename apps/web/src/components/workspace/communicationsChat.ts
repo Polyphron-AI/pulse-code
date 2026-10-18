@@ -124,3 +124,91 @@ export function sendAttempt(
     ? previous
     : { text, nonce: createNonce(), destination };
 }
+
+export interface ConversationRow {
+  readonly key: string;
+  readonly title: string;
+  readonly endpoint: WorkspaceLinkEndpoint;
+  readonly kind: ChatConversation["kind"];
+  readonly initials?: string;
+  readonly knownUnread?: number;
+}
+export interface ConversationGroup {
+  readonly key?: string;
+  readonly label: string;
+  readonly rows: readonly ConversationRow[];
+  readonly project?: boolean;
+}
+export interface ConversationProject {
+  readonly key: string;
+  readonly label: string;
+  readonly conversationKeys: readonly string[];
+}
+const nameSegments = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+export function conversationInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const initial = (word: string | undefined) =>
+    word ? nameSegments.segment(word)[Symbol.iterator]().next().value?.segment : undefined;
+  return (
+    [initial(parts[0]), parts.length > 1 ? initial(parts.at(-1)) : undefined]
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
+
+/** Only confirmed link readers supply project membership, never provider workspace names. */
+export function conversationGroups(
+  rows: readonly ConversationRow[],
+  projects: readonly ConversationProject[],
+  provider: string,
+): readonly ConversationGroup[] {
+  const linked = new Set(projects.flatMap((project) => project.conversationKeys));
+  const general = rows.filter((row) => row.kind !== "dm" && !linked.has(row.key));
+  const direct = provider === "slack" ? rows.filter((row) => row.kind === "dm") : [];
+  return [
+    ...(general.length ? [{ label: "General", rows: general }] : []),
+    ...projects
+      .map((project) => ({
+        key: project.key,
+        label: project.label,
+        project: true,
+        rows: rows.filter((row) => project.conversationKeys.includes(row.key) && row.kind !== "dm"),
+      }))
+      .filter((group) => group.rows.length > 0),
+    ...(direct.length ? [{ label: "Direct messages", rows: direct }] : []),
+  ];
+}
+export interface ConversationMemberCount {
+  readonly value: number;
+  readonly complete: boolean;
+  readonly observedAt: string;
+}
+/** Display-only freshness limit until generation-scoped membership readers are available. */
+export const CONVERSATION_MEMBERSHIP_FRESHNESS_MS = 5 * 60_000;
+/** Failed or disconnected sources omit membership without initiating a fetch. */
+export function conversationSubtitle(
+  providerLabel: string,
+  projectTitle?: string,
+  memberCount?: ConversationMemberCount,
+  now = new Date().toISOString(),
+  sourceAvailable = true,
+) {
+  const age = memberCount ? Date.parse(now) - Date.parse(memberCount.observedAt) : NaN;
+  const fresh = sourceAvailable && age >= 0 && age <= CONVERSATION_MEMBERSHIP_FRESHNESS_MS;
+  const memberText =
+    memberCount?.complete === true &&
+    fresh &&
+    Number.isInteger(memberCount.value) &&
+    memberCount.value >= 0
+      ? ` · ${memberCount.value} members`
+      : "";
+  return `${projectTitle ? `${projectTitle} · ` : ""}${providerLabel}${memberText}`;
+}
+export function legacySlackNotice(
+  provider: string,
+  resource: Pick<ChatResource, "messageId" | "replyRootId">,
+) {
+  return provider === "slack" && resource.messageId && !resource.replyRootId
+    ? "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source."
+    : undefined;
+}

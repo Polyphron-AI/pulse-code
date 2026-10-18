@@ -1,5 +1,10 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { normalizeLinkUrl, WorkspaceLinkEndpoint, WorkspaceLinkList } from "@t3tools/contracts";
+import {
+  chatResourceId,
+  normalizeLinkUrl,
+  WorkspaceLinkEndpoint,
+  WorkspaceLinkList,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import {
   WorkspaceBrowserExternalPage,
@@ -29,7 +34,17 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     session.browserState === "empty-results" ||
     session.browserState === "truncated-results";
   const target = decodeEndpoint({
-    ref: { type: "provider-resource", provider: "slack", resourceId: "slack-marketing" },
+    ref: {
+      type: "provider-resource",
+      provider: "slack",
+      resourceId: chatResourceId({
+        version: 1,
+        transport: "server",
+        connectionId: "fixture-slack",
+        workspaceId: "fixture-team",
+        conversationId: "slack-marketing",
+      }),
+    },
     title: "Marketing channel",
   });
   const pages = decodeLinkList({

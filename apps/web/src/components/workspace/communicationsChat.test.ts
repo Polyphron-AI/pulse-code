@@ -2,6 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 import type { ChatMessage } from "@t3tools/contracts";
 import {
   chatReferenceKey,
+  conversationInitials,
+  conversationGroups,
+  conversationSubtitle,
+  legacySlackNotice,
   createRequestQueue,
   mergeChatMessages,
   sendAttempt,
@@ -60,3 +64,71 @@ describe("communications chat state", () => {
     expect(result.map((item) => item.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
   });
 });
+
+it("derives initials from name parts", () => {
+  expect(conversationInitials("Maya Chen")).toBe("MC");
+  expect(conversationInitials("  Leo   Martins ")).toBe("LM");
+  expect(conversationInitials("Nina")).toBe("N");
+  expect(conversationInitials("👩🏽‍💻 Chen")).toBe("👩🏽‍💻C");
+  expect(conversationInitials("e\u0301 Martin")).toBe("E\u0301M");
+  expect(conversationInitials("🇿🇦")).toBe("🇿🇦");
+});
+it("requires confirmed project provenance and preserves one endpoint across groups", () => {
+  const endpoint = {
+    ref: { type: "url" as const, url: "https://example.invalid/" },
+    title: "SynKEK",
+  };
+  const rows = [
+    { key: "same", title: "SynKEK", endpoint, kind: "channel" as const },
+    { key: "dm", title: "Maya Chen", endpoint, kind: "dm" as const },
+  ];
+  expect(conversationGroups(rows, [], "discord").map((group) => group.label)).toEqual(["General"]);
+  const groups = conversationGroups(
+    rows,
+    [
+      { key: "p1", label: "One", conversationKeys: ["same"] },
+      { key: "p2", label: "Two", conversationKeys: ["same"] },
+    ],
+    "slack",
+  );
+  expect(groups.map((group) => group.label)).toEqual(["One", "Two", "Direct messages"]);
+  expect(groups[0]!.rows[0]!.endpoint).toBe(groups[1]!.rows[0]!.endpoint);
+});
+it("shows only complete fresh source membership including zero", () => {
+  const fresh = { complete: true, value: 0, observedAt: "2026-10-13T08:30:00Z" };
+  expect(conversationSubtitle("Slack", "Project", fresh, "2026-10-13T08:30:01Z")).toBe(
+    "Project · Slack · 0 members",
+  );
+  expect(
+    conversationSubtitle("Slack", undefined, { ...fresh, complete: false }, "2026-10-13T08:30:01Z"),
+  ).toBe("Slack");
+  expect(conversationSubtitle("Slack", undefined, fresh, "2026-10-14T08:30:00Z")).toBe("Slack");
+  expect(conversationSubtitle("Slack", undefined, fresh, "2026-10-13T08:30:01Z", false)).toBe(
+    "Slack",
+  );
+});
+it("retains the spec-pinned legacy Slack warning before loaded-message availability", () => {
+  expect(legacySlackNotice("slack", { messageId: "1" })).toBe(
+    "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source.",
+  );
+  expect(legacySlackNotice("discord", { messageId: "1" })).toBeUndefined();
+});
+
+it.each([
+  ["2026-10-13T08:30:00Z", "2026-10-13T08:35:00Z", 8, true, true, "Slack · 8 members"],
+  ["2026-10-13T08:30:00Z", "2026-10-13T08:35:00.001Z", 8, true, true, "Slack"],
+  ["2026-10-13T08:30:01Z", "2026-10-13T08:30:00Z", 8, true, true, "Slack"],
+  ["2026-10-13T08:30:00Z", "2026-10-13T08:30:01Z", -1, true, true, "Slack"],
+  ["2026-10-13T08:30:00Z", "2026-10-13T08:30:01Z", 1.5, true, true, "Slack"],
+  ["bad", "2026-10-13T08:30:01Z", 8, true, true, "Slack"],
+  ["2026-10-13T08:30:00Z", "bad", 8, true, true, "Slack"],
+  ["2026-10-13T08:30:00Z", "2026-10-13T08:30:01Z", 8, true, false, "Slack"],
+  ["2026-10-13T08:30:00Z", "2026-10-13T08:30:01Z", 8, false, true, "Slack"],
+])(
+  "bounds membership freshness at observed=%s now=%s value=%s complete=%s available=%s",
+  (observedAt, now, value, complete, available, expected) => {
+    expect(
+      conversationSubtitle("Slack", undefined, { observedAt, value, complete }, now, available),
+    ).toBe(expected);
+  },
+);

@@ -1,22 +1,19 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearch } from "@tanstack/react-router";
-import {
-  EnvironmentId,
-  parseChatResourceId,
-  type ChatAccount,
-  type ChatResource,
-} from "@t3tools/contracts";
-import { PlusIcon, RefreshCwIcon, UnplugIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { EnvironmentId, type ChatAccount, type ChatResource } from "@t3tools/contracts";
+import { EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
-import { RequestState } from "./office/shared";
+import { usePrimaryEnvironmentId } from "../../state/environments";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import { ChatCommunicationsWorkspace } from "./ChatCommunicationsWorkspace";
 import { TelegramWorkspace } from "./TelegramWorkspace";
 import { ConnectCommunicationsDialog } from "./ConnectCommunicationsDialog";
+import "./communications.css";
 
 const key = (provider: string, id: string) => JSON.stringify([provider, id]);
 const providerNames = {
@@ -31,161 +28,228 @@ export type ChatSource = {
 };
 export function CommunicationsWorkspace({ source }: { source?: ChatSource | undefined }) {
   const search = useSearch({ strict: false });
+  const capability = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
   return search.communicationProvider === "telegram" ? (
-    <TelegramWorkspace key={`${search.environment}:${search.account}:${search.item}`} />
+    <TelegramWorkspace key={JSON.stringify([capability.environmentId, search.account])} />
   ) : (
-    <DesktopCommunicationsWorkspace source={source} />
+    <DesktopCommunicationsWorkspace
+      key={capability.environmentId}
+      environmentId={capability.environmentId}
+      source={source}
+    />
   );
 }
-function DesktopCommunicationsWorkspace({ source }: { source?: ChatSource | undefined }) {
-  const { run, available, busy, error } = useCommunicationsRequest();
+function DesktopCommunicationsWorkspace({
+  source,
+  environmentId,
+}: {
+  source?: ChatSource | undefined;
+  environmentId: EnvironmentId | null;
+}) {
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
+  const primary = usePrimaryEnvironmentId();
+  const compact = useMediaQuery("max-md");
+  const request = useCommunicationsRequest();
+  const available = request.available && environmentId !== null && environmentId === primary;
+  const { run, busy, error } = request;
   const [chatAccounts, setChatAccounts] = useState<readonly ChatAccount[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [connectOpen, setConnectOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const mounted = useRef(true);
+  const generation = useRef(0);
+  const sourceProvider = source?.provider ?? search.communicationProvider;
+  const requestedAccount = source?.resource.connectionId ?? search.account;
+  const transport = source?.resource.transport;
   const selectedChat = chatAccounts.find(
-    (account) => key(account.provider, account.id) === selectedKey,
+    (account) =>
+      key(account.provider, account.id) === selectedKey &&
+      (!requestedAccount ||
+        (account.id === requestedAccount && account.provider === sourceProvider)),
   );
-  const sourceId = source?.resourceId;
-  const sourceProvider = source?.provider;
   const refresh = useCallback(async () => {
-    const resource = sourceId ? parseChatResourceId(sourceId) : undefined;
-    let chat: readonly ChatAccount[] | undefined;
-    if (available && (!sourceId || resource?.transport === "desktop")) {
-      const response = await run({ operation: "accounts.list" });
-      if (response) chat = response.accounts ?? [];
-    }
-    if (!mounted.current) return;
-    if (chat) {
-      setChatAccounts(chat);
-      setSelectedKey((previous) =>
-        chat.some((account) => key(account.provider, account.id) === previous)
+    const current = ++generation.current;
+    if (!available || transport === "server") return;
+    const response = await run({ operation: "accounts.list" });
+    if (!mounted.current || current !== generation.current || !response) return;
+    const chat = response.accounts ?? [];
+    setChatAccounts(chat);
+    setSelectedKey((previous) =>
+      requestedAccount
+        ? chat.some(
+            (account) => account.provider === sourceProvider && account.id === requestedAccount,
+          )
+          ? key(sourceProvider!, requestedAccount)
+          : ""
+        : chat.some((account) => key(account.provider, account.id) === previous)
           ? previous
-          : resource && sourceProvider
-            ? resource.transport === "desktop" &&
-              chat.some(
-                (account) =>
-                  account.provider === sourceProvider && account.id === resource.connectionId,
-              )
-              ? key(sourceProvider, resource.connectionId)
-              : ""
-            : chat?.[0]
-              ? key(chat[0].provider, chat[0].id)
-              : "",
-      );
-    }
+          : chat[0]
+            ? key(chat[0].provider, chat[0].id)
+            : "",
+    );
     setLoaded(true);
-  }, [available, run, sourceProvider, sourceId]);
+  }, [available, run, sourceProvider, requestedAccount, transport]);
   useEffect(() => {
     mounted.current = true;
     void refresh();
     return () => {
       mounted.current = false;
+      generation.current++;
     };
   }, [refresh]);
-  async function disconnect() {
-    if (!selectedChat || busy) return;
-    const response = await run({ operation: "accounts.disconnect", accountId: selectedChat.id });
-    if (!response) return;
-    await refresh();
-  }
-  const search = useSearch({ strict: false });
-  const { environmentId } = useMailCapabilities(
-    search.environment ? EnvironmentId.make(search.environment) : undefined,
-  );
   const header = useWorkspaceHeaderModel(environmentId, "Communications", "Communications");
   const controls = (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
-      {error && (
-        <div className="w-full">
-          <RequestState busy={busy} error={error} />
-        </div>
-      )}
-      <label className="min-w-0 flex-1">
-        <span className="sr-only">Connected communications account</span>
-        <select
-          aria-label="Connected communications account"
-          value={selectedKey}
-          disabled={busy}
-          onChange={(event) => setSelectedKey(event.target.value)}
-          className="max-w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-        >
-          <option value="">Choose an account</option>
-          {chatAccounts.map((account) => (
-            <option
-              key={key(account.provider, account.id)}
-              value={key(account.provider, account.id)}
-            >
-              {providerNames[account.provider]} · {account.label} · {account.identity}
-            </option>
-          ))}
-        </select>
-      </label>
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        aria-label="Refresh account list"
-        disabled={busy || !available}
-        onClick={() => void refresh()}
-      >
-        <RefreshCwIcon />
-      </Button>
-      {selectedChat && (
+    <details
+      data-communications-source-menu=""
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector("summary")?.focus();
+          event.stopPropagation();
+        }
+      }}
+    >
+      <summary role="button" aria-label="Communications accounts and settings">
+        <EllipsisIcon />
+        Accounts
+      </summary>
+      <div data-communications-source-controls="">
+        <label>
+          Connected communications account
+          <select
+            aria-label="Connected communications account"
+            value={selectedKey}
+            disabled={busy || !available}
+            onChange={(event) => {
+              const selected = chatAccounts.find(
+                (account) => key(account.provider, account.id) === event.target.value,
+              );
+              setSelectedKey(event.target.value);
+              if (selected && (selected.provider === "slack" || selected.provider === "discord"))
+                void navigate({
+                  to: "/workspace",
+                  search: {
+                    space: "communications",
+                    ...(environmentId ? { environment: environmentId } : {}),
+                    communicationProvider: selected.provider,
+                    account: selected.id,
+                  },
+                });
+            }}
+          >
+            <option value="">Choose an account</option>
+            {chatAccounts.map((account) => (
+              <option
+                key={key(account.provider, account.id)}
+                value={key(account.provider, account.id)}
+              >
+                {providerNames[account.provider]} · {account.label} · {account.identity}
+              </option>
+            ))}
+          </select>
+        </label>
         <Button
-          size="icon-sm"
+          size="sm"
           variant="ghost"
-          aria-label={`Disconnect ${selectedChat.label}`}
-          disabled={busy}
-          onClick={() => void disconnect()}
+          disabled={busy || !available}
+          onClick={() => void refresh()}
         >
-          <UnplugIcon />
+          Refresh account list
         </Button>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={!available}
-        onClick={() => setConnectOpen(true)}
-      >
-        <PlusIcon />
-        <span className="hidden sm:inline">Connect chat</span>
-      </Button>
-      <Link
-        to="/workspace"
-        search={{
-          space: "office",
-          officeView: "communications",
-          communicationProvider: "telegram",
-        }}
-        className="shrink-0 text-sm underline underline-offset-4"
-      >
-        Telegram bots
-      </Link>
-      <Link to="/settings/email" className="shrink-0 text-xs underline underline-offset-4">
-        Email accounts
-      </Link>
-    </div>
+        {selectedChat ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy || !available}
+            onClick={async () => {
+              const response = await run({
+                operation: "accounts.disconnect",
+                accountId: selectedChat.id,
+              });
+              if (response && mounted.current) {
+                setSelectedKey("");
+                setChatAccounts((rows) =>
+                  rows.filter(
+                    (row) => row.id !== selectedChat.id || row.provider !== selectedChat.provider,
+                  ),
+                );
+                void navigate({
+                  to: "/workspace",
+                  search: {
+                    space: "communications",
+                    ...(environmentId ? { environment: environmentId } : {}),
+                  },
+                });
+              }
+            }}
+          >
+            Disconnect {selectedChat.label}
+          </Button>
+        ) : null}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!available}
+          onClick={() => setConnectOpen(true)}
+        >
+          Connect chat
+        </Button>
+        <p>
+          Server Slack and Discord connections are unavailable on this version. Open Pulse desktop
+          to use a desktop account.
+        </p>
+        <Link
+          to="/workspace"
+          search={{
+            space: "communications",
+            communicationProvider: "telegram",
+            ...(environmentId ? { environment: environmentId } : {}),
+          }}
+        >
+          Telegram bots
+        </Link>
+        <Link to="/settings/integrations" hash="telegram">
+          Manage Telegram in Settings
+        </Link>
+      </div>
+    </details>
   );
-  const content = (
-    <>
-      {selectedChat?.provider === "telegram" ? (
-        <main className="space-y-3 p-6">
-          <h1 className="text-lg font-semibold">Personal Telegram login has been retired</h1>
-          <p className="text-sm text-muted-foreground">
-            Your saved personal account record and credentials have been retained. Connect a server
-            bot and pair the chats you want to read.
-          </p>
-          <Link to="/settings/integrations" hash="telegram" className="text-sm underline">
-            Connect Telegram in Settings
-          </Link>
-        </main>
-      ) : selectedChat ? (
+  const unavailable = source && legacySourceNotice(source, available, loaded, chatAccounts);
+  const setup = (
+    <main className="p-6">
+      <h2 className="text-lg font-semibold">
+        {source ? "Conversation unavailable here" : "Your conversations, together"}
+      </h2>
+      <p className="mt-3 max-w-xl text-sm text-muted-foreground">
+        {unavailable ||
+          (!available
+            ? "Open Pulse desktop to connect your accounts. Credentials and sessions stay on that computer; this web connection cannot access them."
+            : !loaded
+              ? "Loading connected accounts..."
+              : selectedChat?.provider === "telegram"
+                ? "Personal Telegram login has been retired. Connect a server bot in Settings, then pair a chat."
+                : "Choose an account from Communications accounts and settings, connect Slack, or add a Discord bot. Connect Telegram bots in Settings.")}
+      </p>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Unread is unavailable on this version. Existing saved references remain on this device.
+      </p>
+    </main>
+  );
+  return (
+    <div data-communications-workspace="">
+      {available &&
+      selectedChat &&
+      selectedChat.provider !== "telegram" &&
+      transport !== "server" ? (
         <ChatCommunicationsWorkspace
-          key={JSON.stringify([selectedChat.provider, selectedChat.id])}
+          key={JSON.stringify([environmentId, selectedChat.provider, selectedChat.id])}
           account={selectedChat}
           environmentId={environmentId}
-          controls={controls}
+          accountError={error}
+          accountControls={controls}
           source={
             source?.provider === selectedChat.provider &&
             source.resource.connectionId === selectedChat.id
@@ -194,63 +258,72 @@ function DesktopCommunicationsWorkspace({ source }: { source?: ChatSource | unde
           }
         />
       ) : (
-        <main className="flex-1 overflow-y-auto p-6">
-          <h1 className="text-xl font-semibold">
-            {source ? "Conversation unavailable here" : "Your conversations, together"}
-          </h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            {source && !available && source.resource.transport === "desktop"
-              ? "This conversation is available only on its desktop connection."
-              : source && source.resource.transport === "server"
-                ? "This server conversation reader is not available on this client yet."
-                : source && loaded
-                  ? chatAccounts.some(
-                      (account) =>
-                        account.provider === source.provider &&
-                        account.id === source.resource.connectionId,
-                    )
-                    ? "Choose the original account above to open this conversation."
-                    : "This conversation's desktop connection is not on this device or was removed."
-                  : !available
-                    ? "Open Pulse desktop to connect your accounts. Credentials and sessions stay on that computer; this web connection cannot access them."
-                    : !loaded
-                      ? "Loading connected accounts…"
-                      : "Choose an account above, connect Slack, or add a Discord bot. Connect Telegram bots in Settings."}
-          </p>
-          <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted-foreground">
-            Slack uses your token permissions. Telegram bots read received messages from paired
-            chats. Discord exposes bot-accessible team channels, not a personal inbox. Read mail in
-            the Mail space.
-          </p>
-        </main>
+        <WorkspaceEngagement
+          environmentId={environmentId}
+          space="communications"
+          layout="split"
+          selected={false}
+          list={
+            <div data-communications-account-pane="">
+              {controls}
+              {compact ? setup : null}
+            </div>
+          }
+          header={header}
+          resources={<WorkspaceProjectResources />}
+        >
+          {compact ? null : setup}
+        </WorkspaceEngagement>
       )}
-      {connectOpen && (
+      {error && !selectedChat ? (
+        <p role="alert" className="absolute bottom-2 left-3 text-xs">
+          {error}
+        </p>
+      ) : null}
+      {connectOpen ? (
         <ConnectCommunicationsDialog
+          destination={{ kind: "desktop" }}
           onClose={() => setConnectOpen(false)}
           onConnected={(account) => {
+            setConnectOpen(false);
+            if (!mounted.current) return;
             setChatAccounts((previous) => [
-              ...previous.filter((item) => item.id !== account.id),
+              ...previous.filter(
+                (item) => key(item.provider, item.id) !== key(account.provider, account.id),
+              ),
               account,
             ]);
             setSelectedKey(key(account.provider, account.id));
-            setConnectOpen(false);
+            if (account.provider === "slack" || account.provider === "discord")
+              void navigate({
+                to: "/workspace",
+                search: {
+                  space: "communications",
+                  ...(environmentId ? { environment: environmentId } : {}),
+                  communicationProvider: account.provider,
+                  account: account.id,
+                },
+              });
           }}
         />
-      )}
-    </>
+      ) : null}
+    </div>
   );
-  return selectedChat && selectedChat.provider !== "telegram" ? (
-    content
-  ) : (
-    <WorkspaceEngagement
-      environmentId={environmentId}
-      space="communications"
-      layout="full"
-      header={header}
-      resources={<WorkspaceProjectResources />}
-    >
-      {controls}
-      {content}
-    </WorkspaceEngagement>
-  );
+}
+function legacySourceNotice(
+  source: ChatSource,
+  available: boolean,
+  loaded: boolean,
+  accounts: readonly ChatAccount[],
+) {
+  if (source.resource.transport === "server")
+    return "This server conversation reader is not available on this client yet.";
+  if (!available) return "This conversation is available only on its desktop connection.";
+  if (!loaded) return "Loading connected accounts...";
+  return accounts.some(
+    (account) =>
+      account.provider === source.provider && account.id === source.resource.connectionId,
+  )
+    ? "Choose the original account from Communications accounts and settings to open this conversation."
+    : "This conversation's desktop connection is not on this device or was removed.";
 }

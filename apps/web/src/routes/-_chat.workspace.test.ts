@@ -309,6 +309,10 @@ it("retains exact calendar deep links and validates the independent selected day
   );
 });
 
+vi.mock("../state/environments", async (original) => ({
+  ...(await original<typeof import("../state/environments")>()),
+  usePrimaryEnvironmentId: () => EnvironmentId.make("remote"),
+}));
 vi.mock("../components/workspace/mail/useMailCapabilities", () => ({
   useMailCapabilities: (environmentId?: EnvironmentId) => ({
     environmentId: environmentId ?? EnvironmentId.make("remote"),
@@ -338,6 +342,7 @@ vi.mock("../components/workspace/WorkspaceResourcesPanel", () => ({
     );
   },
 }));
+vi.mock("../hooks/useSettings", () => ({ useEnvironmentSettings: () => undefined }));
 
 it.each([undefined, "explicit"])(
   "opens an exact standalone note in Docs using project %s without inventing an event",
@@ -670,23 +675,25 @@ it.each([
       expect(router.state.location.search.item).toBe(item);
       if (kind === "choose-account") {
         await act(() =>
+          getByRole(node, "button", { name: "Communications accounts and settings" }).click(),
+        );
+        await act(() =>
           fireEvent.change(
             getByRole(node, "combobox", { name: "Connected communications account" }),
             { target: { value: "" } },
           ),
         );
         expect(
-          getByText(node, "Choose the original account above to open this conversation."),
+          getByText(
+            node,
+            "Choose the original account from Communications accounts and settings to open this conversation.",
+          ),
         ).toBeDefined();
       }
       if (kind === "legacy-saved") {
-        await act(() => getByRole(node, "button", { name: "Later" }).click());
-        expect(queryByRole(node, "list", { name: "Unavailable saved references" })).toBeNull();
         expect(node.textContent).toContain("Exact source message");
         expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual(oldSaved);
-        expect(
-          getByRole(node, "button", { name: "Remove from Later" }).hasAttribute("disabled"),
-        ).toBe(true);
+        expect(getByRole(node, "button", { name: "Remove from Later" })).toBeDefined();
         expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual(oldSaved);
       }
     } finally {

@@ -79,8 +79,8 @@ function FixtureReport() {
     sample: true,
     owner: { name: owner.name, initials: owner.initials },
   };
-  const center = runtime.modules.find((module) => module.area === session.recipe.centerArea)
-    ?.center ?? (
+  const centerModule = runtime.modules.find((module) => module.area === session.recipe.centerArea);
+  const center = centerModule?.center ?? (
     <main aria-label="Workspace fixture readiness" className="p-4">
       <h2>Recipe {session.id}</h2>
       <p>Module body pending its owning wave.</p>
@@ -103,6 +103,41 @@ function FixtureReport() {
       onNavigate={(destination) => recordNavigation(`space:${destination}`)}
       onSettings={() => recordNavigation("settings")}
       onToggleSidebar={() => setMenuOpen(false)}
+    />
+  );
+  const resourcePanel = (
+    <WorkspaceResourcesPanelView
+      projects={session.seed.projects}
+      selectedProjectId={resources.projectId}
+      status={
+        selectedProject ? "selected" : resources.projectId === null ? "choose" : "unavailable"
+      }
+      tab={resources.selectedTab}
+      onTabChange={resources.selectTab}
+      onChooseProject={resources.chooseProject}
+      body={
+        selectedProject && resources.selectedTab === session.recipe.resourceTab ? (
+          (resource ?? <p>Resource body pending its owning wave.</p>)
+        ) : (
+          <p>Choose the recipe project and tab to view its sample resource.</p>
+        )
+      }
+      footer={
+        selectedProject ? (
+          <WorkspaceResourceFooter
+            scope={{
+              environmentId: session.environmentId,
+              projectId: selectedProject.id,
+            }}
+            observations={[]}
+            sample
+            onSettings={() => recordNavigation("project-settings")}
+          />
+        ) : (
+          <span>Connection status unavailable</span>
+        )
+      }
+      onClose={resources.close}
     />
   );
   return (
@@ -141,60 +176,26 @@ function FixtureReport() {
           />
         }
         engagement={
-          <WorkspaceEngagement
-            environmentId={session.environmentId}
-            space={session.recipe.space}
-            header={header}
-            storage={session.storage}
-            resources={
-              <WorkspaceResourcesPanelView
-                projects={session.seed.projects}
-                selectedProjectId={resources.projectId}
-                status={
-                  selectedProject
-                    ? "selected"
-                    : resources.projectId === null
-                      ? "choose"
-                      : "unavailable"
-                }
-                tab={resources.selectedTab}
-                onTabChange={resources.selectTab}
-                onChooseProject={resources.chooseProject}
-                body={
-                  selectedProject && resources.selectedTab === session.recipe.resourceTab ? (
-                    (resource ?? <p>Resource body pending its owning wave.</p>)
-                  ) : (
-                    <p>Choose the recipe project and tab to view its sample resource.</p>
-                  )
-                }
-                footer={
-                  selectedProject ? (
-                    <WorkspaceResourceFooter
-                      scope={{
-                        environmentId: session.environmentId,
-                        projectId: selectedProject.id,
-                      }}
-                      observations={[]}
-                      sample
-                      onSettings={() => recordNavigation("project-settings")}
-                    />
-                  ) : (
-                    <span>Connection status unavailable</span>
-                  )
-                }
-                onClose={resources.close}
-              />
-            }
-            {...(session.recipe.space === "mail" || session.recipe.space === "communications"
-              ? {
-                  layout: "split" as const,
-                  selected: true,
-                  list: <p className="p-3 text-xs">List pending its owning wave.</p>,
-                }
-              : { layout: "full" as const })}
-          >
-            {center}
-          </WorkspaceEngagement>
+          centerModule?.renderEngagement ? (
+            centerModule.renderEngagement(resourcePanel)
+          ) : (
+            <WorkspaceEngagement
+              environmentId={session.environmentId}
+              space={session.recipe.space}
+              header={header}
+              storage={session.storage}
+              resources={resourcePanel}
+              {...(session.recipe.space === "mail" || session.recipe.space === "communications"
+                ? {
+                    layout: "split" as const,
+                    selected: true,
+                    list: <p className="p-3 text-xs">List pending its owning wave.</p>,
+                  }
+                : { layout: "full" as const })}
+            >
+              {center}
+            </WorkspaceEngagement>
+          )
         }
       />
     </WorkspaceResourcesProvider>

@@ -4,9 +4,13 @@ import {
   telegramResourceId,
   type TelegramMessage,
   type WorkspaceItemRef,
+  workspaceItemKey,
 } from "@t3tools/contracts";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
+import { ConversationNavigation } from "./ConversationNavigation";
+import { useEnvironmentSettings } from "../../hooks/useSettings";
+import { displayDay, formatDay, formatEventTime } from "@t3tools/client-runtime/calendar/dates";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import { telegram } from "../../state/telegram";
 import { useEnvironmentQuery } from "../../state/query";
@@ -41,7 +45,10 @@ export function TelegramWorkspace() {
       </Link>
       <Link
         to="/workspace"
-        search={{ space: "office", officeView: "communications" }}
+        search={{
+          space: "communications",
+          ...(environmentId ? { environment: environmentId } : {}),
+        }}
         className="text-sm underline"
       >
         Slack and Discord
@@ -104,8 +111,7 @@ function TelegramReader({
     void navigate({
       to: "/workspace",
       search: {
-        space: "office",
-        officeView: "communications",
+        space: "communications",
         communicationProvider: "telegram",
         environment: environmentId,
         account: connection.id,
@@ -161,8 +167,7 @@ function TelegramReader({
         void navigate({
           to: "/workspace",
           search: {
-            space: "office",
-            officeView: "communications",
+            space: "communications",
             communicationProvider: "telegram",
             environment: environmentId,
             account: connection.id,
@@ -183,8 +188,7 @@ function TelegramReader({
                 void navigate({
                   to: "/workspace",
                   search: {
-                    space: "office",
-                    officeView: "communications",
+                    space: "communications",
                     communicationProvider: "telegram",
                     environment: environmentId,
                     account: event.target.value,
@@ -223,30 +227,37 @@ function TelegramReader({
           ) : chats.data.chats.length === 0 ? (
             <MailNotice>No paired chats. Start pairing in Settings.</MailNotice>
           ) : (
-            chats.data.chats.map((row) => (
-              <WorkspaceItemMenu
-                key={row.chatId}
-                environmentId={environmentId}
-                item={{ ref: refFor(connection.id, row.chatId), title: row.title }}
-              >
-                <button
-                  type="button"
-                  aria-current={row.chatId === requested?.chatId ? "page" : undefined}
-                  onClick={() => select(row.chatId)}
-                  className="min-w-0 flex-1 border-b border-border p-3 text-left text-sm hover:bg-accent/50 aria-[current=page]:bg-accent"
-                >
-                  <span className="block truncate font-medium">
-                    {row.title}
-                    {row.active ? "" : " (removed)"}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {!connection.connected || !row.active
-                      ? "Unavailable until connected and paired"
-                      : (row.preview ?? `Paired by ${row.pairedUserLabel}`)}
-                  </span>
-                </button>
-              </WorkspaceItemMenu>
-            ))
+            <ConversationNavigation
+              accountLabels={{ [connection.id]: `${connection.title} (@${connection.username})` }}
+              groups={[
+                {
+                  label: "General",
+                  rows: chats.data.chats.map((row) => {
+                    const endpoint = { ref: refFor(connection.id, row.chatId), title: row.title };
+                    return {
+                      key: workspaceItemKey(endpoint.ref),
+                      title: row.active ? row.title : `${row.title} (removed)`,
+                      endpoint,
+                      kind: "channel" as const,
+                    };
+                  }),
+                },
+              ]}
+              selectedKey={
+                requested ? workspaceItemKey(refFor(connection.id, requested.chatId)) : undefined
+              }
+              onSelect={(endpoint) => {
+                if (endpoint.ref.type === "provider-resource") {
+                  const target = parseTelegramResourceId(endpoint.ref.resourceId);
+                  if (target) select(target.chatId);
+                }
+              }}
+              renderRow={(row, button) => (
+                <WorkspaceItemMenu environmentId={environmentId} item={row.endpoint}>
+                  {button}
+                </WorkspaceItemMenu>
+              )}
+            />
           )}
           {chats.data?.truncated ? (
             <p className="p-3 text-xs text-muted-foreground">
@@ -269,8 +280,8 @@ function TelegramReader({
         <div>
           <header className="space-y-3 border-b border-border p-4">
             <p className="text-xs text-muted-foreground">
-              Received messages only. Media contents are not downloaded. Chat text cannot issue
-              agent commands.
+              Received messages only. Telegram bot replies are not enabled. Media contents are not
+              downloaded. Chat text cannot issue agent commands.
             </p>
             <Button
               size="sm"
@@ -280,8 +291,7 @@ function TelegramReader({
                 void navigate({
                   to: "/workspace",
                   search: {
-                    space: "office",
-                    officeView: "communications",
+                    space: "communications",
                     communicationProvider: "telegram",
                     environment: environmentId,
                     account: connection.id,
@@ -363,11 +373,17 @@ function RemoveChat(props: { environmentId: EnvironmentId; connectionId: string;
     </div>
   );
 }
-function MessageBody({ message }: { message: TelegramMessage }) {
+function MessageBody({ message, timeZone }: { message: TelegramMessage; timeZone: string }) {
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">
-        {message.sender} / {new Date(message.sentAt).toLocaleString()}
+        {message.sender} /{" "}
+        {formatDay(displayDay(new Date(message.sentAt).toISOString(), timeZone), {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })}
+        , {formatEventTime(message.sentAt, timeZone)}
         {message.edited ? " (edited)" : ""}
       </p>
       <pre className="whitespace-pre-wrap break-words font-sans text-sm">{message.text}</pre>
@@ -384,6 +400,8 @@ function TelegramMessageDetail(props: {
   messageId: string;
 }) {
   const { environmentId, ...input } = props;
+  const timeZone =
+    useEnvironmentSettings(environmentId, (settings) => settings.workspaceDisplayTimeZone) ?? "UTC";
   const result = useEnvironmentQuery(telegram.message({ environmentId, input }));
   if (result.error) return <MailError message={result.error} onRetry={result.refresh} />;
   return result.data === null ? (
@@ -394,7 +412,7 @@ function TelegramMessageDetail(props: {
     )
   ) : (
     <div className="p-4">
-      <MessageBody message={result.data} />
+      <MessageBody message={result.data} timeZone={timeZone} />
     </div>
   );
 }
@@ -430,6 +448,9 @@ function TelegramPage(props: {
   last: boolean;
   onMore: (cursor: string) => void;
 }) {
+  const timeZone =
+    useEnvironmentSettings(props.environmentId, (settings) => settings.workspaceDisplayTimeZone) ??
+    "UTC";
   const result = useEnvironmentQuery(
     telegram.messages({
       environmentId: props.environmentId,
@@ -462,7 +483,7 @@ function TelegramPage(props: {
               }}
             >
               <div className="min-w-0 flex-1">
-                <MessageBody message={message} />
+                <MessageBody message={message} timeZone={timeZone} />
                 <Button size="sm" variant="ghost" onClick={() => props.onSelect(message.messageId)}>
                   Open message
                 </Button>
