@@ -231,6 +231,7 @@ import { readWorkflowScript } from "./orchestration-v2/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import { WorkspaceSavedItems } from "./workspace/WorkspaceSavedItems.ts";
 import { SlackConnection } from "./communications/SlackConnection.ts";
+import * as SlackReader from "./communications/SlackReader.ts";
 import { projectHub, WorkspaceLinks } from "./workspace/WorkspaceLinks.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
@@ -1511,10 +1512,13 @@ const savedItemsWsRpcLayer = SavedItemsWsRpcGroup.toLayer(
 const communicationsWsRpcLayer = CommunicationsWsRpcGroup.toLayer(
   Effect.gen(function* () {
     const slack = yield* SlackConnection;
+    const reader = yield* SlackReader.SlackReader;
     return CommunicationsWsRpcGroup.of({
       [WS_METHODS.slackConnect]: slack.connect,
       [WS_METHODS.slackListConnections]: () => slack.list,
       [WS_METHODS.slackDisconnect]: slack.disconnect,
+      [WS_METHODS.slackListConversations]: reader.listConversations,
+      [WS_METHODS.slackListMessages]: reader.listMessages,
     });
   }),
 );
@@ -4318,6 +4322,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       Context.add(MailSendService, yield* MailSendService),
       Context.add(TelegramService, yield* TelegramService),
       Context.add(SlackConnection, yield* SlackConnection),
+      Context.add(SlackReader.SlackReader, yield* SlackReader.SlackReader),
       Context.add(DriveService, yield* DriveService),
       Context.add(WorkspaceTools, yield* WorkspaceTools),
       Context.add(WorkspaceNotes, yield* WorkspaceNotes),

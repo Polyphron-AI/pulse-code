@@ -34,6 +34,12 @@ describe("RPC authorization scopes", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.slackListConnections)).toBe(
       AuthOrchestrationReadScope,
     );
+    expect(requiredScopeForRpcMethod(WS_METHODS.slackListConversations)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.slackListMessages)).toBe(
+      AuthOrchestrationReadScope,
+    );
     expect(requiredScopeForRpcMethod(WS_METHODS.slackConnect)).toBe(AuthOrchestrationOperateScope);
     expect(requiredScopeForRpcMethod(WS_METHODS.slackDisconnect)).toBe(
       AuthOrchestrationOperateScope,
@@ -189,6 +195,14 @@ it.effect("denies Slack connection mutations before invoking handlers in a read-
         Effect.sync(() => {
           calls.push("disconnect");
         }),
+      [WS_METHODS.slackListConversations]: () =>
+        Effect.succeed({
+          conversations: [],
+          observedAt: "2026-10-13T09:00:00.000Z",
+          incomplete: false,
+        }),
+      [WS_METHODS.slackListMessages]: () =>
+        Effect.succeed({ messages: [], observedAt: "2026-10-13T09:00:00.000Z", incomplete: false }),
     });
     const read = yield* RpcTest.makeClient(group).pipe(
       Effect.provide(
@@ -202,6 +216,16 @@ it.effect("denies Slack connection mutations before invoking handlers in a read-
       yield* read[WS_METHODS.slackDisconnect]({ connectionId: account.id }).pipe(Effect.flip),
     ).toMatchObject({ requiredScope: AuthOrchestrationOperateScope });
     expect(yield* read[WS_METHODS.slackListConnections]({})).toEqual([account]);
+    expect(
+      (yield* read[WS_METHODS.slackListConversations]({ connectionId: account.id })).conversations,
+    ).toEqual([]);
+    expect(
+      (yield* read[WS_METHODS.slackListMessages]({
+        connectionId: account.id,
+        workspaceId: "T123",
+        conversationId: "C1",
+      })).messages,
+    ).toEqual([]);
     expect(calls).toEqual(["list"]);
     const operate = yield* RpcTest.makeClient(group).pipe(
       Effect.provide(
@@ -213,6 +237,18 @@ it.effect("denies Slack connection mutations before invoking handlers in a read-
     expect(yield* operate[WS_METHODS.slackListConnections]({}).pipe(Effect.flip)).toMatchObject({
       requiredScope: AuthOrchestrationReadScope,
     });
+    expect(
+      yield* operate[WS_METHODS.slackListConversations]({ connectionId: account.id }).pipe(
+        Effect.flip,
+      ),
+    ).toMatchObject({ requiredScope: AuthOrchestrationReadScope });
+    expect(
+      yield* operate[WS_METHODS.slackListMessages]({
+        connectionId: account.id,
+        workspaceId: "T123",
+        conversationId: "C1",
+      }).pipe(Effect.flip),
+    ).toMatchObject({ requiredScope: AuthOrchestrationReadScope });
     expect(calls).toEqual(["list", "connect", "disconnect"]);
   }).pipe(Effect.scoped),
 );

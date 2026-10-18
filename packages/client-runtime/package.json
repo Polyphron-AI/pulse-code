@@ -7,6 +7,10 @@
       "types": "./src/projectPullRequests.ts",
       "default": "./src/projectPullRequests.ts"
     },
+    "./state/communications": {
+      "types": "./src/state/communications.ts",
+      "default": "./src/state/communications.ts"
+    },
     "./calendar/dates": {
       "types": "./src/calendar/dates.ts",
       "default": "./src/calendar/dates.ts"

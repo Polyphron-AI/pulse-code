@@ -8,6 +8,8 @@ import {
   PulseCommunicationsRpcs,
   SlackConnectInput,
   SlackDisconnectInput,
+  SlackListMessagesInput,
+  CommunicationMessagePage,
 } from "./pulseCommunications.ts";
 import { WS_METHODS, WsRpcGroup } from "./rpc.ts";
 
@@ -93,10 +95,51 @@ describe("server Slack connection contracts", () => {
       "pulse.communications.slack.connect",
       "pulse.communications.slack.listConnections",
       "pulse.communications.slack.disconnect",
+      "pulse.communications.slack.listConversations",
+      "pulse.communications.slack.listMessages",
     ]);
     for (const [key, value] of Object.entries(PULSE_COMMUNICATIONS_METHODS)) {
       expect(WS_METHODS[key as keyof typeof PULSE_COMMUNICATIONS_METHODS]).toBe(value);
       expect(WsRpcGroup.requests.has(value)).toBe(true);
     }
   });
+});
+
+const decodeSlackMessagesInput = Schema.decodeSync(SlackListMessagesInput);
+const isSlackMessagesInput = Schema.is(SlackListMessagesInput);
+const decodeMessagePage = Schema.decodeSync(CommunicationMessagePage);
+const isMessagePage = Schema.is(CommunicationMessagePage);
+
+it("validates exact Slack identities and bounded wire pages without inventing counts", () => {
+  const input = {
+    connectionId: connection.id,
+    workspaceId: "T123",
+    conversationId: "C1",
+    replyRootId: "1760343120.000001",
+  };
+  expect(decodeSlackMessagesInput(input)).toEqual(input);
+  for (const patch of [
+    { workspaceId: "../bad" },
+    { replyRootId: "1e10" },
+    { cursor: "x".repeat(6001) },
+  ])
+    expect(isSlackMessagesInput({ ...input, ...patch })).toBe(false);
+  const message = {
+    id: input.replyRootId,
+    accountId: connection.id,
+    connectionId: connection.id,
+    workspaceId: "T123",
+    conversationId: "C1",
+    author: "U1",
+    date: "2026-10-13T09:32:00.000Z",
+    text: "Hello",
+  };
+  const page = { messages: [message], observedAt: "2026-10-13T09:32:00.000Z", incomplete: false };
+  expect(decodeMessagePage(page)).toEqual(page);
+  expect(isMessagePage({ ...page, messages: Array.from({ length: 101 }, () => message) })).toBe(
+    false,
+  );
+  expect(isMessagePage({ ...page, messages: [{ ...message, text: "😀".repeat(9000) }] })).toBe(
+    false,
+  );
 });

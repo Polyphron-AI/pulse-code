@@ -77,6 +77,7 @@ import * as TelegramService from "./telegram/TelegramService.ts";
 import * as TelegramStore from "./telegram/TelegramStore.ts";
 import * as TelegramBotApi from "./telegram/TelegramBotApi.ts";
 import * as SlackConnection from "./communications/SlackConnection.ts";
+import * as SlackReader from "./communications/SlackReader.ts";
 import * as SlackAccountStore from "./communications/SlackAccountStore.ts";
 import * as MailConfigService from "./mail/MailConfigService.ts";
 import * as MailOAuth from "./mail/MailOAuth.ts";
@@ -675,7 +676,10 @@ const TelegramLayerLive = TelegramService.layer().pipe(
   Layer.provide(TelegramBotApi.layer),
 );
 
-const SlackConnectionLayerLive = SlackConnection.layer.pipe(Layer.provide(SlackAccountStore.layer));
+const SlackConnectionLayerLive = SlackReader.layer.pipe(
+  Layer.provideMerge(SlackConnection.layer),
+  Layer.provide(SlackAccountStore.layer),
+);
 
 const SuggestionsLayerLive = WorkspaceSuggestions.layer.pipe(
   Layer.provide(WorkspaceSuggestionCandidates.layer()),
