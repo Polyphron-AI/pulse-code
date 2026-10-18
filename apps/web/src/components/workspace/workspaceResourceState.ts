@@ -397,6 +397,21 @@ const BrowserDraftsContext = createContext<
   ((key: string) => ReturnType<typeof createBrowserDraft>) | null
 >(null);
 
+interface NoteOpenIntent {
+  readonly locationKey: string;
+  readonly location: string;
+  readonly scope: string;
+}
+const NoteOpenIntentContext = createContext<{
+  readonly read: () => NoteOpenIntent | null;
+  readonly acknowledge: (intent: NoteOpenIntent) => void;
+} | null>(null);
+
+/** A single handled route can resume through Code while this session remains mounted. */
+export function useWorkspaceNoteOpenIntent() {
+  return useContext(NoteOpenIntentContext);
+}
+
 /** Keeps each resource scope's address across chrome and sheet remounts without rendering preview on edits. */
 export function useWorkspaceBrowserDraft(environmentId: EnvironmentId, projectId: ProjectId) {
   const getDraft = useContext(BrowserDraftsContext);
@@ -426,6 +441,15 @@ export function WorkspaceResourcesProvider(props: {
   readonly value: WorkspaceResourcesState;
   readonly children: ReactNode;
 }): ReactNode {
+  const [noteOpenIntent] = useState(() => {
+    let handled: NoteOpenIntent | null = null;
+    return {
+      read: () => handled,
+      acknowledge: (intent: NoteOpenIntent) => {
+        handled = intent;
+      },
+    };
+  });
   const [sessions, setSessions] = useState<NoteSessions>(() => new Map());
   const notes = useMemo(() => ({ sessions, setSessions }), [sessions]);
   const [docSessions, setDocSessions] = useState<DocSessions>(() => new Map());
@@ -453,7 +477,11 @@ export function WorkspaceResourcesProvider(props: {
       createElement(
         DocSessionsContext,
         { value: documents },
-        createElement(BrowserDraftsContext, { value: getBrowserDraft }, props.children),
+        createElement(
+          BrowserDraftsContext,
+          { value: getBrowserDraft },
+          createElement(NoteOpenIntentContext, { value: noteOpenIntent }, props.children),
+        ),
       ),
     ),
   );

@@ -48,8 +48,8 @@ are being repaired. Choosing another resource project creates no links.
 
 A note has its own links and access. Linking a meeting does not give an agent access to its notes.
 Save note checks the revision you edited. A conflict keeps your draft; reload the current note
-only after deciding whether to discard it. Closing Resources or switching tabs keeps an unsaved
-note draft for this workspace session. Leaving the workspace or reloading ends that session.
+only after deciding whether to discard it. Closing Resources, switching tabs or visiting Code
+keeps an unsaved note draft for this app session. Reloading clears that draft.
 Delete note keeps its links as unavailable; Undo delete restores the note when its revision still
 matches. Documents stored by an external provider open and edit with that provider.
 
@@ -107,6 +107,27 @@ A suggestion gives an agent no access to the item. Only confirmed links and exis
 Pasted Drive links work before you connect an account. To search Drive or read a linked file through Pulse Code, connect your own Google account in Settings, Integrations, Google Drive, using your own OAuth client and read-only Drive permission. Choose the connection used for the file. Connecting another Google account does not silently change that choice. See [Google Drive](google-drive.md) for setup and remote sign-in.
 
 Search returns a bounded set of matching files. Supported text files and Google document exports can be read; other files open on Google. Spreadsheet reads use a CSV export of the first sheet. Open the file on Google to work with the other sheets. Pulse Code does not edit or synchronize Drive files. Disconnecting removes read access while keeping your saved links.
+
+## Docs and project pull requests
+
+Choose a project in Resources, then Docs, to browse its linked documents. Related documents say
+which linked item they came through. These are discovery results; link a document directly when
+you want it to become project context. A large list can be incomplete. Back to documents returns
+to the list without changing your current space or resource project.
+
+Choose a Drive connection before reading a Drive file. Pulse keeps that file's account choice
+until you explicitly change it. A device paired with read access to an environment can read that
+environment's bound Drive files. A project link does not narrow that pairing permission.
+Native meeting notes use the selected environment's access and
+revision checks. Supported Markdown displays headings and lists. Other Drive content may have a
+plain-text preview or open with its provider. Comments and sharing information explain their
+availability; an unavailable count does not mean zero comments or no people with access.
+
+PRs collects pull requests already linked to the resource project or its owned or explicitly
+linked threads. Each source remains visible. The collection can be incomplete and does not search
+every repository. Unlink removes only the source you choose; the same pull request can remain
+through another source. Open in Code uses the existing review view when a matching project is
+available. Otherwise, open the pull request on its host. Opening a pull request starts no agent.
 
 ## Telegram
 

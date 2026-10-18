@@ -26,6 +26,12 @@ continuation cursors remain scoped to the owning environment, project, folder pa
 changing a link, binding or connection invalidates that scope. The shared explorer discards stale
 responses and never creates a binding or relationship while browsing.
 
+The project PR collection combines direct project links with existing PR associations from owned
+or explicitly linked threads. It preserves each source so unlinking one association does not
+remove another. A bounded or unavailable source keeps the collection incomplete. Discovery and
+repository browsing grant no linked context. The collection reuses Code's review view when its
+target resolves, with a host URL fallback; it does not create a repository-wide context cache.
+
 Calendar and native notes belong to the selected environment. Desktop account tokens are not
 migrated into the Calendar service. Occurrence identity survives rescheduling, and a confirmed
 meeting link never grants access through a meeting-to-note edge. Each note needs its own direct

@@ -4,6 +4,7 @@ import { useSidebar } from "../ui/sidebar";
 import { WorkspaceModeSwitch } from "./WorkspaceNavigationView";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceEnvironment } from "./useWorkspaceEnvironment";
+import { useWorkspaceNoteOpenIntent } from "./workspaceResourceState";
 import {
   codeReturnHref,
   parseWorkspaceSearch,
@@ -14,9 +15,16 @@ import {
   type WorkspaceDestination,
 } from "./workspaceNavigation";
 
+declare module "@tanstack/react-router" {
+  interface HistoryState {
+    workspaceNoteResumeFrom?: string;
+  }
+}
+
 /** Shared route scope and return memory for the live sidebar and mode switch. */
 export function useWorkspaceNavigation() {
   const navigate = useNavigate();
+  const noteOpenIntent = useWorkspaceNoteOpenIntent();
   const location = useLocation();
   const workspace = location.pathname === "/workspace";
   const search = useMemo(
@@ -41,8 +49,16 @@ export function useWorkspaceNavigation() {
       : {}),
     onModeChange: (mode: "workspace" | "code") => {
       leave();
+      const handledNoteIntent = noteOpenIntent?.read();
       if (mode === "workspace")
-        void navigate({ to: "/workspace", search: workspaceReturnSearch(environmentId) });
+        void navigate({
+          to: "/workspace",
+          search: workspaceReturnSearch(environmentId),
+          state:
+            inCode && handledNoteIntent
+              ? { workspaceNoteResumeFrom: handledNoteIntent.locationKey }
+              : {},
+        });
       else if (!inCode)
         void navigate({ href: environmentId ? codeReturnHref(environmentId) : "/" });
     },

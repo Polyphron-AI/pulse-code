@@ -5,9 +5,12 @@ import {
 } from "../components/workspace/calendar/CalendarSpace";
 import { MeetingsSpace } from "../components/workspace/meetings/MeetingsSpace";
 import { parseNoteLocation, openMeetingNote } from "../components/workspace/meetings/meetingNotes";
-import { useWorkspaceResources } from "../components/workspace/workspaceResourceState";
+import {
+  useWorkspaceResources,
+  useWorkspaceNoteOpenIntent,
+} from "../components/workspace/workspaceResourceState";
 import { parseChatResourceId, ProjectId } from "@t3tools/contracts";
-import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useMemo } from "react";
 import { useEnvironmentQuery } from "../state/query";
 import { workspaceCalendar } from "../state/workspaceCalendar";
@@ -107,6 +110,8 @@ function WorkspaceRouteContent() {
 
 function NoteWorkspace() {
   const search = Route.useSearch();
+  const location = useLocation();
+  const noteOpenIntent = useWorkspaceNoteOpenIntent();
   const { environmentId } = useMailCapabilities(
     search.environment ? EnvironmentId.make(search.environment) : undefined,
   );
@@ -117,13 +122,35 @@ function NoteWorkspace() {
   const header = useWorkspaceHeaderModel(environmentId, "Notes", "Notes");
   const open = useWorkspaceItemOpener(environmentId);
   useEffect(() => {
+    if (
+      location.pathname !== "/workspace" ||
+      JSON.stringify(parseWorkspaceSearch(location.search)) !==
+        JSON.stringify(parseWorkspaceSearch(search))
+    )
+      return;
     if (!environmentId || !note || resources.environmentId !== environmentId) return;
-    const key = JSON.stringify([environmentId, note, projectId]);
+    const scope = JSON.stringify([environmentId, note, projectId]);
+    const locationKey = location.state.__TSR_key;
+    const key = JSON.stringify([locationKey, scope]);
     if (handled.current === key) return;
     handled.current = key;
+    const exactLocation = JSON.stringify([
+      location.pathname,
+      parseWorkspaceSearch(search),
+      location.hash,
+    ]);
+    const previous = noteOpenIntent?.read();
+    const resume =
+      previous &&
+      location.state.workspaceNoteResumeFrom === previous.locationKey &&
+      previous.location === exactLocation &&
+      previous.scope === scope;
+    if (noteOpenIntent && locationKey)
+      noteOpenIntent.acknowledge({ locationKey, location: exactLocation, scope });
+    if (resume) return;
     if (projectId) openMeetingNote(resources, { environmentId, note, projectId });
     else resources.reopen();
-  }, [environmentId, note, projectId, resources]);
+  }, [environmentId, note, projectId, resources, location, search, noteOpenIntent]);
   if (!note) return <UnavailableWorkspace space="meetings" />;
   return (
     <WorkspaceEngagement

@@ -254,6 +254,15 @@ function ProjectProjectionRetention() {
   return null;
 }
 
+function WorkspaceResourceSession({ children }: { readonly children: ReactNode }) {
+  const { environmentId } = useWorkspaceNavigation();
+  const wide = useMediaQuery("xl");
+  const resources = useWorkspaceResourceState(environmentId, {
+    presentation: wide ? "dock" : "sheet",
+  });
+  return <WorkspaceResourcesProvider value={resources}>{children}</WorkspaceResourcesProvider>;
+}
+
 function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
   const navigation = useWorkspaceNavigation();
   const navigate = useNavigate();
@@ -276,10 +285,6 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
     () => ({ environmentLabel: header.environmentLabel, spaceLabel: header.spaceLabel }),
     [header.environmentLabel, header.spaceLabel],
   );
-  const wide = useMediaQuery("xl");
-  const resources = useWorkspaceResourceState(navigation.environmentId, {
-    presentation: wide ? "dock" : "sheet",
-  });
   const content = (
     <WorkspaceNavigation
       {...navigation}
@@ -304,44 +309,42 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
       data-workspace-sidebar={!isMobile && !open ? "closed" : "open"}
     >
       <WorkspaceHeaderContext value={headerLabels}>
-        <WorkspaceResourcesProvider value={resources}>
-          <WorkspaceShellLayout
-            navigation={
-              isMobile ? (
-                <Sidebar aria-label="Workspace menu" data-app-sidebar="">
-                  {content}
-                </Sidebar>
-              ) : (
-                content
-              )
-            }
-            header={header}
-            electron={isElectron}
-            onOpenWorkspace={() => navigation.onNavigate("projects")}
-            rail={
-              destination ? (
-                <WorkspaceViewRail
-                  items={workspaceRailItems[destination]}
-                  selected={navigation.search?.view ?? workspaceRailItems[destination][0]!.id}
-                  onSelect={(view) => {
-                    void navigate({
-                      to: "/workspace",
-                      search: {
-                        ...navigation.search,
-                        space: destination,
-                        view,
-                        ...(navigation.environmentId
-                          ? { environment: navigation.environmentId }
-                          : {}),
-                      },
-                    });
-                  }}
-                />
-              ) : null
-            }
-            engagement={children}
-          />
-        </WorkspaceResourcesProvider>
+        <WorkspaceShellLayout
+          navigation={
+            isMobile ? (
+              <Sidebar aria-label="Workspace menu" data-app-sidebar="">
+                {content}
+              </Sidebar>
+            ) : (
+              content
+            )
+          }
+          header={header}
+          electron={isElectron}
+          onOpenWorkspace={() => navigation.onNavigate("projects")}
+          rail={
+            destination ? (
+              <WorkspaceViewRail
+                items={workspaceRailItems[destination]}
+                selected={navigation.search?.view ?? workspaceRailItems[destination][0]!.id}
+                onSelect={(view) => {
+                  void navigate({
+                    to: "/workspace",
+                    search: {
+                      ...navigation.search,
+                      space: destination,
+                      view,
+                      ...(navigation.environmentId
+                        ? { environment: navigation.environmentId }
+                        : {}),
+                    },
+                  });
+                }}
+              />
+            ) : null
+          }
+          engagement={children}
+        />
       </WorkspaceHeaderContext>
     </div>
   );
@@ -436,47 +439,49 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         defaultOpen
         style={sidebarProviderStyle}
       >
-        <SidebarBrandWidthProbe onWidthChange={setBrandWidth} />
-        <ProjectProjectionRetention />
-        <WorkspaceNavigationTracker />
-        {pathname === "/workspace" ? (
-          <WorkspaceLiveShell>{children}</WorkspaceLiveShell>
-        ) : (
-          <>
-            <Sidebar
-              side="left"
-              collapsible="offcanvas"
-              data-app-sidebar=""
-              role="navigation"
-              aria-label={isOnSettings ? "Settings" : "Threads"}
-              resizable={{
-                maxWidth: sidebarMaximumWidth,
-                minWidth: sidebarMinimumWidth,
-                shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
-                  nextWidth <= currentWidth ||
-                  wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
-                storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
-                onResize: setSidebarWidth,
-              }}
-            >
-              {isOnSettings ? (
-                <>
-                  <SidebarChromeHeader isElectron={isElectron} />
-                  <SettingsSidebarNav pathname={pathname} />
-                </>
-              ) : legacySidebarEnabled ? (
-                <LegacyThreadSidebar />
-              ) : (
-                <ThreadSidebar />
-              )}
-              <SidebarRail onDoubleClick={resetSidebarWidth} />
-            </Sidebar>
-            {children}
-          </>
-        )}
-        <SidebarControl />
-        <NavigationHistoryShortcuts />
-        <MainAppLocationTracker />
+        <WorkspaceResourceSession>
+          <SidebarBrandWidthProbe onWidthChange={setBrandWidth} />
+          <ProjectProjectionRetention />
+          <WorkspaceNavigationTracker />
+          {pathname === "/workspace" ? (
+            <WorkspaceLiveShell>{children}</WorkspaceLiveShell>
+          ) : (
+            <>
+              <Sidebar
+                side="left"
+                collapsible="offcanvas"
+                data-app-sidebar=""
+                role="navigation"
+                aria-label={isOnSettings ? "Settings" : "Threads"}
+                resizable={{
+                  maxWidth: sidebarMaximumWidth,
+                  minWidth: sidebarMinimumWidth,
+                  shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
+                    nextWidth <= currentWidth ||
+                    wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
+                  storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
+                  onResize: setSidebarWidth,
+                }}
+              >
+                {isOnSettings ? (
+                  <>
+                    <SidebarChromeHeader isElectron={isElectron} />
+                    <SettingsSidebarNav pathname={pathname} />
+                  </>
+                ) : legacySidebarEnabled ? (
+                  <LegacyThreadSidebar />
+                ) : (
+                  <ThreadSidebar />
+                )}
+                <SidebarRail onDoubleClick={resetSidebarWidth} />
+              </Sidebar>
+              {children}
+            </>
+          )}
+          <SidebarControl />
+          <NavigationHistoryShortcuts />
+          <MainAppLocationTracker />
+        </WorkspaceResourceSession>
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>
   );
