@@ -14,8 +14,8 @@ import * as Supervisor from "../connection/supervisor.ts";
 import { getInitialServerConfig, request } from "../rpc/client.ts";
 import {
   createAtomCommandScheduler,
+  createEnvironmentRpcCommand,
   createEnvironmentQueryAtomFamily,
-  createEnvironmentRpcQueryAtomFamily,
   executeAtomQuery,
   type AtomCommandResult,
 } from "./runtime.ts";
@@ -106,13 +106,12 @@ export function createCommunicationsAtoms<R, E>(
         ),
       );
     });
-  const slackConnections = createEnvironmentRpcQueryAtomFamily(runtime, {
+  const connections = createEnvironmentQueryAtomFamily(runtime, {
     label: "communications:slack-connections",
-    tag: WS_METHODS.slackListConnections,
     idleTtlMs: 0,
     staleTimeMs: Infinity,
-    execute: (input) =>
-      requireSupport.pipe(Effect.andThen(request(WS_METHODS.slackListConnections, input))),
+    execute: (_input: { generation: number }) =>
+      requireSupport.pipe(Effect.andThen(request(WS_METHODS.slackListConnections, {}))),
   });
   const conversations = createEnvironmentQueryAtomFamily(runtime, {
     label: "communications:slack-conversations",
@@ -132,6 +131,11 @@ export function createCommunicationsAtoms<R, E>(
     conversations({
       environmentId: target.environmentId,
       input: { input: target.input, generation: target.generation ?? 0 },
+    });
+  const slackConnections = (target: Target<Record<string, never>>) =>
+    connections({
+      environmentId: target.environmentId,
+      input: { generation: target.generation ?? 0 },
     });
   const slackMessages = (target: Target<SlackListMessagesInput>) =>
     messages({
@@ -181,6 +185,18 @@ export function createCommunicationsAtoms<R, E>(
       refresh(registry, slackMessages(target), target),
   };
   return {
+    connectSlack: createEnvironmentRpcCommand(runtime, {
+      label: "communications:connect-slack",
+      tag: WS_METHODS.slackConnect,
+      execute: (input) =>
+        requireSupport.pipe(Effect.andThen(request(WS_METHODS.slackConnect, input))),
+    }),
+    disconnectSlack: createEnvironmentRpcCommand(runtime, {
+      label: "communications:disconnect-slack",
+      tag: WS_METHODS.slackDisconnect,
+      execute: (input) =>
+        requireSupport.pipe(Effect.andThen(request(WS_METHODS.slackDisconnect, input))),
+    }),
     slackConnections,
     slackConversations,
     slackMessages,

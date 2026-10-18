@@ -218,3 +218,48 @@ it("carries the selected day through menu and palette destination searches", () 
     workspaceDestinationSearch("calendar", EnvironmentId.make("other-day"), current),
   ).not.toHaveProperty("day");
 });
+
+it("retains an explicit server setup destination and ignores invalid source hints", () => {
+  const setup = {
+    space: "communications",
+    environment: "remote",
+    communicationProvider: "slack",
+    communicationSource: "server",
+    account: "slack_a",
+  };
+  expect(parseWorkspaceSearch(setup)).toEqual(setup);
+  expect(parseWorkspaceSearch({ ...setup, space: "mail" })).not.toHaveProperty(
+    "communicationSource",
+  );
+  expect(parseWorkspaceSearch({ ...setup, communicationSource: "unknown" })).not.toHaveProperty(
+    "communicationSource",
+  );
+  expect(
+    parseWorkspaceSearch({
+      space: "communications",
+      communicationProvider: "slack",
+      account: "legacy",
+    }),
+  ).not.toHaveProperty("communicationSource");
+});
+
+it("keeps the captured Communications destination for palette/keybinding entry and clears it elsewhere", () => {
+  const captured = parseWorkspaceSearch({
+    space: "communications",
+    environment: "remote-source",
+    communicationSource: "server",
+    communicationProvider: "slack",
+    account: "slack_a",
+    item: "v1/invalid",
+  });
+  expect(
+    workspaceDestinationSearch("communications", EnvironmentId.make("remote-source"), captured),
+  ).toMatchObject({
+    communicationSource: "server",
+    communicationProvider: "slack",
+    account: "slack_a",
+  });
+  expect(
+    workspaceDestinationSearch("mail", EnvironmentId.make("remote-source"), captured),
+  ).not.toHaveProperty("communicationSource");
+});

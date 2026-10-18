@@ -39,6 +39,7 @@ export interface WorkspaceSearch {
   readonly view?: WorkspaceView;
   readonly officeView?: "communications";
   readonly communicationProvider?: "telegram" | "slack" | "discord";
+  readonly communicationSource?: "server" | "desktop";
   readonly account?: string;
   readonly folder?: string;
   readonly project?: string;
@@ -130,6 +131,10 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
     ...(day ? { day } : {}),
     ...(view !== undefined ? { view } : {}),
     ...(environment !== undefined ? { environment } : {}),
+    ...(destination === "communications" &&
+    (raw.communicationSource === "server" || raw.communicationSource === "desktop")
+      ? { communicationSource: raw.communicationSource }
+      : {}),
     ...(telegram
       ? { communicationProvider: "telegram" as const }
       : chat
@@ -158,6 +163,18 @@ export function workspaceDestinationSearch(
     view: workspaceViews[destination][0],
     ...(environmentId ? { environment: environmentId } : {}),
     ...(context?.day ? { day: context.day } : {}),
+    ...(destination === "communications" && context?.space === "communications"
+      ? {
+          ...(context.communicationSource
+            ? { communicationSource: context.communicationSource }
+            : {}),
+          ...(context.communicationProvider
+            ? { communicationProvider: context.communicationProvider }
+            : {}),
+          ...(context.account ? { account: context.account } : {}),
+          ...(context.item ? { item: context.item } : {}),
+        }
+      : {}),
   };
 }
 

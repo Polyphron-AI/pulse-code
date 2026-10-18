@@ -869,7 +869,7 @@ function ScopedChatWorkspace(props: ChatWorkspaceProps & { environmentId: Enviro
     />
   );
 }
-function ConversationProjectLinks({
+export function ConversationProjectLinks({
   environmentId,
   projectId,
   title,

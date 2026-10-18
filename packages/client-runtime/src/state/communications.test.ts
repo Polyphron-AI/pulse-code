@@ -746,3 +746,59 @@ it.effect("missing or already aborted Refresh ownership starts no Slack read", (
     }),
   ),
 );
+
+it.effect(
+  "connects and disconnects only the explicit supported environment without caching tokens",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const calls: Array<{ method: string; input: unknown }> = [];
+        const client = {
+          [WS_METHODS.slackConnect]: (input: unknown) =>
+            Effect.sync(() => {
+              calls.push({ method: "connect", input });
+              return {
+                id: "slack_test",
+                provider: "slack",
+                identity: "Maya",
+                label: "Source",
+                connected: true,
+                generation: 1,
+              };
+            }),
+          [WS_METHODS.slackDisconnect]: (input: unknown) =>
+            Effect.sync(() => {
+              calls.push({ method: "disconnect", input });
+            }),
+          [WS_METHODS.slackListConnections]: () => Effect.succeed([]),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const connected = yield* Effect.promise(() =>
+          atoms.connectSlack.run(registry, {
+            environmentId: TARGET.environmentId,
+            input: { token: "fake-only-token" },
+          }),
+        );
+        expect(AsyncResult.isSuccess(connected)).toBe(true);
+        yield* Effect.promise(() =>
+          atoms.disconnectSlack.run(registry, {
+            environmentId: TARGET.environmentId,
+            input: { connectionId: "slack_test" },
+          }),
+        );
+        expect(calls).toEqual([
+          { method: "connect", input: { token: "fake-only-token" } },
+          { method: "disconnect", input: { connectionId: "slack_test" } },
+        ]);
+        const old = yield* makeTestRuntime(client, false);
+        const denied = yield* Effect.promise(() =>
+          old.atoms.connectSlack.run(old.registry, {
+            environmentId: TARGET.environmentId,
+            input: { token: "not-sent" },
+          }),
+        );
+        expect(AsyncResult.isFailure(denied)).toBe(true);
+        expect(calls).toHaveLength(2);
+      }),
+    ),
+);

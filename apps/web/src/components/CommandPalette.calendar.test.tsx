@@ -264,3 +264,66 @@ it("keeps a listed palette action usable after opening it from a focused page po
     vi.unstubAllGlobals();
   }
 });
+
+it("retains the exact server Slack destination through the actual palette command", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const rootRoute = createRootRoute({
+    component: () => (
+      <CommandPalette>
+        <Outlet />
+      </CommandPalette>
+    ),
+  });
+  const workspace = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/workspace",
+    validateSearch: parseWorkspaceSearch,
+    component: () => <p>Workspace</p>,
+  });
+  const item = (await import("@t3tools/contracts")).chatResourceId({
+    version: 1,
+    transport: "server",
+    connectionId: "slack_a",
+    workspaceId: "T1",
+    conversationId: "C1",
+    messageId: "1728810000.000002",
+    replyRootId: "1728810000.000001",
+  });
+  const query = new URLSearchParams({
+    space: "communications",
+    environment: "remote",
+    communicationSource: "server",
+    communicationProvider: "slack",
+    account: "slack_a",
+    item,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([workspace]),
+    history: createMemoryHistory({ initialEntries: ["/workspace?" + query.toString()] }),
+    defaultPendingMs: 0,
+    defaultPendingMinMs: 0,
+  });
+  await router.load();
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(<RouterProvider router={router} />));
+    await act(async () => openCommandPalette());
+    await act(async () =>
+      getByRole(document.body, "button", { name: "Open Communications" }).click(),
+    );
+    expect(router.state.location.search).toMatchObject({
+      space: "communications",
+      environment: "remote",
+      communicationSource: "server",
+      communicationProvider: "slack",
+      account: "slack_a",
+      item,
+    });
+  } finally {
+    await act(async () => root.unmount());
+    node.remove();
+    vi.unstubAllGlobals();
+  }
+});

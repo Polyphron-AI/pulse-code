@@ -1,4 +1,5 @@
 import { DriveSettings } from "./DriveSettings";
+import { CommunicationsSettings } from "./CommunicationsSettings";
 import { TelegramSettings } from "./TelegramSettings";
 import { DeviceHostUpdates } from "../device/DeviceHostUpdates";
 import { DeviceToolVersions } from "../device/DeviceToolVersions";
@@ -1450,6 +1451,7 @@ export function IntegrationsSettingsPanel() {
     </>
   );
   const sectionContent = {
+    communications: <CommunicationsSettings />,
     telegram: <TelegramSettings />,
     drive: <DriveSettings />,
     skills: <ManagedSkillsSettings />,

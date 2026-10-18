@@ -643,7 +643,10 @@ it.each([
         ]);
       } else if (kind === "server") {
         expect(
-          getByText(node, "This server conversation reader is not available on this client yet."),
+          getByText(
+            node,
+            "The selected environment is unavailable. Reconnect it to read this source.",
+          ),
         ).toBeDefined();
         expect(requests).toEqual([]);
       } else {

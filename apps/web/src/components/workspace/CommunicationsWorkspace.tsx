@@ -5,7 +5,6 @@ import { EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
-import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -13,6 +12,7 @@ import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import { ChatCommunicationsWorkspace } from "./ChatCommunicationsWorkspace";
 import { TelegramWorkspace } from "./TelegramWorkspace";
 import { ConnectCommunicationsDialog } from "./ConnectCommunicationsDialog";
+import { ServerCommunicationsWorkspace } from "./ServerCommunicationsWorkspace";
 import "./communications.css";
 
 const key = (provider: string, id: string) => JSON.stringify([provider, id]);
@@ -28,15 +28,16 @@ export type ChatSource = {
 };
 export function CommunicationsWorkspace({ source }: { source?: ChatSource | undefined }) {
   const search = useSearch({ strict: false });
-  const capability = useMailCapabilities(
-    search.environment ? EnvironmentId.make(search.environment) : undefined,
-  );
-  return search.communicationProvider === "telegram" ? (
-    <TelegramWorkspace key={JSON.stringify([capability.environmentId, search.account])} />
-  ) : (
+  const primary = usePrimaryEnvironmentId();
+  const environmentId = search.environment ? EnvironmentId.make(search.environment) : primary;
+  if (search.communicationProvider === "telegram")
+    return <TelegramWorkspace key={JSON.stringify([environmentId, search.account])} />;
+  if ((source?.resource.transport ?? search.communicationSource) === "server")
+    return <ServerCommunicationsWorkspace environmentId={environmentId} source={source} />;
+  return (
     <DesktopCommunicationsWorkspace
-      key={capability.environmentId}
-      environmentId={capability.environmentId}
+      key={environmentId}
+      environmentId={environmentId}
       source={source}
     />
   );
@@ -198,9 +199,20 @@ function DesktopCommunicationsWorkspace({
           Connect chat
         </Button>
         <p>
-          Server Slack and Discord connections are unavailable on this version. Open Pulse desktop
-          to use a desktop account.
+          Server Slack uses the selected environment. Desktop accounts stay on this computer. Server
+          Discord reading is not available.
         </p>
+        <Link
+          to="/workspace"
+          search={{
+            space: "communications",
+            communicationProvider: "slack",
+            communicationSource: "server",
+            ...(environmentId ? { environment: environmentId } : {}),
+          }}
+        >
+          Server Slack accounts
+        </Link>
         <Link
           to="/workspace"
           search={{
@@ -213,6 +225,13 @@ function DesktopCommunicationsWorkspace({
         </Link>
         <Link to="/settings/integrations" hash="telegram">
           Manage Telegram in Settings
+        </Link>
+        <Link
+          to="/settings/integrations"
+          hash="communications"
+          search={environmentId ? { machine: environmentId } : {}}
+        >
+          Communications settings
         </Link>
       </div>
     </details>

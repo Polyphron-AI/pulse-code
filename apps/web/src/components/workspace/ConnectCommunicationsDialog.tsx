@@ -132,7 +132,7 @@ export function ConnectCommunicationsDialog({
                 }}
               >
                 <option value="slack">Slack</option>
-                <option value="discord">Discord</option>
+                {destination.kind === "desktop" ? <option value="discord">Discord</option> : null}
               </select>
             </label>
             <p className="text-xs leading-relaxed text-muted-foreground">

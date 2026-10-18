@@ -667,7 +667,7 @@ it.each(["local", "old-server"])(
     const { node, requests } = await render({ environment, item });
     expect(requests).toEqual([]);
     expect(node.textContent).toContain(
-      "This server conversation reader is not available on this client yet.",
+      "The selected environment is unavailable. Reconnect it to read this source.",
     );
   },
 );
